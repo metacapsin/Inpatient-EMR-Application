@@ -147,7 +147,7 @@ const AuthPage: React.FC = () => {
                 <div className="w-full max-w-lg bg-white dark:bg-[#141210] rounded-xl shadow-primary/10 shadow-lg border border-primary-100/50 dark:border-primary-900/30 p-6 lg:p-10">
                     {/* Logo/Title */}
                     <div className="flex items-center justify-center mb-8">
-                        <h2 className="text-2xl font-bold text-black dark:text-white">Patient Portal</h2>
+                        <h2 className="text-2xl font-bold text-black dark:text-white">EMR Inpatient</h2>
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-5">
