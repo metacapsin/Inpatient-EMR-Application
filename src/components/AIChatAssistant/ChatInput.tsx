@@ -65,7 +65,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   
       {/* Minimal Hint */}
       <p className="mt-1 text-[10px] text-gray-400 px-1">
-        Ask about medications, diagnoses, vitals, or history
+        Demo mode — connect a backend for live AI answers
       </p>
   
     </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI, aiHealthInsightsAPI } from '../../services/api';
+import { usePatientId } from '../../hooks/usePatientId';
 import { format } from 'date-fns';
 import { FaUserCheck, FaCalendarAlt, FaMapMarkerAlt, FaList, FaTimes } from 'react-icons/fa';
 import IconSparkles from '../../components/Icon/IconSparkles';
@@ -25,6 +26,7 @@ interface ScreeningRecord {
 }
 
 const PreventiveScreening: React.FC = () => {
+  const patientId = usePatientId();
   const [list, setList] = useState<ScreeningRecord[]>([]);
   const [filteredTableList, setFilteredTableList] = useState<ScreeningRecord[]>([]);
   const [paginatedCardList, setPaginatedCardList] = useState<ScreeningRecord[]>([]);
@@ -97,13 +99,6 @@ const PreventiveScreening: React.FC = () => {
   }, [rowsPerPage]);
 
   const getPatientScreenings = useCallback(async () => {
-    const currentUser = localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user') || '{}') : {};
-    const patientId =
-      currentUser.patientId ||
-      currentUser.rcopiaID ||
-      currentUser.user?.patientId ||
-      currentUser.user?.rcopiaID;
-
     if (!patientId) {
       toast.error('Patient ID is required');
       return;
@@ -121,7 +116,7 @@ const PreventiveScreening: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [patientId]);
 
   useEffect(() => {
     getPatientScreenings();
@@ -176,13 +171,6 @@ const PreventiveScreening: React.FC = () => {
   };
 
   const handleGetAISuggestions = async () => {
-    const currentUser = localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user') || '{}') : {};
-    const patientId =
-      currentUser.patientId ||
-      currentUser.rcopiaID ||
-      currentUser.user?.patientId ||
-      currentUser.user?.rcopiaID;
-
     if (!patientId) {
       toast.error('Patient ID is required');
       return;

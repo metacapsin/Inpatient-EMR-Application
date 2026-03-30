@@ -8,13 +8,16 @@ import Footer from './Footer';
 import Header from './Header';
 import Setting from './Setting';
 import Sidebar from './Sidebar';
+import FacesheetSidebar from './FacesheetSidebar';
 import Portals from '../../components/Portals';
+import { AppLayoutProvider, useAppLayout } from '../../contexts/AppLayoutContext';
 
-const DefaultLayout = ({ children }: PropsWithChildren) => {
+function DefaultLayoutInner({ children }: PropsWithChildren) {
     const themeConfig = useSelector((state: IRootState) => state.themeConfig);
     const dispatch = useDispatch();
     const location = useLocation();
-    const isAIAssistantPage = location.pathname === '/app/ai-assistant';
+    const { variant } = useAppLayout();
+    const isFacesheet = variant === 'facesheet';
     const isSymptomAssessmentPage = location.pathname === '/app/symptom-assessment';
     const isFullViewportPage = ['/app/health-trends', '/app/daily-log'].includes(location.pathname);
 
@@ -46,7 +49,7 @@ const DefaultLayout = ({ children }: PropsWithChildren) => {
         }
 
         return () => {
-            window.removeEventListener('onscroll', onScrollHandler);
+            window.removeEventListener('scroll', onScrollHandler);
         };
     }, []);
 
@@ -90,12 +93,14 @@ const DefaultLayout = ({ children }: PropsWithChildren) => {
                 <Setting />
                 {/* END APP SETTING LAUNCHER */}
 
-                <div className={`${themeConfig.navbar} main-container text-black dark:text-white-dark min-h-screen`}>
+                <div
+                    className={`${themeConfig.navbar} main-container text-black dark:text-white-dark min-h-screen${isFacesheet ? ' facesheet-shell' : ''}`}
+                >
                     {/* BEGIN SIDEBAR */}
-                    <Sidebar />
+                    {isFacesheet ? <FacesheetSidebar /> : <Sidebar />}
                     {/* END SIDEBAR */}
 
-                    <div className={`main-content flex flex-col ${isAIAssistantPage || isSymptomAssessmentPage || isFullViewportPage ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>
+                    <div className={`main-content flex flex-col ${isSymptomAssessmentPage || isFullViewportPage ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>
                         {/* BEGIN TOP NAVBAR */}
                         <Header />
                         {/* END TOP NAVBAR */}
@@ -103,7 +108,13 @@ const DefaultLayout = ({ children }: PropsWithChildren) => {
                         {/* BEGIN CONTENT AREA */}
                         <Suspense>
                             <div
-                                className={`${themeConfig.animation} animate__animated flex-1 min-h-0 flex flex-col min-w-0 ${isAIAssistantPage || isSymptomAssessmentPage || isFullViewportPage ? 'overflow-hidden h-full' : 'overflow-auto'} ${isSymptomAssessmentPage ? 'py-4 sm:py-6 ltr:pl-4 ltr:pr-6 rtl:pr-4 rtl:pl-6' : 'p-6'}`}
+                                className={`${themeConfig.animation} animate__animated flex-1 min-h-0 flex flex-col min-w-0 ${isSymptomAssessmentPage || isFullViewportPage ? 'overflow-hidden h-full' : 'overflow-auto'} ${
+                                    isSymptomAssessmentPage
+                                        ? 'py-4 sm:py-6 ltr:pl-4 ltr:pr-6 rtl:pr-4 rtl:pl-6'
+                                        : isFacesheet
+                                          ? 'p-4 sm:p-5 lg:p-6'
+                                          : 'p-6'
+                                }`}
                             >
                                 {children}
                             </div>
@@ -111,7 +122,7 @@ const DefaultLayout = ({ children }: PropsWithChildren) => {
                         {/* END CONTENT AREA */}
 
                         {/* BEGIN FOOTER */}
-                        <Footer />
+                        {!isFacesheet && <Footer />}
                         {/* END FOOTER */}
                         <Portals />
                     </div>
@@ -119,6 +130,12 @@ const DefaultLayout = ({ children }: PropsWithChildren) => {
             </div>
         </App>
     );
-};
+}
+
+const DefaultLayout = ({ children }: PropsWithChildren) => (
+    <AppLayoutProvider>
+        <DefaultLayoutInner>{children}</DefaultLayoutInner>
+    </AppLayoutProvider>
+);
 
 export default DefaultLayout;

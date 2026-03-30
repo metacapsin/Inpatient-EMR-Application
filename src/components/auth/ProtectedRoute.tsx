@@ -13,7 +13,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   }
 
   // If no token and not loading, redirect to login
-  return token ? <>{children}</> : <Navigate to="/" replace />;
+  return token ? <>{children}</> : <Navigate to="/login" replace />;
 };
 
 export default ProtectedRoute;

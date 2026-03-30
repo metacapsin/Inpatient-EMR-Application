@@ -1,6 +1,8 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import axios from 'axios';
 import type { PremiumStatus } from '../types/premium';
+import api from '../services/api';
+import { parseLoginResponse } from '../services/auth.service';
 
 const BASE_URL = 'https://devapi.mdcareproviders.com';
 
@@ -107,20 +109,42 @@ export const loginUser = createAsyncThunk(
     'auth/login',
     async ({ email, password }: { email: string; password: string }, { rejectWithValue }) => {
         try {
-            const response = await axios.post('/auth/login', { email, password });
-            const { token, user } = response.data;
+            const payload = {
+                username: email.trim(),
+                password: password.trim(),
+            };
+            console.log('[login] POST /login payload:', payload);
+            const response = await api.post('/login', payload, {
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const parsed = parseLoginResponse(response.data);
+            if (!parsed) {
+                return rejectWithValue('Invalid login response from server');
+            }
 
-            // Store to localStorage
-            localStorage.setItem('token', token);
-            localStorage.setItem('user', JSON.stringify(user));
-            if (user.role) localStorage.setItem('role', user.role);
+            const userPayload: User = parsed.user
+                ? ({ ...parsed.user, email: String((parsed.user as User).email ?? email) } as User)
+                : ({ email } as User);
 
-            // Set Axios authorization header
-            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            localStorage.setItem('token', parsed.token);
+            localStorage.setItem('user', JSON.stringify(userPayload));
+            if (parsed.role) localStorage.setItem('role', parsed.role);
 
-            return { token, user, role: user.role || null, data: response.data };
+            axios.defaults.headers.common['Authorization'] = `Bearer ${parsed.token}`;
+
+            return {
+                token: parsed.token,
+                user: userPayload,
+                role: parsed.role,
+                data: response.data,
+            };
         } catch (error: any) {
-            return rejectWithValue(error.response?.data?.message || 'Login failed');
+            const message =
+                error.response?.data?.message ||
+                error.response?.data?.error ||
+                error.message ||
+                'Login failed';
+            return rejectWithValue(typeof message === 'string' ? message : 'Login failed');
         }
     }
 );

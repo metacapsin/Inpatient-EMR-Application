@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI, aiHealthInsightsAPI } from '../../services/api';
+import { usePatientId } from '../../hooks/usePatientId';
 import { format } from 'date-fns';
 import { FaEye, FaDownload,FaTimes  } from 'react-icons/fa';
 import { FaWandMagicSparkles } from 'react-icons/fa6';
@@ -17,6 +18,7 @@ interface DocumentRecord {
 }
 
 const Documents: React.FC = () => {
+  const patientId = usePatientId();
   const [documentsList, setDocumentsList] = useState<DocumentRecord[]>([]);
   const [filteredTableList, setFilteredTableList] = useState<DocumentRecord[]>([]);
   const [filteredCardList, setFilteredCardList] = useState<DocumentRecord[]>([]);
@@ -45,12 +47,7 @@ const Documents: React.FC = () => {
     }
   };
 
-  const getPatientDocuments = async () => {
-    const currentUser = localStorage.getItem('user')
-      ? JSON.parse(localStorage.getItem('user') || '{}')
-      : {};
-    const patientId = currentUser.patientId || currentUser.rcopiaID;
-
+  const getPatientDocuments = useCallback(async () => {
     if (!patientId) {
       toast.error('Patient ID is required');
       return;
@@ -124,11 +121,11 @@ const Documents: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [patientId]);
 
   useEffect(() => {
     getPatientDocuments();
-  }, []);
+  }, [getPatientDocuments]);
 
   useEffect(() => {
     filterData();

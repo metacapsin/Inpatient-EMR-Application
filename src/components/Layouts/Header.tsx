@@ -63,7 +63,7 @@ const Header = () => {
 
     const handleLogout = () => {
         dispatch(logout());
-        navigate('/');
+        navigate('/login');
     };
 
     useEffect(() => {
@@ -460,10 +460,10 @@ const Header = () => {
                         </div>
                         <NavLink
                             to="/app/ai-assistant"
-                            className="flex items-center justify-center p-2 rounded-full bg-white-light/40 dark:bg-dark/40 hover:text-primary hover:bg-white-light/90 dark:hover:bg-dark/60 shrink-0"
+                            className="flex shrink-0 items-center justify-center rounded-full bg-white-light/40 p-2 hover:bg-white-light/90 hover:text-primary dark:bg-dark/40 dark:hover:bg-dark/60"
                             title="AI Assistant"
                         >
-                            <IconSparkles className="w-5 h-5" />
+                            <IconSparkles className="h-5 w-5" />
                         </NavLink>
                         <div className="dropdown shrink-0 flex">
     <Dropdown

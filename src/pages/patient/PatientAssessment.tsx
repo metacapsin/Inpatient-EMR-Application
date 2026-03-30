@@ -1,20 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { TriageChat } from '../../components/Triage';
-
-function getPatientId(): string | null {
-  try {
-    const userStr = localStorage.getItem('user');
-    if (!userStr) return null;
-    const currentUser = JSON.parse(userStr) as { patientId?: string; rcopiaID?: string };
-    return currentUser.patientId || currentUser.rcopiaID || null;
-  } catch {
-    return null;
-  }
-}
+import { usePatientPortalId } from '../../hooks/usePatientPortalId';
 
 const PatientAssessment: React.FC = () => {
-  const patientId = getPatientId();
+  const patientId = usePatientPortalId();
 
   if (!patientId) {
     return (

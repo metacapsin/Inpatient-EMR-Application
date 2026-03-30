@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI } from '../../services/api';
+import { usePatientId } from '../../hooks/usePatientId';
 import { format } from 'date-fns';
 import { FaUser, FaCalendarCheck, FaHistory, FaShieldAlt } from 'react-icons/fa';
 
@@ -13,17 +15,18 @@ interface DemographicData {
   secondaryInsuranceDetails?: any;
 }
 
+function getLegacyPatientId(): string {
+  const currentUser = localStorage.getItem('user')
+    ? JSON.parse(localStorage.getItem('user') || '{}')
+    : {};
+  return currentUser.patientId || currentUser.rcopiaID || '';
+}
+
 const Demographic: React.FC = () => {
   const [demographicData, setDemographicData] = useState<DemographicData>({});
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
-
-  const getPatientId = () => {
-    const currentUser = localStorage.getItem('user')
-      ? JSON.parse(localStorage.getItem('user') || '{}')
-      : {};
-    return currentUser.patientId || currentUser.rcopiaID || '';
-  };
+  const routePatientId = usePatientId();
 
   const formatDate = (dateString: string): string => {
     if (!dateString) return '';
@@ -45,8 +48,8 @@ const Demographic: React.FC = () => {
     }
   };
 
-  const getPatientDemographics = async () => {
-    const patientId = getPatientId();
+  const getPatientDemographics = useCallback(async () => {
+    const patientId = routePatientId || getLegacyPatientId();
     if (!patientId) {
       toast.error('Patient ID is required');
       return;
@@ -85,11 +88,11 @@ const Demographic: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [routePatientId]);
 
   useEffect(() => {
     getPatientDemographics();
-  }, []);
+  }, [getPatientDemographics]);
 
   const getStatusMessage = (status: string, isPast: boolean = false): string => {
     if (isPast) {
@@ -171,7 +174,9 @@ const Demographic: React.FC = () => {
         <div className="mb-5">
           <ul className="flex items-center gap-2 text-sm">
             <li>
-              <a href="#" className="text-primary hover:underline">Patient List</a>
+              <Link to="/app/patients/list" className="text-primary hover:underline">
+                Patient List
+              </Link>
             </li>
             <li>/</li>
             <li className="text-gray-900 dark:text-white font-medium">Demographic</li>

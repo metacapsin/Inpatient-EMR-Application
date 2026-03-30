@@ -1,4 +1,4 @@
-import { PropsWithChildren, useEffect, useState } from 'react';
+import { PropsWithChildren, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { IRootState, AppDispatch } from './store';
 import { toggleRTL, toggleTheme, toggleLocale, toggleMenu, toggleLayout, toggleAnimation, toggleNavbar, toggleSemidark } from './store/themeConfigSlice';
@@ -9,9 +9,8 @@ function App({ children }: PropsWithChildren) {
     const themeConfig = useSelector((state: IRootState) => state.themeConfig);
     const token = useSelector((state: IRootState) => state.auth.token);
     const dispatch = useDispatch<AppDispatch>();
-    const [steps, setSteps] = useState(0);
     useEffect(() => {
-        dispatch(toggleTheme(localStorage.getItem('theme') || themeConfig.theme));
+        dispatch(toggleTheme(localStorage.getItem('theme') || themeConfig.theme || 'light'));
         dispatch(toggleMenu(localStorage.getItem('menu') || themeConfig.menu));
         dispatch(toggleLayout(localStorage.getItem('layout') || themeConfig.layout));
         dispatch(toggleRTL(localStorage.getItem('rtlClass') || themeConfig.rtlClass));
@@ -28,29 +27,7 @@ function App({ children }: PropsWithChildren) {
             dispatch(fetchCloudSubscriptions());
         }
     }, [dispatch, token]);
-    useEffect(() => {
-        function onDeviceReady() {
-          if (window.pedometer) {
-            window.pedometer.startPedometerUpdates(
-              (data) => {
-                console.log("Steps:", data.numberOfSteps);
-                setSteps(data.numberOfSteps);
-              },
-              (error) => {
-                console.error(error);
-              }
-            );
-          } else {
-            console.log("Pedometer plugin not available");
-          }
-        }
-    
-        document.addEventListener("deviceready", onDeviceReady);
-    
-        return () => {
-          document.removeEventListener("deviceready", onDeviceReady);
-        };
-      }, []);
+
     return (
         <div
             className={`${(store.getState().themeConfig.sidebar && 'toggle-sidebar') || ''} ${themeConfig.menu} ${themeConfig.layout} ${
@@ -58,7 +35,6 @@ function App({ children }: PropsWithChildren) {
             } main-section antialiased relative font-nunito text-sm font-normal`}
         >
             {children}
-            <p>Steps: {steps}</p>
         </div>
     );
 }

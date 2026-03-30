@@ -35,7 +35,8 @@ const defaultState = {
 };
 
 const initialState = {
-    theme: localStorage.getItem('theme') || themeConfig.theme,
+    /** Default light when no preference is stored */
+    theme: localStorage.getItem('theme') || themeConfig.theme || 'light',
     menu: localStorage.getItem('menu') || themeConfig.menu,
     layout: localStorage.getItem('layout') || themeConfig.layout,
     rtlClass: localStorage.getItem('rtlClass') || themeConfig.rtlClass,
@@ -134,7 +135,7 @@ const themeConfigSlice = createSlice({
         },
 
         setPageTitle(state, { payload }) {
-            document.title = `${payload} | MD CARE - Patient Portal`;
+            document.title = `${payload} | MD CARE - EMR Inpatient`;
         },
     },
 });

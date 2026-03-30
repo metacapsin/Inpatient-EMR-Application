@@ -138,7 +138,7 @@ const AuthPage: React.FC = () => {
             <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary/10 to-primary/5 items-center justify-center p-8">
                 <div className="text-center">
                     <h1 className="text-4xl font-bold text-black dark:text-white mb-4">Welcome Back</h1>
-                    <p className="text-lg text-gray-600 dark:text-gray-400">Sign in to access your patient portal</p>
+                    <p className="text-lg text-gray-600 dark:text-gray-400">Sign in to access EMR Inpatient</p>
                 </div>
             </div>
 

@@ -17,8 +17,7 @@ api.interceptors.request.use(
     if (config.data instanceof FormData) {
       delete (config.headers as Record<string, unknown>)['Content-Type'];
     }
-    // const token = localStorage.getItem('token');
-    const token = sessionStorage.getItem('token');
+    const token = localStorage.getItem('token');
     if (token) {
       config.headers.set('Authorization', `Bearer ${token}`);
     }
@@ -98,8 +97,10 @@ api.interceptors.response.use(
 
 // Auth API
 export const authAPI = {
-  login: (credentials: { email: string; password: string; tenant_id?: string }) =>
-    api.post('/auth/login', credentials),
+  login: (credentials: { username: string; password: string; tenant_id?: string }) =>
+    api.post('/login', credentials, {
+      headers: { 'Content-Type': 'application/json' },
+    }),
   
   register: (userData: Record<string, any>) =>
     api.post('/auth/register', userData),
@@ -108,7 +109,7 @@ export const authAPI = {
     api.post('/auth/register-user', userData),
   
   forgotPassword: (email: string) =>
-    api.post('/auth/forgot-password', { email }),
+    api.post('/forgotPassword', { email }),
   
   resetPassword: (data: { token: string; newPassword: string; confirmPassword: string }) =>
     api.post('/auth/reset-password', data),
@@ -363,7 +364,7 @@ export const dashboardAPI = {
   getDashboardData: (params?: any) => api.get('/reports/dashboard', { params })
 };
 
-// Patient Portal API - separate instance for patient registration
+// Patient / registration API - separate axios instance (no auth interceptor)
 // const PATIENT_API_BASE_URL = import.meta.env.VITE_PATIENT_API_BASE_URL || 'https://devapi.mdcareproviders.com';
 
 const patientApi: AxiosInstance = axios.create({
@@ -508,7 +509,7 @@ export const vitalsAPI = {
     api.delete(`/PatientVitals/deletePatientVitals/${id}`),
 };
 
-// Patient Data API (Read-only for patient portal)
+// Patient Data API (read-only)
 export const patientDataAPI = {
   // Allergies
   getAllAllergyList: (rcopiaID: string) =>
@@ -609,7 +610,7 @@ export const premiumSubscriptionAPI = {
     api.get('/premium-subscription/status'),
 };
 
-// Patient Portal Subscription API (unified subscription data from /Patient-Portal/subscription)
+// Subscription API (unified subscription data from /Patient-Portal/subscription)
 export const patientSubscriptionAPI = {
   getSubscription: (patientId: string) =>
     api.get('/Patient-Portal/subscription', { params: { patientId } }),

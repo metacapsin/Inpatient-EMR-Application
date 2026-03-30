@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI } from '../../services/api';
+import { usePatientId } from '../../hooks/usePatientId';
 import { format } from 'date-fns';
 import { FaHistory, FaClock, FaTags, FaCalendarAlt, FaStickyNote, FaEye } from 'react-icons/fa';
 import IconSearch from '../../components/Icon/IconSearch';
@@ -21,6 +22,7 @@ interface HistoryRecord {
 }
 
 const History: React.FC = () => {
+  const patientId = usePatientId();
   const [historyList, setHistoryList] = useState<HistoryRecord[]>([]);
   const [filteredTableList, setFilteredTableList] = useState<HistoryRecord[]>([]);
   const [filteredCardList, setFilteredCardList] = useState<HistoryRecord[]>([]);
@@ -42,15 +44,7 @@ const History: React.FC = () => {
     }
   };
 
-  const getPatientId = (): string => {
-    const currentUser = localStorage.getItem('user')
-      ? JSON.parse(localStorage.getItem('user') || '{}')
-      : {};
-    return currentUser.patientId || currentUser.rcopiaID || '';
-  };
-
-  const fetchHistory = async () => {
-    const patientId = getPatientId();
+  const fetchHistory = useCallback(async () => {
     if (!patientId) {
       toast.error('Patient ID is required to fetch history.');
       return;
@@ -86,11 +80,11 @@ const History: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [patientId]);
 
   useEffect(() => {
     fetchHistory();
-  }, []);
+  }, [fetchHistory]);
 
   useEffect(() => {
     filterData();

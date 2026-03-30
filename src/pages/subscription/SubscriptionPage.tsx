@@ -110,7 +110,7 @@ const SubscriptionPage: React.FC = () => {
 
     const PLANS: PremiumPlan[] = apiPlans.length > 0 ? apiPlans : [
         { id: 'basic', name: 'Basic', description: 'Essential access to your health records', priceMonthly: 9.99, priceYearly: 99, features: ['View vitals & demographics', 'Appointments scheduling', 'Basic document access', 'Email support'], popular: false, numberOfMembers: 1 },
-        { id: 'premium', name: 'Premium', description: 'Full access to all patient portal features', priceMonthly: 19.99, priceYearly: 199, features: ['Everything in Basic', 'Labs, prescriptions & medications', 'Immunizations & screenings', 'Priority support', 'Download documents'], popular: true, numberOfMembers: 1 },
+        { id: 'premium', name: 'Premium', description: 'Full access to all EMR Inpatient features', priceMonthly: 19.99, priceYearly: 199, features: ['Everything in Basic', 'Labs, prescriptions & medications', 'Immunizations & screenings', 'Priority support', 'Download documents'], popular: true, numberOfMembers: 1 },
         { id: 'family', name: 'Family', description: 'Manage health for your whole family', priceMonthly: 29.99, priceYearly: 299, features: ['Everything in Premium', 'Up to 5 family members', 'Shared health dashboard', '24/7 support'], popular: false, numberOfMembers: 5 },
     ];
 
@@ -249,7 +249,7 @@ const SubscriptionPage: React.FC = () => {
                         {isActive ? 'Your Subscription' : 'Choose Your Plan'}
                     </h1>
                     <p className="text-sm sm:text-base lg:text-lg text-gray-600 dark:text-gray-400 max-w-xl mx-auto px-2">
-                        {isActive ? 'Manage your subscription and billing' : 'Get full access to your patient portal.'}
+                        {isActive ? 'Manage your subscription and billing' : 'Get full access to EMR Inpatient.'}
                     </p>
                 </div>
 

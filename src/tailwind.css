@@ -180,6 +180,20 @@
     .collapsible-vertical .main-content {
         @apply lg:w-[calc(100%-70px)] lg:ltr:ml-[70px] lg:rtl:mr-[70px];
     }
+
+    /* Facesheet: chart rail stays 260px; main content margin matches (collapsible menu otherwise uses 70px) */
+    @media (min-width: 1024px) {
+        .main-container.facesheet-shell .facesheet-chart-nav.sidebar {
+            width: 260px !important;
+        }
+        .main-container.facesheet-shell .facesheet-chart-nav.sidebar:hover {
+            width: 260px !important;
+        }
+        .main-section.collapsible-vertical:not(.toggle-sidebar) .main-container.facesheet-shell .main-content {
+            width: calc(100% - 260px) !important;
+            margin-inline-start: 260px !important;
+        }
+    }
     .collapsible-vertical .sidebar .collapse-icon,
     .collapsible-vertical .main-logo > span {
         @apply transition-opacity duration-300 lg:opacity-0;

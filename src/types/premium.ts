@@ -1,4 +1,4 @@
-// Premium subscription types (for Stripe-based patient portal premium)
+// Premium subscription types (for Stripe-based EMR Inpatient premium)
 
 export interface PremiumStatus {
     active: boolean;

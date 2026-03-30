@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { FaRunning } from 'react-icons/fa';
 import usePedometer from '@/hooks/usePedometer';
 
-const HealthSummary: React.FC = () => {
+const PatientSteps: React.FC = () => {
   const [loading] = useState(false);
   const steps = usePedometer();
   if (loading) {
@@ -21,7 +21,7 @@ const HealthSummary: React.FC = () => {
           <ul className="flex items-center gap-2 text-sm">
             <li><Link to="/app/dashboard" className="text-primary hover:underline">Dashboard</Link></li>
             <li>/</li>
-            <li className="text-gray-900 dark:text-white font-medium">Health Summary</li>
+            <li className="text-gray-900 dark:text-white font-medium">Steps</li>
           </ul>
         </div>
         <div className="mb-6">
@@ -57,4 +57,4 @@ const HealthSummary: React.FC = () => {
   );
 };
 
-export default HealthSummary;
+export default PatientSteps;

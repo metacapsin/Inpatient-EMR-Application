@@ -3,69 +3,39 @@ import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import { NavLink, useLocation } from 'react-router-dom';
 import { toggleSidebar } from '../../store/themeConfigSlice';
-import AnimateHeight from 'react-animate-height';
 import { IRootState } from '../../store';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import IconCaretsDown from '../Icon/IconCaretsDown';
 import IconCaretDown from '../Icon/IconCaretDown';
-import IconMenuDashboard from '../Icon/Menu/IconMenuDashboard';
 import IconMinus from '../Icon/IconMinus';
-import IconMenuChat from '../Icon/Menu/IconMenuChat';
-import IconMenuMailbox from '../Icon/Menu/IconMenuMailbox';
-import IconMenuTodo from '../Icon/Menu/IconMenuTodo';
-import IconMenuNotes from '../Icon/Menu/IconMenuNotes';
-import IconMenuScrumboard from '../Icon/Menu/IconMenuScrumboard';
-import IconMenuContacts from '../Icon/Menu/IconMenuContacts';
-import IconMenuInvoice from '../Icon/Menu/IconMenuInvoice';
-import IconMenuCalendar from '../Icon/Menu/IconMenuCalendar';
-import IconMenuComponents from '../Icon/Menu/IconMenuComponents';
-import IconMenuElements from '../Icon/Menu/IconMenuElements';
-import IconMenuCharts from '../Icon/Menu/IconMenuCharts';
-import IconMenuWidgets from '../Icon/Menu/IconMenuWidgets';
-import IconMenuFontIcons from '../Icon/Menu/IconMenuFontIcons';
-import IconMenuDragAndDrop from '../Icon/Menu/IconMenuDragAndDrop';
-import IconMenuTables from '../Icon/Menu/IconMenuTables';
-import IconMenuDatatables from '../Icon/Menu/IconMenuDatatables';
-import IconMenuForms from '../Icon/Menu/IconMenuForms';
+import IconMenuDashboard from '../Icon/Menu/IconMenuDashboard';
 import IconMenuUsers from '../Icon/Menu/IconMenuUsers';
+import IconMenuCalendar from '../Icon/Menu/IconMenuCalendar';
 import IconMenuPages from '../Icon/Menu/IconMenuPages';
-import IconMenuAuthentication from '../Icon/Menu/IconMenuAuthentication';
-import IconMenuDocumentation from '../Icon/Menu/IconMenuDocumentation';
-import IconSettings from '../Icon/IconSettings';
-import IconCreditCard from '../Icon/IconCreditCard';
-import IconLock from '../Icon/IconLock';
-import IconUsersGroup from '../Icon/IconUsersGroup';
 import mdCareLogo from '../../assets/images/mdcare-logo.png';
 
+const linkClass =
+    'text-black dark:text-[#506690] dark:group-hover:text-white-dark';
+
+/** Only patient list lives in the main sidebar; chart modules use the facesheet sidebar. */
+const PATIENT_SECTION_PREFIXES = ['/app/patients'] as const;
+
+function isPatientSectionPath(pathname: string): boolean {
+    return PATIENT_SECTION_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
 const Sidebar = () => {
-    const [currentMenu, setCurrentMenu] = useState<string>('');
-    const [errorSubMenu, setErrorSubMenu] = useState(false);
     const themeConfig = useSelector((state: IRootState) => state.themeConfig);
-    const premiumSubscription = useSelector((state: IRootState) => state.auth.premiumSubscription);
     const semidark = useSelector((state: IRootState) => state.themeConfig.semidark);
     const location = useLocation();
     const dispatch = useDispatch();
     const { t } = useTranslation();
-    const toggleMenu = (value: string) => {
-        setCurrentMenu((oldValue) => {
-            return oldValue === value ? '' : value;
-        });
-    };
+    const [patientsOpen, setPatientsOpen] = useState(() => isPatientSectionPath(location.pathname));
 
     useEffect(() => {
         const selector = document.querySelector('.sidebar ul a[href="' + window.location.pathname + '"]');
         if (selector) {
             selector.classList.add('active');
-            const ul: any = selector.closest('ul.sub-menu');
-            if (ul) {
-                let ele: any = ul.closest('li.menu').querySelectorAll('.nav-link') || [];
-                if (ele.length) {
-                    ele = ele[0];
-                    setTimeout(() => {
-                        ele.click();
-                    });
-                }
-            }
         }
     }, []);
 
@@ -76,6 +46,12 @@ const Sidebar = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [location]);
 
+    useEffect(() => {
+        if (isPatientSectionPath(location.pathname)) {
+            setPatientsOpen(true);
+        }
+    }, [location.pathname]);
+
     return (
         <div className={semidark ? 'dark' : ''}>
             <nav
@@ -83,10 +59,8 @@ const Sidebar = () => {
             >
                 <div className="bg-white dark:bg-black h-full">
                     <div className="flex justify-between items-center px-4 py-3">
-                        <NavLink to="/" className="main-logo flex items-center shrink-0">
-                            {/* Logo image - shown in dark mode only */}
+                        <NavLink to="/app/dashboard" className="main-logo flex items-center shrink-0">
                             <img className="h-8 w-auto object-contain hidden dark:block" src={mdCareLogo} alt="MD Care" />
-                            {/* Text - shown in light mode only */}
                             <span className=" text-2xl font-extrabold tracking-wide text-primary align-middle dark:hidden">MD CARE</span>
                         </NavLink>
 
@@ -102,7 +76,7 @@ const Sidebar = () => {
                         <ul className="relative font-semibold space-y-0.5 p-4 py-0">
                             <h2 className="py-3 px-7 flex items-center uppercase font-extrabold bg-white-light/30 dark:bg-dark dark:bg-opacity-[0.08] -mx-4 mb-1">
                                 <IconMinus className="w-4 h-5 flex-none hidden" />
-                                <span>Patient Portal</span>
+                                <span>EMR Inpatient</span>
                             </h2>
 
                             <li className="nav-item">
@@ -111,149 +85,55 @@ const Sidebar = () => {
                                         <NavLink to="/app/dashboard" className="group">
                                             <div className="flex items-center">
                                                 <IconMenuDashboard className="group-hover:!text-primary shrink-0" />
-                                                <span className="ltr:pl-3 rtl:pr-3 text-black dark:text-[#506690] dark:group-hover:text-white-dark">{t('dashboard')}</span>
+                                                <span className={`ltr:pl-3 rtl:pr-3 ${linkClass}`}>{t('dashboard')}</span>
                                             </div>
                                         </NavLink>
                                     </li>
+
                                     <li className="menu nav-item">
-                                        <button type="button" className={`${currentMenu === 'healthSymptom' ? 'active' : ''} nav-link group w-full`} onClick={() => toggleMenu('healthSymptom')}>
-                                            <div className="flex items-center">
-                                                <IconMenuCharts className="group-hover:!text-primary shrink-0" />
-                                                <span className="ltr:pl-3 rtl:pr-3 text-black dark:text-[#506690] dark:group-hover:text-white-dark">Health Monitoring</span>
-                                            </div>
-                                            <div className={currentMenu !== 'healthSymptom' ? 'rtl:rotate-90 -rotate-90' : ''}>
-                                                <IconCaretDown />
+                                        <button
+                                            type="button"
+                                            className={`group ${patientsOpen ? 'active' : ''}`}
+                                            onClick={() => setPatientsOpen((o) => !o)}
+                                        >
+                                            <div className="flex w-full items-center justify-between gap-2">
+                                                <div className="flex min-w-0 items-center">
+                                                    <IconMenuUsers className="shrink-0 text-black/50 dark:text-white/50 group-hover:!text-primary" />
+                                                    <span className={`ltr:pl-3 rtl:pr-3 ${linkClass}`}>Patients</span>
+                                                </div>
+                                                <IconCaretDown
+                                                    className={`h-4 w-4 shrink-0 text-black/40 transition-transform dark:text-white/40 ${patientsOpen ? 'rotate-180' : ''}`}
+                                                />
                                             </div>
                                         </button>
-                                        <AnimateHeight duration={300} height={currentMenu === 'healthSymptom' ? 'auto' : 0}>
-                                            <ul className="sub-menu text-gray-500">
+                                        {patientsOpen && (
+                                            <ul className="sub-menu">
                                                 <li>
-                                                    <NavLink to="/app/symptom-assessment">Symptom Assessment</NavLink>
-                                                </li>
-                                                <li>
-                                                    <NavLink to="/app/daily-log">Daily Log</NavLink>
-                                                </li>
-                                                <li>
-                                                    <NavLink to="/app/health-trends">Health Trends</NavLink>
-                                                </li>
-                                                <li>
-                                                    <NavLink to="/app/health-alerts">Health Alerts</NavLink>
-                                                </li>
-                                                <li>
-                                                    <NavLink to="/app/provider/patient-risk-list">Patient Risk List</NavLink>
+                                                    <NavLink to="/app/patients/list">Patient List</NavLink>
                                                 </li>
                                             </ul>
-                                        </AnimateHeight>
+                                        )}
                                     </li>
+
                                     <li className="nav-item">
                                         <NavLink to="/app/appointments" className="group">
                                             <div className="flex items-center">
                                                 <IconMenuCalendar className="group-hover:!text-primary shrink-0" />
-                                                <span className="ltr:pl-3 rtl:pr-3 text-black dark:text-[#506690] dark:group-hover:text-white-dark">Appointments</span>
+                                                <span className={`ltr:pl-3 rtl:pr-3 ${linkClass}`}>Appointments</span>
                                             </div>
                                         </NavLink>
                                     </li>
-                                    <li className="menu nav-item">
-                                        <button type="button" className={`${currentMenu === 'patient' ? 'active' : ''} nav-link group w-full`} onClick={() => toggleMenu('patient')}>
-                                            <div className="flex items-center">
-                                                <IconMenuUsers className="group-hover:!text-primary shrink-0" />
-                                                <span className="ltr:pl-3 rtl:pr-3 text-black dark:text-[#506690] dark:group-hover:text-white-dark">Patient</span>
-                                            </div>
-                                            <div className={currentMenu !== 'patient' ? 'rtl:rotate-90 -rotate-90' : ''}>
-                                                <IconCaretDown />
-                                            </div>
-                                        </button>
-                                        <AnimateHeight duration={300} height={currentMenu === 'patient' ? 'auto' : 0}>
-                                            <ul className="sub-menu text-gray-500">
-                                                <li>
-                                                    <NavLink to="/app/health-summary">Health Summary</NavLink>
-                                                </li>
-                                                <li>
-                                                    <NavLink to="/app/vitals">Vitals</NavLink>
-                                                </li>
-                                                <li>
-                                                    <NavLink to="/app/demographic">Demographic</NavLink>
-                                                </li>
-                                                <li>
-                                                    <NavLink to="/app/history">History</NavLink>
-                                                </li>
-                                                <li>
-                                                    <NavLink to="/app/diagnoses">Diagnoses</NavLink>
-                                                </li>
-                                                <li>
-                                                    <NavLink to="/app/medications">Medications</NavLink>
-                                                </li>
-                                                <li>
-                                                    <NavLink to="/app/prescriptions">Prescriptions</NavLink>
-                                                </li>
-                                                <li>
-                                                    <NavLink to="/app/allergies">Allergies</NavLink>
-                                                </li>
-                                                <li>
-                                                    <NavLink to="/app/documents">Documents</NavLink>
-                                                </li>
-                                                <li>
-                                                    <NavLink to="/app/notes">Notes</NavLink>
-                                                </li>
-                                                <li>
-                                                    <NavLink to="/app/labs">Labs</NavLink>
-                                                </li>
-                                                <li>
-                                                    <NavLink to="/app/lab-orders">Lab Orders</NavLink>
-                                                </li>
-                                                <li>
-                                                    <NavLink to="/app/immunizations">Immunizations</NavLink>
-                                                </li>
-                                                <li>
-                                                    <NavLink to="/app/preventive-screening">Preventive Screening</NavLink>
-                                                </li>
-                                            </ul>
-                                        </AnimateHeight>
-                                    </li>
+
                                     <li className="nav-item">
-                                        <NavLink to="/app/patient-steps" className="group">
+                                        <NavLink to="/app/settings" className="group">
                                             <div className="flex items-center">
-                                                <IconSettings className="group-hover:!text-primary shrink-0" />
-                                                <span className="ltr:pl-3 rtl:pr-3 text-black dark:text-[#506690] dark:group-hover:text-white-dark">Steps</span>
+                                                <IconMenuPages className="group-hover:!text-primary shrink-0" />
+                                                <span className={`ltr:pl-3 rtl:pr-3 ${linkClass}`}>Settings</span>
                                             </div>
                                         </NavLink>
                                     </li>
                                 </ul>
                             </li>
-
-                            <li className="nav-item">
-                                <NavLink to="/app/subscription" className="group">
-                                    <div className="flex items-center">
-                                        <IconCreditCard className="group-hover:!text-primary shrink-0" />
-                                        <span className="ltr:pl-3 rtl:pr-3 text-black dark:text-[#506690] dark:group-hover:text-white-dark">Subscription</span>
-                                        {!premiumSubscription?.active && (
-                                            <span className="ml-auto flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary dark:bg-primary/25 shrink-0">
-                                                <IconLock className="w-2.5 h-2.5" /> Upgrade
-                                            </span>
-                                        )}
-                                    </div>
-                                </NavLink>
-                            </li>
-
-                            <li className="nav-item">
-                                <NavLink to="/app/settings" className="group">
-                                    <div className="flex items-center">
-                                        <IconSettings className="group-hover:!text-primary shrink-0" />
-                                        <span className="ltr:pl-3 rtl:pr-3 text-black dark:text-[#506690] dark:group-hover:text-white-dark">Settings</span>
-                                    </div>
-                                </NavLink>
-                            </li>
-
-                            {premiumSubscription?.planId === 'family' && (
-                                <li className="nav-item">
-                                    <NavLink to="/app/family-members" className="group">
-                                        <div className="flex items-center">
-                                            <IconUsersGroup className="group-hover:!text-primary shrink-0" />
-                                            <span className="ltr:pl-3 rtl:pr-3 text-black dark:text-[#506690] dark:group-hover:text-white-dark">Family Members</span>
-                                        </div>
-                                    </NavLink>
-                                </li>
-                            )}
                         </ul>
                     </PerfectScrollbar>
                 </div>
