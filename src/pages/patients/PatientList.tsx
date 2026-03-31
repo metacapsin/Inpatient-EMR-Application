@@ -11,7 +11,10 @@ import {
     type PatientListItem,
     type PatientListSortField,
 } from '../../services/patient.service';
-
+type DateRange = {
+    from: string;
+    to: string;
+  };
 const LIMIT_OPTIONS = [10, 25, 50] as const;
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -21,26 +24,36 @@ const STATUS_OPTIONS = [
     { value: 'inactive', label: 'Inactive' },
 ];
 
-const SEX_OPTIONS = [
+const GENDER_OPTIONS = [
     { value: 'all', label: 'All' },
     { value: 'M', label: 'Male' },
     { value: 'F', label: 'Female' },
-    { value: 'U', label: 'Unknown / other' },
 ];
+
+const AGE_RANGE_URL_VALUES = ['0-18', '19-64', '65+'] as const;
 
 const AGE_OPTIONS = [
     { value: 'all', label: 'All ages' },
-    { value: '0-17', label: '0–17' },
-    { value: '18-64', label: '18–64' },
+    { value: '0-18', label: '0–18' },
+    { value: '19-35', label: '19–35' },
     { value: '65+', label: '65+' },
 ];
 
+function normalizeAgeRangeParam(raw: string | null): string {
+    const v = (raw ?? '').trim();
+    if (!v || v === 'all') return 'all';
+    if ((AGE_RANGE_URL_VALUES as readonly string[]).includes(v)) return v;
+    if (v === '0-17') return '0-18';
+    if (v === '18-64') return '19-64';
+    return 'all';
+}
+
 const RECENT_OPTIONS = [
     { value: 'all', label: 'All patients' },
-    { value: '7', label: 'Last 7 days' },
-    { value: '30', label: 'Last 30 days' },
-    { value: '90', label: 'Last 90 days' },
-];
+    { value: 'today', label: 'Today' },
+    { value: 'thismonth', label: 'This Month' },
+    { value: 'last5recent', label: 'Last 5 Recent' },
+  ];
 
 type StatusValue = 'all' | 'active' | 'inactive';
 
@@ -48,11 +61,11 @@ interface ListQueryState {
     page: number;
     limit: number;
     status: StatusValue;
-    sex: string;
+    gender: string;
     ageRange: string;
     recent: string;
-    fromDate: string;
-    toDate: string;
+    startDate: string;
+    endDate: string;
     sortBy: PatientListSortField;
     sortOrder: 'asc' | 'desc';
     search: string;
@@ -68,11 +81,11 @@ function readListQuery(sp: URLSearchParams): ListQueryState {
             if (s === 'active' || s === 'inactive' || s === 'all') return s;
             return 'all';
         })(),
-        sex: sp.get('sex') || 'all',
-        ageRange: sp.get('ageRange') || 'all',
+        gender: sp.get('gender') || 'all',
+        ageRange: normalizeAgeRangeParam(sp.get('ageRange')),
         recent: sp.get('recent') || 'all',
-        fromDate: sp.get('fromDate') || '',
-        toDate: sp.get('toDate') || '',
+        startDate: sp.get('startDate') || sp.get('fromDate') || '',
+        endDate: sp.get('endDate') || sp.get('toDate') || '',
         sortBy: parsePatientListSortField(sp.get('sortBy')) ?? 'patient',
         sortOrder: sp.get('sortOrder') === 'desc' ? 'desc' : 'asc',
         search: sp.get('search') || '',
@@ -85,11 +98,11 @@ function serializeListQuery(q: ListQueryState): URLSearchParams {
     p.set('limit', String(q.limit));
     if (q.search.trim()) p.set('search', q.search.trim());
     if (q.status !== 'all') p.set('status', q.status);
-    if (q.sex !== 'all') p.set('sex', q.sex);
+    if (q.gender !== 'all') p.set('gender', q.gender);
     if (q.ageRange !== 'all') p.set('ageRange', q.ageRange);
     if (q.recent !== 'all') p.set('recent', q.recent);
-    if (q.fromDate) p.set('fromDate', q.fromDate);
-    if (q.toDate) p.set('toDate', q.toDate);
+    if (q.startDate) p.set('startDate', q.startDate);
+    if (q.endDate) p.set('endDate', q.endDate);
     p.set('sortBy', q.sortBy);
     p.set('sortOrder', q.sortOrder);
     return p;
@@ -106,11 +119,14 @@ const PatientList = () => {
     const [page, setPage] = useState(initial.page);
     const [limit, setLimit] = useState(initial.limit);
     const [status, setStatus] = useState<StatusValue>(initial.status);
-    const [sex, setSex] = useState(initial.sex);
+    const [gender, setGender] = useState(initial.gender);
     const [ageRange, setAgeRange] = useState(initial.ageRange);
     const [recent, setRecent] = useState(initial.recent);
-    const [fromDate, setFromDate] = useState(initial.fromDate);
-    const [toDate, setToDate] = useState(initial.toDate);
+    const [dateRange, setDateRange] = useState({
+        from: initial.startDate,
+        to: initial.endDate,
+      });
+    // const [toDate, setToDate] = useState(initial.toDate);
     const [sortBy, setSortBy] = useState<PatientListSortField>(initial.sortBy);
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(initial.sortOrder);
     const [searchInput, setSearchInput] = useState(initial.search);
@@ -139,24 +155,27 @@ const PatientList = () => {
         if (lastSyncedSearchParams.current !== null && cur === lastSyncedSearchParams.current) {
             return;
         }
-
+    
         const r = readListQuery(searchParams);
         setPage(r.page);
         setLimit(r.limit);
         setStatus(r.status);
-        setSex(r.sex);
+        setGender(r.gender);
         setAgeRange(r.ageRange);
         setRecent(r.recent);
-        setFromDate(r.fromDate);
-        setToDate(r.toDate);
+    
+        if (r.startDate !== dateRange.from || r.endDate !== dateRange.to) {
+            setDateRange({ from: r.startDate, to: r.endDate });
+        }
+    
         setSortBy(r.sortBy);
         setSortOrder(r.sortOrder);
-
+    
         if (typeof document !== 'undefined' && document.activeElement !== searchInputRef.current) {
             setSearchInput(r.search);
             setDebouncedSearch(r.search);
         }
-
+    
         lastSyncedSearchParams.current = cur;
     }, [searchParams]);
 
@@ -165,29 +184,28 @@ const PatientList = () => {
             page,
             limit,
             status,
-            sex,
+            gender,
             ageRange,
             recent,
-            fromDate,
-            toDate,
+            startDate: dateRange.from,
+            endDate: dateRange.to,
             sortBy,
             sortOrder,
             search: debouncedSearch,
         }).toString();
-
+    
         if (next === searchParams.toString()) return;
-
+    
         lastSyncedSearchParams.current = next;
         setSearchParams(new URLSearchParams(next), { replace: true });
     }, [
         page,
         limit,
         status,
-        sex,
+        gender,
         ageRange,
         recent,
-        fromDate,
-        toDate,
+        dateRange, // 🔥 FIX
         sortBy,
         sortOrder,
         debouncedSearch,
@@ -203,11 +221,11 @@ const PatientList = () => {
                 page,
                 limit,
                 status,
-                sex,
+                gender,
                 ageRange,
                 recent,
-                fromDate,
-                toDate,
+                startDate: dateRange.from,
+                endDate: dateRange.to,
                 search: debouncedSearch,
                 sortBy,
                 sortOrder,
@@ -223,8 +241,7 @@ const PatientList = () => {
         } finally {
             setLoading(false);
         }
-    }, [page, limit, status, sex, ageRange, recent, fromDate, toDate, debouncedSearch, sortBy, sortOrder]);
-
+    }, [page, limit, status, gender, ageRange, recent, dateRange, debouncedSearch, sortBy, sortOrder]);
     useEffect(() => {
         load();
     }, [load]);
@@ -241,11 +258,10 @@ const PatientList = () => {
 
     const clearFilters = () => {
         setStatus('all');
-        setSex('all');
+        setGender('all');
         setAgeRange('all');
         setRecent('all');
-        setFromDate('');
-        setToDate('');
+        setDateRange({ from: '', to: '' });
         setPage(1);
     };
 
@@ -287,10 +303,10 @@ const PatientList = () => {
                             setStatus(v as StatusValue);
                             setPage(1);
                         }} options={STATUS_OPTIONS} />
-                        <FilterSelect label="Sex" value={sex} onChange={(v) => {
-                            setSex(v);
+                        <FilterSelect label="Gender" value={gender} onChange={(v) => {
+                            setGender(v);
                             setPage(1);
-                        }} options={SEX_OPTIONS} />
+                        }} options={GENDER_OPTIONS} />
                         <FilterSelect label="Age range" value={ageRange} onChange={(v) => {
                             setAgeRange(v);
                             setPage(1);
@@ -300,18 +316,16 @@ const PatientList = () => {
                             setPage(1);
                         }} options={RECENT_OPTIONS} />
                         <DateRangePicker
-                            label="Reg date"
-                            from={fromDate}
-                            to={toDate}
-                            onFromChange={(v) => {
-                                setFromDate(v);
-                                setPage(1);
-                            }}
-                            onToChange={(v) => {
-                                setToDate(v);
-                                setPage(1);
-                            }}
-                        />
+  label="Reg date"
+  value={dateRange}
+  onChange={(range) => {
+    setDateRange(range);
+  
+    if (range.from && range.to) {
+      setPage(1);
+    }
+  }}
+/>
                     </div>
                     <button
                         type="button"

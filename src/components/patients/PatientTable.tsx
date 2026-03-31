@@ -16,7 +16,7 @@ function TableSkeleton() {
         <>
             {Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i}>
-                    <td className="px-4 py-3" colSpan={6}>
+                    <td className="px-4 py-3" colSpan={7}>
                         <div className="flex items-center gap-3">
                             <div className="h-10 w-10 shrink-0 animate-pulse rounded-lg bg-gray-200 dark:bg-gray-700" />
                             <div className="flex-1 space-y-2">
@@ -62,12 +62,13 @@ const PatientTable = ({
         return (
             <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-[#1a1a1a]">
                 <div className="hidden overflow-x-auto md:block">
-                    <table className="w-full min-w-[720px] text-left text-sm">
+                    <table className="w-full min-w-[800px] text-left text-sm">
                         <thead className="sticky top-0 z-10 border-b border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/80">
                             <tr>
                                 <SortableHeader {...headerProps('patient')}>Patient</SortableHeader>
-                                <SortableHeader {...headerProps('dob')}>DOB</SortableHeader>
+                                <SortableHeader {...headerProps('dob')}>DOB / Age</SortableHeader>
                                 <SortableHeader {...headerProps('gender')}>Gender</SortableHeader>
+                                <SortableHeader {...headerProps('status')}>Status</SortableHeader>
                                 <SortableHeader {...headerProps('phone')}>Phone</SortableHeader>
                                 <SortableHeader {...headerProps('createdDate')}>Created Date</SortableHeader>
                                 <SortableHeader isSortable={false} align="right">
@@ -104,12 +105,13 @@ const PatientTable = ({
         <>
             <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-[#1a1a1a] md:block">
                 <div className="max-h-[min(70vh,720px)] overflow-auto">
-                    <table className="w-full min-w-[720px] text-left text-sm">
+                    <table className="w-full min-w-[800px] text-left text-sm">
                         <thead className="sticky top-0 z-10 border-b border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/80">
                             <tr>
                                 <SortableHeader {...headerProps('patient')}>Patient</SortableHeader>
-                                <SortableHeader {...headerProps('dob')}>DOB</SortableHeader>
+                                <SortableHeader {...headerProps('dob')}>DOB / Age</SortableHeader>
                                 <SortableHeader {...headerProps('gender')}>Gender</SortableHeader>
+                                <SortableHeader {...headerProps('status')}>Status</SortableHeader>
                                 <SortableHeader {...headerProps('phone')}>Phone</SortableHeader>
                                 <SortableHeader {...headerProps('createdDate')}>Created Date</SortableHeader>
                                 <SortableHeader isSortable={false} align="right" className="text-gray-500">

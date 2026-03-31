@@ -1,6 +1,6 @@
 import { Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import type { PatientListItem } from '../../services/patient.service';
+import { formatAgeLabelFromDobRaw, type PatientListItem } from '../../services/patient.service';
 
 interface PatientRowProps {
     patient: PatientListItem;
@@ -18,6 +18,31 @@ function facesheetPatientId(patient: PatientListItem): string {
     const fromUnderscore = typeof raw?._id === 'string' ? raw._id.trim() : '';
     if (fromUnderscore) return fromUnderscore;
     return patient.id;
+}
+
+function statusPillClass(label: string): string {
+    const n = label.trim().toLowerCase();
+    if (n === 'active' || n === 'true' || n === '1') {
+        return 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-500/30';
+    }
+    if (n === 'inactive' || n === 'false' || n === '0') {
+        return 'bg-gray-100 text-gray-700 ring-1 ring-gray-500/15 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-500/25';
+    }
+    return 'bg-gray-50 text-gray-700 ring-1 ring-gray-500/10 dark:bg-gray-800/60 dark:text-gray-300';
+}
+
+function PatientStatusCell({ label }: { label: string }) {
+    if (!label || label === '—') {
+        return <span className="text-sm text-gray-400">—</span>;
+    }
+    return (
+        <span
+            className={`inline-flex max-w-[9rem] truncate rounded-full px-2 py-0.5 text-xs font-medium capitalize ${statusPillClass(label)}`}
+            title={label}
+        >
+            {label}
+        </span>
+    );
 }
 
 export function PatientTableRow({ patient }: PatientRowProps) {
@@ -70,8 +95,16 @@ export function PatientTableRow({ patient }: PatientRowProps) {
                     </div>
                 </div>
             </td>
-            <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">{patient.dob}</td>
+            <td className="px-4 py-3 text-sm text-gray-700">
+                <div className="flex flex-col gap-0.5">
+                    <span className="whitespace-nowrap tabular-nums">{patient.dob}</span>
+                    <span className="whitespace-nowrap text-xs text-gray-500 tabular-nums dark:text-gray-400">
+                        {formatAgeLabelFromDobRaw(patient.dobRaw)}
+                    </span>
+                </div>
+            </td>
             <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">{patient.gender}</td>
+            <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">{patient.statusLabel}</td>
             <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">{patient.phone}</td>
             <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">{patient.createdDate}</td>
             <td className="whitespace-nowrap px-4 py-3">
@@ -133,7 +166,16 @@ export function PatientMobileCard({ patient }: PatientRowProps) {
                     <p className="text-xs text-gray-500">{patient.email || '—'}</p>
                     <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-gray-600">
                         <span className="text-gray-400">DOB</span>
-                        <span>{patient.dob}</span>
+                        <span className="text-right">
+                            <span className="block tabular-nums">{patient.dob}</span>
+                            <span className="block text-gray-500 tabular-nums dark:text-gray-400">
+                                {formatAgeLabelFromDobRaw(patient.dobRaw)}
+                            </span>
+                        </span>
+                        <span className="text-gray-400">Status</span>
+                        <span className="flex justify-end">
+                            <PatientStatusCell label={patient.statusLabel} />
+                        </span>
                         <span className="text-gray-400">Phone</span>
                         <span>{patient.phone}</span>
                     </div>

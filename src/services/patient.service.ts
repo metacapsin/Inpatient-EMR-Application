@@ -1,3 +1,4 @@
+import { format } from 'date-fns';
 import api from './api';
 
 /** Raw row from GET /Patient/getAllPatientListPaginated */
@@ -14,6 +15,13 @@ export interface PatientApiRecord {
     email?: string;
     emailAddress?: string;
     profilePicture?: string;
+    /** Often boolean in list API (matches `status` query filter) */
+    status?: boolean | string | number;
+    isActive?: boolean;
+    active?: boolean;
+    patientStatus?: string;
+    statusLabel?: string;
+    accountStatus?: string;
     [key: string]: unknown;
 }
 
@@ -22,7 +30,10 @@ export interface PatientListItem {
     name: string;
     email: string;
     mrn: string;
+    /** DOB formatted MM/DD/YYYY for display */
     dob: string;
+    /** Raw API date string (ISO or parseable) for age calculation */
+    dobRaw: string;
     gender: string;
     phone: string;
     createdDate: string;
@@ -50,11 +61,13 @@ export interface GetPatientsListParams {
     limit: number;
     /** Active / inactive / omitted for all */
     status?: string;
-    sex?: string;
+    /** Filter: `all` or API values `M` / `F`. */
+    gender?: string;
+    /** UI bucket `0-18` | `19-64` | `65+` — mapped to `ageMin`/`ageMax` + `fromDOB`/`toDOB` for the API */
     ageRange?: string;
     recent?: string;
-    fromDate?: string;
-    toDate?: string;
+    startDate?: string;
+    endDate?: string;
     search?: string;
     sortBy?: PatientListSortField;
     sortOrder?: 'asc' | 'desc';
@@ -79,11 +92,157 @@ function pickString(v: unknown): string {
     return String(v).trim();
 }
 
+function startOfLocalDay(d: Date): Date {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function addYears(d: Date, years: number): Date {
+    const x = new Date(d.getTime());
+    x.setFullYear(x.getFullYear() + years);
+    return x;
+}
+
+function addDays(d: Date, days: number): Date {
+    const x = new Date(d.getTime());
+    x.setDate(x.getDate() + days);
+    return x;
+}
+
+function toYmd(d: Date): string {
+    return format(d, 'yyyy-MM-dd');
+}
+
+/**
+ * Maps UI age buckets to API params. Sends `ageMin`/`ageMax` and inclusive DOB bounds (`fromDOB`/`toDOB`)
+ * so the backend can filter by either convention. Does not send legacy `ageRange`.
+ */
+export function buildAgeFilterParams(ageRange: string | undefined): {
+    ageMin: number;
+    ageMax: number;
+    fromDOB: string;
+    toDOB: string;
+} | null {
+    if (!ageRange || ageRange === 'all') return null;
+    const today = startOfLocalDay(new Date());
+    switch (ageRange) {
+        case '0-18': {
+            const from = addDays(addYears(today, -19), 1);
+            return { ageMin: 0, ageMax: 18, fromDOB: toYmd(from), toDOB: toYmd(today) };
+        }
+        case '19-35': {
+            const from = addDays(addYears(today, -36), 1);
+            const to = addYears(today, -19);
+            return {
+                ageMin: 19,
+                ageMax: 35,
+                fromDOB: toYmd(from),
+                toDOB: toYmd(to),
+            };
+        }
+        case '65+': {
+            const to = addYears(today, -65);
+            return { ageMin: 65, ageMax: 200, fromDOB: '1900-01-01', toDOB: toYmd(to) };
+        }
+        // Legacy URL values
+        case '0-17':
+            return buildAgeFilterParams('0-18');
+        case '18-64':
+            return buildAgeFilterParams('19-64');
+        default:
+            return null;
+    }
+}
+
+function parseDobDate(raw: string): Date | null {
+    if (!raw) return null;
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return null;
+    return d;
+}
+
+/** MM/DD/YYYY for patient list DOB column */
+function formatDobMMDDYYYY(raw: string): string {
+    const d = parseDobDate(raw);
+    if (!d) return raw ? raw.trim() : '—';
+    return format(d, 'MM/dd/yyyy');
+}
+
+function monthsBetweenBirthAndRef(birth: Date, ref: Date): number {
+    let months = (ref.getFullYear() - birth.getFullYear()) * 12 + (ref.getMonth() - birth.getMonth());
+    if (ref.getDate() < birth.getDate()) months -= 1;
+    return Math.max(0, months);
+}
+
+/**
+ * Human-readable age from DOB (calendar years, or months if under one year).
+ */
+export function formatAgeLabelFromDobRaw(raw: string): string {
+    const birth = parseDobDate(raw);
+    if (!birth) return '—';
+    const today = new Date();
+    let years = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+        years -= 1;
+    }
+    if (years >= 1) {
+        return `${years} ${years === 1 ? 'Year' : 'Years'}`;
+    }
+    const months = monthsBetweenBirthAndRef(birth, today);
+    if (months === 0) return 'Newborn';
+    return `${months} ${months === 1 ? 'Month' : 'Months'}`;
+}
+
 function formatDisplayDate(value: string): string {
     if (!value) return '—';
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return value;
     return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+/** Coerce API flag values to boolean; unknown shapes → null */
+function apiTruthyToBool(v: unknown): boolean | null {
+    if (v === true || v === 'true' || v === 1 || v === '1') return true;
+    if (v === false || v === 'false' || v === 0 || v === '0') return false;
+    return null;
+}
+
+/**
+ * Derive a single status label for the patient list from common API shapes:
+ * `status: true|false`, `isActive`, string enums, etc.
+ */
+export function mapPatientStatusFromApi(raw: PatientApiRecord): string {
+    const r = raw as Record<string, unknown>;
+
+    const boolStatus = apiTruthyToBool(r.status);
+    if (boolStatus === true) return 'Active';
+    if (boolStatus === false) return 'Inactive';
+
+    const stringStatusKeys = [
+        'status',
+        'patientStatus',
+        'statusLabel',
+        'accountStatus',
+        'recordStatus',
+        'patientRecordStatus',
+    ] as const;
+    for (const key of stringStatusKeys) {
+        const s = pickString(r[key] as string | undefined);
+        if (!s) continue;
+        const low = s.toLowerCase();
+        if (low === 'true' || low === '1' || low === 'yes' || low === 'y' || low === 'active') return 'Active';
+        if (low === 'false' || low === '0' || low === 'no' || low === 'n' || low === 'inactive') return 'Inactive';
+        return s;
+    }
+
+    const boolKeys = ['isActive', 'active', 'patientIsActive', 'isPatientActive', 'patientActive'] as const;
+    for (const key of boolKeys) {
+        const b = apiTruthyToBool(r[key]);
+        if (b === true) return 'Active';
+        if (b === false) return 'Inactive';
+    }
+
+    return '—';
 }
 
 export function mapPatientRecord(raw: PatientApiRecord): PatientListItem {
@@ -94,21 +253,19 @@ export function mapPatientRecord(raw: PatientApiRecord): PatientListItem {
         pickString(raw.patientId) ||
         pickString(raw.mrn) ||
         `row-${Math.random().toString(36).slice(2, 11)}`;
+    const dobRaw = pickString(raw.dOB);
 
     return {
         id,
         name: pickString(raw.fullName) || '—',
         email: pickString(raw.email) || pickString(raw.emailAddress),
         mrn: pickString(raw.mrn) || '—',
-        dob: formatDisplayDate(pickString(raw.dOB)),
+        dob: formatDobMMDDYYYY(dobRaw),
+        dobRaw,
         gender: pickString(raw.sex) || '—',
         phone: phone || '—',
         createdDate: formatDisplayDate(pickString(raw.createdOn)),
-        statusLabel:
-            pickString(raw.status as string | undefined) ||
-            pickString(raw.patientStatus as string | undefined) ||
-            pickString(raw.statusLabel as string | undefined) ||
-            'Active',
+        statusLabel: mapPatientStatusFromApi(raw),
         ward: pickString(raw.ward as string | undefined) || pickString(raw.wardName as string | undefined) || '—',
         bed:
             pickString(raw.bed as string | undefined) ||
@@ -290,6 +447,16 @@ function compactQueryParams(record: Record<string, unknown>): Record<string, str
     return out;
 }
 
+function toApiYmd(value: string | undefined): string | undefined {
+    if (!value) return undefined;
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    const d = new Date(trimmed);
+    if (Number.isNaN(d.getTime())) return undefined;
+    return format(d, 'yyyy-MM-dd');
+}
+
 /**
  * GET /Patient/getAllPatientListPaginated — pagination, search, sort, filters.
  */
@@ -308,11 +475,22 @@ export async function getPatientsList(params: GetPatientsListParams): Promise<Pa
     const q = params.search?.trim();
     if (q) qp.search = q;
 
-    if (params.sex && params.sex !== 'all') qp.sex = params.sex;
-    if (params.ageRange && params.ageRange !== 'all') qp.ageRange = params.ageRange;
-    if (params.recent && params.recent !== 'all') qp.recent = params.recent;
-    if (params.fromDate) qp.fromDate = params.fromDate;
-    if (params.toDate) qp.toDate = params.toDate;
+    if (params.gender && params.gender !== 'all') {
+        const g = params.gender.trim().toUpperCase();
+        if (g === 'M' || g === 'F') qp.gender = g;
+    }
+    const ageFilter = buildAgeFilterParams(params.ageRange);
+    if (params.ageRange && params.ageRange !== 'all') {
+        qp.ageRange = params.ageRange; 
+    }
+    if (params.recent && params.recent !== 'all') {
+        qp.recentlyCreated = params.recent; 
+      }
+    const startDate = toApiYmd(params.startDate);
+    if (startDate) qp.startDate = startDate;
+
+    const endDate = toApiYmd(params.endDate);
+    if (endDate) qp.endDate = endDate;
 
     const { data } = await api.get<unknown>('/Patient/getAllPatientListPaginated', {
         params: compactQueryParams(qp),
