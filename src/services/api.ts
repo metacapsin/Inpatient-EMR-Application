@@ -404,6 +404,30 @@ export const patientAPI = {
 
 // Appointment API
 export const appointmentAPI = {
+  formatAppointmentDate: (value: unknown): string => {
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) return '';
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  },
+
+  getCurrentMonthDateRange: (): { fromDate: string; toDate: string } => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const fromDate = `${firstDay.getFullYear()}-${String(firstDay.getMonth() + 1).padStart(2, '0')}-${String(firstDay.getDate()).padStart(2, '0')}`;
+    const toDate = `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
+    return { fromDate, toDate };
+  },
+
   getGeneralCalendarSetting: () =>
     api.get("/CalendarSetting/getGeneralCalendarSetting"),
 
@@ -415,18 +439,70 @@ export const appointmentAPI = {
   // Get all appointments with optional filters
   getAppointments: (id?: string) =>
     api.get('/Appointment/getAppointmentListByPatientId/' + id),
+  getAppointmentListPaginated: (params?: Record<string, any>) => {
+    const payload: Record<string, any> = { ...(params ?? {}) };
+    const providedFromDate =
+      appointmentAPI.formatAppointmentDate(payload.fromDate) ||
+      appointmentAPI.formatAppointmentDate(payload.startDate);
+    const providedToDate =
+      appointmentAPI.formatAppointmentDate(payload.toDate) ||
+      appointmentAPI.formatAppointmentDate(payload.endDate);
+
+    const { fromDate: defaultFromDate, toDate: defaultToDate } = appointmentAPI.getCurrentMonthDateRange();
+    payload.fromDate = providedFromDate || defaultFromDate;
+    payload.toDate = providedToDate || defaultToDate;
+
+    payload.page = Number(payload.page ?? 1) || 1;
+    payload.limit = Number(payload.limit ?? 10) || 10;
+    payload.sortField = String(payload.sortField ?? payload.sortBy ?? 'startDate');
+    payload.sortOrder = String(payload.sortOrder ?? 'asc').toLowerCase() === 'desc' ? 'desc' : 'asc';
+
+    if (Array.isArray(payload.providerIds)) {
+      payload.providerIds = payload.providerIds.filter((providerId: unknown) =>
+        typeof providerId === 'string' ? providerId.trim().length > 0 : Boolean(providerId)
+      );
+      if (payload.providerIds.length === 0) delete payload.providerIds;
+    } else if (typeof payload.providerIds === 'string' && payload.providerIds.trim()) {
+      payload.providerIds = [payload.providerIds.trim()];
+    } else {
+      delete payload.providerIds;
+    }
+
+    Object.keys(payload).forEach((key) => {
+      const value = payload[key];
+      if (value === undefined || value === null) {
+        delete payload[key];
+        return;
+      }
+      if (typeof value === 'string' && value.trim().length === 0) {
+        delete payload[key];
+      }
+    });
+
+    return api.post('/Appointment/getAppointmentListPaginated', payload);
+  },
   
   // Get appointment by ID
   getAppointmentById: (id: string) =>
-    api.get(`/appointments/${id}`),
+    api.get(`/Appointment/getAppointmentById/${encodeURIComponent(id)}`),
   
   // Create new appointment
   createAppointment: (data: Record<string, any>) =>
     api.post('/Appointment/createAppointment', data),
   
   // Update existing appointment
-  updateAppointment: (id: string, data: Record<string, any>) =>
-    api.put(`/Appointment/updateAppointment`, data),
+  updateAppointment: (data: Record<string, any>) => {
+    const appointmentId =
+      (typeof data?._id === 'string' && data._id.trim()) ||
+      (typeof data?.appointmentId === 'string' && data.appointmentId.trim()) ||
+      (typeof data?.id === 'string' && data.id.trim()) ||
+      undefined;
+    const payload = {
+      ...data,
+      _id: appointmentId,
+    };
+    return api.put('/Appointment/updateAppointment', payload);
+  },
   
   // Delete appointment
   deleteAppointment: (id: string) =>

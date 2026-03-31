@@ -245,6 +245,14 @@ export function mapPatientStatusFromApi(raw: PatientApiRecord): string {
     return '—';
 }
 
+/** Primary id for routing (facesheet, book appointment); prefers Mongo `_id` from raw. */
+export function getPatientListRowId(patient: PatientListItem): string {
+    const raw = patient.raw as Record<string, unknown>;
+    const fromUnderscore = typeof raw?._id === 'string' ? raw._id.trim() : '';
+    if (fromUnderscore) return fromUnderscore;
+    return patient.id;
+}
+
 export function mapPatientRecord(raw: PatientApiRecord): PatientListItem {
     const phone = pickString(raw.mobilePhone) || pickString(raw.homePhone);
     const id =

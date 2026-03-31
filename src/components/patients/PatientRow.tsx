@@ -1,6 +1,6 @@
-import { Eye } from 'lucide-react';
+import { Eye, CalendarPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { formatAgeLabelFromDobRaw, type PatientListItem } from '../../services/patient.service';
+import { formatAgeLabelFromDobRaw, getPatientListRowId, type PatientListItem } from '../../services/patient.service';
 
 interface PatientRowProps {
     patient: PatientListItem;
@@ -11,13 +11,6 @@ function initials(name: string): string {
     if (parts.length === 0) return '?';
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-function facesheetPatientId(patient: PatientListItem): string {
-    const raw = patient.raw as Record<string, unknown>;
-    const fromUnderscore = typeof raw?._id === 'string' ? raw._id.trim() : '';
-    if (fromUnderscore) return fromUnderscore;
-    return patient.id;
 }
 
 function statusPillClass(label: string): string {
@@ -47,7 +40,7 @@ function PatientStatusCell({ label }: { label: string }) {
 
 export function PatientTableRow({ patient }: PatientRowProps) {
     const navigate = useNavigate();
-    const chartId = facesheetPatientId(patient);
+    const chartId = getPatientListRowId(patient);
 
     const goToFacesheet = () => {
         navigate(`/app/facesheet/${encodeURIComponent(chartId)}`);
@@ -61,6 +54,11 @@ export function PatientTableRow({ patient }: PatientRowProps) {
     const handleView = (e: React.MouseEvent) => {
         e.stopPropagation();
         goToFacesheet();
+    };
+
+    const handleBookAppointment = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        navigate(`/app/appointments/add?patientId=${encodeURIComponent(chartId)}`);
     };
 
     return (
@@ -108,7 +106,15 @@ export function PatientTableRow({ patient }: PatientRowProps) {
             <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">{patient.phone}</td>
             <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">{patient.createdDate}</td>
             <td className="whitespace-nowrap px-4 py-3">
-                <div className="flex items-center gap-1">
+                <div className="flex items-center justify-end gap-1">
+                    <button
+                        type="button"
+                        title="Book appointment"
+                        onClick={handleBookAppointment}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary"
+                    >
+                        <CalendarPlus className="h-4 w-4" />
+                    </button>
                     <button
                         type="button"
                         title="View"
@@ -125,7 +131,7 @@ export function PatientTableRow({ patient }: PatientRowProps) {
 
 export function PatientMobileCard({ patient }: PatientRowProps) {
     const navigate = useNavigate();
-    const chartId = facesheetPatientId(patient);
+    const chartId = getPatientListRowId(patient);
 
     const goToFacesheet = () => {
         navigate(`/app/facesheet/${encodeURIComponent(chartId)}`);
@@ -134,6 +140,11 @@ export function PatientMobileCard({ patient }: PatientRowProps) {
     const handleView = (e: React.MouseEvent) => {
         e.stopPropagation();
         goToFacesheet();
+    };
+
+    const handleBookAppointment = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        navigate(`/app/appointments/add?patientId=${encodeURIComponent(chartId)}`);
     };
 
     return (
@@ -181,6 +192,14 @@ export function PatientMobileCard({ patient }: PatientRowProps) {
                     </div>
                     <div className="mt-3 flex items-center justify-end">
                         <div className="flex items-center gap-1">
+                            <button
+                                type="button"
+                                title="Book appointment"
+                                onClick={handleBookAppointment}
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary"
+                            >
+                                <CalendarPlus className="h-4 w-4" />
+                            </button>
                             <button
                                 type="button"
                                 title="View"
