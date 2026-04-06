@@ -23,6 +23,7 @@ const Notes = lazy(() => import('../patient/Notes'));
 const PreventiveScreening = lazy(() => import('../patient/PreventiveScreening'));
 const Pharmacies = lazy(() => import('../patient/Pharmacies'));
 const PharmacyMessage = lazy(() => import('../patient/PharmacyMessage'));
+const VisitorsContacts = lazy(() => import('../patient/VisitorsContacts'));
 
 function ModuleFallback() {
     return (
@@ -118,6 +119,7 @@ const FacesheetPage = () => {
                             <Route path="preventive-screening" element={<PreventiveScreening />} />
                             <Route path="pharmacies" element={<Pharmacies />} />
                             <Route path="pharmacy-message" element={<PharmacyMessage />} />
+                            <Route path="visitors-contacts" element={<VisitorsContacts />} />
                             <Route path="*" element={<Navigate to="demographic" replace />} />
                         </Routes>
                     </Suspense>

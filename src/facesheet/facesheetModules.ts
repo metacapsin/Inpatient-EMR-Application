@@ -17,7 +17,7 @@ import {
     UserRound,
 } from 'lucide-react';
 
-export type FacesheetModuleGroupId = 'overview' | 'clinical' | 'labs' | 'care' | 'pharmacy';
+export type FacesheetModuleGroupId = 'overview' | 'clinical' | 'labs' | 'care' | 'pharmacy' | 'social';
 
 export interface FacesheetModuleDef {
     path: string;
@@ -32,6 +32,7 @@ export const FACESHEET_MODULE_GROUPS: Record<FacesheetModuleGroupId, string> = {
     labs: 'Labs & records',
     care: 'Care plan',
     pharmacy: 'Pharmacy',
+    social: 'Social',
 };
 
 export const FACESHEET_MODULES: FacesheetModuleDef[] = [
@@ -50,9 +51,10 @@ export const FACESHEET_MODULES: FacesheetModuleDef[] = [
     { path: 'preventive-screening', label: 'Preventive', icon: FileText, group: 'care' },
     { path: 'pharmacies', label: 'Pharmacies', icon: Building2, group: 'pharmacy' },
     { path: 'pharmacy-message', label: 'Rx messaging', icon: MessageSquare, group: 'pharmacy' },
+    { path: 'visitors-contacts', label: 'Visitors & Contacts', icon: UsersRound, group: 'social' },
 ];
 
-const ORDER: FacesheetModuleGroupId[] = ['overview', 'clinical', 'labs', 'care', 'pharmacy'];
+const ORDER: FacesheetModuleGroupId[] = ['overview', 'clinical', 'labs', 'care', 'pharmacy', 'social'];
 
 export function facesheetModulesByGroup(): { group: FacesheetModuleGroupId; title: string; items: FacesheetModuleDef[] }[] {
     return ORDER.map((group) => ({
