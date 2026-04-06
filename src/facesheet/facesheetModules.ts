@@ -15,6 +15,7 @@ import {
     Stethoscope,
     Syringe,
     UserRound,
+    UsersRound,
 } from 'lucide-react';
 
 export type FacesheetModuleGroupId = 'overview' | 'clinical' | 'labs' | 'care' | 'pharmacy' | 'social';
