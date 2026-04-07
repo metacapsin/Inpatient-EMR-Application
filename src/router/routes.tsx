@@ -7,12 +7,14 @@ const LoginPage = lazy(() => import('../pages/auth/LoginPage'));
 const ForgotPasswordPage = lazy(() => import('../pages/auth/ForgotPasswordPage'));
 const Dashboard = lazy(() => import('../pages/Dashboard'));
 const PatientList = lazy(() => import('../pages/patients/PatientList'));
+const AdtStandalonePage = lazy(() => import('../pages/adt/AdtStandalonePage'));
 const FacesheetPage = lazy(() => import('../pages/facesheet/FacesheetPage'));
 const HealthMonitoring = lazy(() => import('../pages/patient/HealthSummary'));
 const AppointmentList = lazy(() => import('../pages/appointments/AppointmentList'));
 const AppointmentCalendarPage = lazy(() => import('../pages/appointments/AppointmentCalendarPage'));
 const AddAppointment = lazy(() => import('../pages/appointments/AddAppointment'));
 const Settings = lazy(() => import('../pages/Settings'));
+const FacilitySettingsPage = lazy(() => import('../modules/settings/facility/FacilitySettingsPage'));
 const Demographic = lazy(() => import('../pages/patient/Demographic'));
 const Vitals = lazy(() => import('../pages/patient/Vitals'));
 const History = lazy(() => import('../pages/patient/History'));
@@ -72,6 +74,11 @@ const routes = [
         layout: 'default' as const,
     },
     {
+        path: '/app/adt',
+        element: guard(<AdtStandalonePage />),
+        layout: 'default' as const,
+    },
+    {
         path: '/app/health-monitoring',
         element: guard(<HealthMonitoring />),
         layout: 'default' as const,
@@ -104,6 +111,11 @@ const routes = [
     {
         path: '/app/settings',
         element: guard(<Settings />),
+        layout: 'default' as const,
+    },
+    {
+        path: '/app/settings/facility',
+        element: guard(<FacilitySettingsPage />),
         layout: 'default' as const,
     },
     {

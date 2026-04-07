@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI } from '../../services/api';
 import { usePatientId } from '../../hooks/usePatientId';
+import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
 import { FaUser, FaCalendarCheck, FaHistory, FaShieldAlt } from 'react-icons/fa';
 
@@ -27,6 +28,7 @@ const Demographic: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
   const routePatientId = usePatientId();
+  const { moduleRootClass } = useFacesheetChartLayout();
 
   const formatDate = (dateString: string): string => {
     if (!dateString) return '';
@@ -168,8 +170,7 @@ const Demographic: React.FC = () => {
     : 'Unknown';
 
   return (
-    <div>
-      <div className="panel h-[calc(100vh-120px)] overflow-y-auto">
+    <div className={moduleRootClass}>
         {/* Breadcrumb */}
         <div className="mb-5">
           <ul className="flex items-center gap-2 text-sm">
@@ -838,7 +839,6 @@ const Demographic: React.FC = () => {
             )}
           </div>
         )}
-      </div>
     </div>
   );
 };

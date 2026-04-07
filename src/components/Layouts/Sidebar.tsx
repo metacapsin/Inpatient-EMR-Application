@@ -55,7 +55,7 @@ const Sidebar = () => {
     return (
         <div className={semidark ? 'dark' : ''}>
             <nav
-                className={`sidebar fixed min-h-screen h-full top-0 bottom-0 w-[260px] shadow-[5px_0_25px_0_rgba(151,112,79,0.08)] transition-all duration-300 border-r border-primary-100/30 dark:border-primary-900/20 ${semidark ? 'text-white-dark' : ''} ${themeConfig.sidebar ? 'z-[50] lg:z-10' : 'z-10'}`}
+                className={`sidebar fixed min-h-screen h-full top-0 bottom-0 w-[200px] shadow-[5px_0_25px_0_rgba(151,112,79,0.08)] transition-all duration-300 border-r border-primary-100/30 dark:border-primary-900/20 ${semidark ? 'text-white-dark' : ''} ${themeConfig.sidebar ? 'z-[50] lg:z-10' : 'z-10'}`}
             >
                 <div className="bg-white dark:bg-black h-full">
                     <div className="flex justify-between items-center px-4 py-3">
@@ -110,6 +110,9 @@ const Sidebar = () => {
                                             <ul className="sub-menu">
                                                 <li>
                                                     <NavLink to="/app/patients/list">Patient List</NavLink>
+                                                </li>
+                                                <li>
+                                                    <NavLink to="/app/adt">ADT workspace</NavLink>
                                                 </li>
                                             </ul>
                                         )}

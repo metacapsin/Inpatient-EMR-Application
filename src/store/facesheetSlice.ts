@@ -1,5 +1,6 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk, type PayloadAction } from '@reduxjs/toolkit';
 import { getPatientById, type FacesheetPatient } from '../services/patient.service';
+import type { PatientLocationSnapshot } from '../types/patientLocation';
 import { logout } from './authSlice';
 
 export const fetchFacesheetPatient = createAsyncThunk(
@@ -37,6 +38,11 @@ const facesheetSlice = createSlice({
     initialState,
     reducers: {
         clearFacesheet: () => initialState,
+        updatePatientLocation: (state, action: PayloadAction<PatientLocationSnapshot>) => {
+            if (state.patient) {
+                state.patient.location = action.payload;
+            }
+        },
     },
     extraReducers: (builder) => {
         builder
@@ -63,5 +69,5 @@ const facesheetSlice = createSlice({
     },
 });
 
-export const { clearFacesheet } = facesheetSlice.actions;
+export const { clearFacesheet, updatePatientLocation } = facesheetSlice.actions;
 export default facesheetSlice.reducer;

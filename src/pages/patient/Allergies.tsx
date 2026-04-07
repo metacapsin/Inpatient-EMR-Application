@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI } from '../../services/api';
 import { usePatientId } from '../../hooks/usePatientId';
+import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
 import IconSearch from '../../components/Icon/IconSearch';
 
@@ -18,6 +19,7 @@ interface AllergyRecord {
 
 const Allergies: React.FC = () => {
   const patientId = usePatientId();
+  const { moduleRootClass } = useFacesheetChartLayout();
   const [allergiesList, setAllergiesList] = useState<AllergyRecord[]>([]);
   const [filteredTableList, setFilteredTableList] = useState<AllergyRecord[]>([]);
   const [filteredCardList, setFilteredCardList] = useState<AllergyRecord[]>([]);
@@ -204,8 +206,7 @@ const Allergies: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="panel h-[calc(100vh-120px)] overflow-y-auto">
+    <div className={moduleRootClass}>
         {/* Breadcrumb */}
         <div className="mb-5">
           <ul className="flex items-center gap-2 text-sm">
@@ -330,7 +331,6 @@ const Allergies: React.FC = () => {
             )}
           </div>
         </div>
-      </div>
     </div>
   );
 };

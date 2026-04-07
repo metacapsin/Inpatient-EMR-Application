@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI } from '../../services/api';
 import { usePatientId } from '../../hooks/usePatientId';
+import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
 import { FaEye, FaTimes } from 'react-icons/fa';
 import IconSearch from '../../components/Icon/IconSearch';
@@ -27,6 +28,7 @@ interface MedicationRecord {
 
 const Medications: React.FC = () => {
   const patientId = usePatientId();
+  const { moduleRootClass } = useFacesheetChartLayout();
   const [medicationsList, setMedicationsList] = useState<MedicationRecord[]>([]);
   const [filteredTableList, setFilteredTableList] = useState<MedicationRecord[]>([]);
   const [filteredCardList, setFilteredCardList] = useState<MedicationRecord[]>([]);
@@ -277,8 +279,7 @@ const Medications: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="panel h-[calc(100vh-120px)] overflow-y-auto">
+    <div className={moduleRootClass}>
         {/* Breadcrumb */}
         <div className="mb-5">
           <ul className="flex items-center gap-2 text-sm">
@@ -466,7 +467,6 @@ const Medications: React.FC = () => {
             )}
           </div>
         </div>
-      </div>
 
       {/* View Medication modal */}
       {viewMedication && (

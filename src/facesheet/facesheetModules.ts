@@ -1,7 +1,9 @@
 import type { LucideIcon } from 'lucide-react';
 import {
     Activity,
+    BedDouble,
     Building2,
+    Hospital,
     ClipboardList,
     FileStack,
     FileText,
@@ -39,6 +41,8 @@ export const FACESHEET_MODULE_GROUPS: Record<FacesheetModuleGroupId, string> = {
 export const FACESHEET_MODULES: FacesheetModuleDef[] = [
     { path: 'demographic', label: 'Demographics', icon: UserRound, group: 'overview' },
     { path: 'vitals', label: 'Vitals', icon: Activity, group: 'overview' },
+    { path: 'location', label: 'Location', icon: BedDouble, group: 'overview' },
+    { path: 'adt', label: 'ADT', icon: Hospital, group: 'overview' },
     { path: 'history', label: 'History', icon: History, group: 'clinical' },
     { path: 'diagnoses', label: 'Diagnoses', icon: Stethoscope, group: 'clinical' },
     { path: 'medications', label: 'Medications', icon: Pill, group: 'clinical' },

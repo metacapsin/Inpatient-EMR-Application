@@ -1,7 +1,7 @@
 // api.ts
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 
-export const BASE_URL = 'https://devapi.mdcareproviders.com'
+export const BASE_URL = (import.meta.env.VITE_EMR_API_BASE_URL as string | undefined)?.replace(/\/$/, '') || 'https://devapi.mdcareproviders.com';
 // http://101.53.133.39:4000
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,

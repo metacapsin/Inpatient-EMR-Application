@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import type { PatientLocationSnapshot } from '../types/patientLocation';
 import api from './api';
 
 /** Raw row from GET /Patient/getAllPatientListPaginated */
@@ -39,6 +40,7 @@ export interface PatientListItem {
     createdDate: string;
     statusLabel: string;
     ward: string;
+    room: string;
     bed: string;
     profilePicture?: string;
     raw: PatientApiRecord;
@@ -53,6 +55,7 @@ export type PatientListSortField =
     | 'phone'
     | 'createdDate'
     | 'ward'
+    | 'room'
     | 'bed'
     | 'status';
 
@@ -275,6 +278,11 @@ export function mapPatientRecord(raw: PatientApiRecord): PatientListItem {
         createdDate: formatDisplayDate(pickString(raw.createdOn)),
         statusLabel: mapPatientStatusFromApi(raw),
         ward: pickString(raw.ward as string | undefined) || pickString(raw.wardName as string | undefined) || '—',
+        room:
+            pickString(raw.room as string | undefined) ||
+            pickString(raw.roomName as string | undefined) ||
+            pickString(raw.roomNumber as string | undefined) ||
+            '—',
         bed:
             pickString(raw.bed as string | undefined) ||
             pickString(raw.bedNumber as string | undefined) ||
@@ -322,7 +330,35 @@ export interface FacesheetPatient {
     sex: string;
     mobilePhone: string;
     address: string;
+    /** Parsed from getPatientById when the API supplies location fields */
+    location: PatientLocationSnapshot | null;
     raw: Record<string, unknown>;
+}
+
+function extractPatientLocationFromPayload(p: Record<string, unknown>): PatientLocationSnapshot | null {
+    const wardName =
+        pickString(p.ward) || pickString(p.wardName) || pickString(p.unit) || pickString(p.unitName);
+    const roomName =
+        pickString(p.room) ||
+        pickString(p.roomName) ||
+        pickString(p.roomNumber) ||
+        pickString(p.patientRoom);
+    const bedName =
+        pickString(p.bed) || pickString(p.bedName) || pickString(p.bedNumber) || pickString(p.patientBed);
+    const wardId = pickString(p.wardId);
+    const roomId = pickString(p.roomId);
+    const bedId = pickString(p.bedId);
+    if (!wardName && !roomName && !bedName && !wardId && !roomId && !bedId) {
+        return null;
+    }
+    return {
+        wardId,
+        wardName: wardName || '',
+        roomId,
+        roomName: roomName || '',
+        bedId,
+        bedName: bedName || '',
+    };
 }
 
 function extractSinglePatientPayload(data: unknown): Record<string, unknown> {
@@ -390,6 +426,7 @@ export async function getPatientById(id: string): Promise<FacesheetPatient> {
         sex: formatSexDisplay(pickString(p.sex)),
         mobilePhone: pickString(p.mobilePhone) || pickString(p.homePhone) || '—',
         address: buildPatientAddress(p) || '—',
+        location: extractPatientLocationFromPayload(p),
         raw: p,
     };
 }
@@ -420,6 +457,7 @@ const SORT_FIELDS: ReadonlySet<string> = new Set([
     'phone',
     'createdDate',
     'ward',
+    'room',
     'bed',
     'status',
 ]);
@@ -439,6 +477,7 @@ function patientListSortFieldToApi(field: PatientListSortField | undefined): str
         phone: 'mobilePhone',
         createdDate: 'createdOn',
         ward: 'ward',
+        room: 'room',
         bed: 'bed',
         status: 'status',
     };

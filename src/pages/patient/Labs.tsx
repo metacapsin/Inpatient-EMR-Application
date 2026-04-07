@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI, aiHealthInsightsAPI } from '../../services/api';
 import { usePatientId } from '../../hooks/usePatientId';
+import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
 import { FaFlask, FaDownload, FaTimes, FaEye } from 'react-icons/fa';
 import { FaWandMagicSparkles } from 'react-icons/fa6';
@@ -24,6 +25,7 @@ interface LabRecord {
 
 const Labs: React.FC = () => {
   const patientId = usePatientId();
+  const { moduleSurfaceClass } = useFacesheetChartLayout();
 
   const [labsList, setLabsList] = useState<LabRecord[]>([]);
   const [paginatedCardList, setPaginatedCardList] = useState<LabRecord[]>([]);
@@ -168,7 +170,7 @@ const Labs: React.FC = () => {
   };
 
   return (
-    <div className="panel">
+    <div className={moduleSurfaceClass}>
        {/* Breadcrumb */}
        <div className="mb-5">
           <ul className="flex items-center gap-2 text-sm">

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI } from '../../services/api';
 import { usePatientId } from '../../hooks/usePatientId';
+import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
 import IconSearch from '../../components/Icon/IconSearch';
 
@@ -283,6 +284,7 @@ function mapRawToPrescriptionRecord(item: any, index: number, formatDateFn: (s: 
 
 const Prescriptions: React.FC = () => {
   const patientId = usePatientId();
+  const { moduleRootClass } = useFacesheetChartLayout();
   const [prescriptionsList, setPrescriptionsList] = useState<PrescriptionRecord[]>([]);
   const [filteredTableList, setFilteredTableList] = useState<PrescriptionRecord[]>([]);
   const [filteredCardList, setFilteredCardList] = useState<PrescriptionRecord[]>([]);
@@ -395,8 +397,7 @@ const Prescriptions: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="panel h-[calc(100vh-120px)] overflow-y-auto">
+    <div className={moduleRootClass}>
         {/* Breadcrumb */}
         <div className="mb-5">
           <ul className="flex items-center gap-2 text-sm">
@@ -567,7 +568,6 @@ const Prescriptions: React.FC = () => {
             )}
           </div>
         </div>
-      </div>
 
       {/* Text Modal (Documents-style) */}
       {showTextModal && (

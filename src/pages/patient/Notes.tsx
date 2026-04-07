@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI, aiHealthInsightsAPI } from '../../services/api';
 import { usePatientId } from '../../hooks/usePatientId';
+import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
 import { FaDownload, FaTimes } from 'react-icons/fa';
 import IconSparkles from '../../components/Icon/IconSparkles';
@@ -24,6 +25,7 @@ interface NoteRecord {
 
 const Notes: React.FC = () => {
   const patientId = usePatientId();
+  const { moduleSurfaceClass } = useFacesheetChartLayout();
   const [notesList, setNotesList] = useState<NoteRecord[]>([]);
   const [filteredTableList, setFilteredTableList] = useState<NoteRecord[]>([]);
   const [filteredCardList, setFilteredCardList] = useState<NoteRecord[]>([]);
@@ -218,8 +220,7 @@ const Notes: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="panel">
+    <div className={moduleSurfaceClass}>
         {/* Breadcrumb */}
         <div className="mb-5">
           <ul className="flex items-center gap-2 text-sm">
@@ -359,7 +360,6 @@ const Notes: React.FC = () => {
             )}
           </div>
         </div>
-      </div>
 
       {/* AI Visit Summary Modal */}
       {showAIModal && (

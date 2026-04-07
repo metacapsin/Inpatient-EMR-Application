@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI } from '../../services/api';
 import { usePatientId } from '../../hooks/usePatientId';
+import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
 import { FaHistory, FaClock, FaTags, FaCalendarAlt, FaStickyNote, FaEye } from 'react-icons/fa';
 import IconSearch from '../../components/Icon/IconSearch';
@@ -23,6 +24,7 @@ interface HistoryRecord {
 
 const History: React.FC = () => {
   const patientId = usePatientId();
+  const { moduleRootClass } = useFacesheetChartLayout();
   const [historyList, setHistoryList] = useState<HistoryRecord[]>([]);
   const [filteredTableList, setFilteredTableList] = useState<HistoryRecord[]>([]);
   const [filteredCardList, setFilteredCardList] = useState<HistoryRecord[]>([]);
@@ -145,8 +147,7 @@ const History: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="panel h-[calc(100vh-120px)] overflow-y-auto">
+    <div className={moduleRootClass}>
         {/* Breadcrumb */}
         <div className="mb-5">
           <ul className="flex items-center gap-2 text-sm">
@@ -278,7 +279,6 @@ const History: React.FC = () => {
             )}
           </div>
         </div>
-      </div>
 
       {/* View History Details Modal */}
       {viewHistoryDialog && (

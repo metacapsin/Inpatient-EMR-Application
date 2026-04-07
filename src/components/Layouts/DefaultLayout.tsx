@@ -20,6 +20,7 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
     const isFacesheet = variant === 'facesheet';
     const isSymptomAssessmentPage = location.pathname === '/app/symptom-assessment';
     const isFullViewportPage = ['/app/health-trends', '/app/daily-log'].includes(location.pathname);
+    const isPatientListPage = location.pathname === '/app/patients/list';
 
     const [showLoader, setShowLoader] = useState(true);
     const [showTopButton, setShowTopButton] = useState(false);
@@ -100,23 +101,45 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
                     {isFacesheet ? <FacesheetSidebar /> : <Sidebar />}
                     {/* END SIDEBAR */}
 
-                    <div className={`main-content flex flex-col ${isSymptomAssessmentPage || isFullViewportPage ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>
+                    <div
+                        className={`main-content flex flex-col ${
+                            isSymptomAssessmentPage || isFullViewportPage
+                                ? 'h-screen overflow-hidden'
+                                : isFacesheet
+                                  ? 'h-[100dvh] max-h-[100dvh] min-h-0 overflow-hidden'
+                                  : 'h-[100dvh] max-h-[100dvh] min-h-0 overflow-hidden'
+                        }`}
+                    >
                         {/* BEGIN TOP NAVBAR */}
-                        <Header />
+                        <div className="shrink-0">
+                            <Header />
+                        </div>
                         {/* END TOP NAVBAR */}
 
                         {/* BEGIN CONTENT AREA */}
                         <Suspense>
                             <div
-                                className={`${themeConfig.animation} animate__animated flex-1 min-h-0 flex flex-col min-w-0 ${isSymptomAssessmentPage || isFullViewportPage ? 'overflow-hidden h-full' : 'overflow-auto'} ${
+                                className={`${themeConfig.animation} animate__animated flex min-w-0 flex-1 flex-col ${
+                                    isSymptomAssessmentPage || isFullViewportPage
+                                        ? 'min-h-0 h-full overflow-hidden'
+                                        : isFacesheet
+                                          ? 'min-h-0 overflow-x-hidden overflow-y-hidden'
+                                          : isPatientListPage
+                                            ? 'min-h-0 overflow-x-hidden overflow-y-hidden'
+                                            : 'min-h-0 overflow-y-auto overflow-x-hidden'
+                                } ${
                                     isSymptomAssessmentPage
                                         ? 'py-4 sm:py-6 ltr:pl-4 ltr:pr-6 rtl:pr-4 rtl:pl-6'
                                         : isFacesheet
-                                          ? 'p-4 sm:p-5 lg:p-6'
+                                          ? 'p-2 sm:p-3 lg:p-4'
                                           : 'p-6'
                                 }`}
                             >
-                                {children}
+                                {isFacesheet || isPatientListPage ? (
+                                    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
+                                ) : (
+                                    children
+                                )}
                             </div>
                         </Suspense>
                         {/* END CONTENT AREA */}

@@ -5,6 +5,9 @@ import { DateRangePicker } from '../../components/patients/DateRangePicker';
 import { FilterSelect } from '../../components/patients/FilterSelect';
 import { SearchInput } from '../../components/patients/SearchInput';
 import PatientTable from '../../components/patients/PatientTable';
+import { AdtPatientWorkflowModal } from '../../components/adt/AdtPatientWorkflowModal';
+import type { AdtWorkflowIntent } from '../../components/adt/AdtPatientWorkflowModal';
+import { getPatientListRowId } from '../../services/patient.service';
 import {
     getPatientsList,
     parsePatientListSortField,
@@ -136,6 +139,8 @@ const PatientList = () => {
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    const [adtModal, setAdtModal] = useState<{ patient: PatientListItem; intent: AdtWorkflowIntent } | null>(null);
 
     useEffect(() => {
         const t = window.setTimeout(() => setDebouncedSearch(searchInput), SEARCH_DEBOUNCE_MS);
@@ -270,8 +275,8 @@ const PatientList = () => {
     const to = Math.min(page * limit, total);
 
     return (
-        <div className="panel">
-            <div className="mb-5">
+        <div className="panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <div className="shrink-0">
                 <ul className="flex flex-wrap items-center gap-2 text-sm">
                     <li>
                         <NavLink to="/app/patients/list" className="text-primary hover:underline">
@@ -283,8 +288,8 @@ const PatientList = () => {
                 </ul>
             </div>
 
-            <div className="mt-4">
-                <div className="mb-6 flex flex-col gap-3 sm:mb-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-3 shrink-0">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <h3 className="text-lg font-semibold text-gray-800 dark:text-white sm:text-xl">Patient List</h3>
                     <SearchInput
                         className="w-full sm:max-w-md lg:max-w-lg"
@@ -296,8 +301,8 @@ const PatientList = () => {
                 </div>
             </div>
 
-            <div className="mt-6 border-t border-white-light pt-5 dark:border-[#191e3a]">
-                <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+            <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white-light pt-4 dark:border-[#191e3a]">
+                <div className="mb-3 flex shrink-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
                     <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3 lg:gap-4">
                         <FilterSelect label="Status" value={status} onChange={(v) => {
                             setStatus(v as StatusValue);
@@ -316,16 +321,16 @@ const PatientList = () => {
                             setPage(1);
                         }} options={RECENT_OPTIONS} />
                         <DateRangePicker
-  label="Reg date"
-  value={dateRange}
-  onChange={(range) => {
-    setDateRange(range);
-  
-    if (range.from && range.to) {
-      setPage(1);
-    }
-  }}
-/>
+                            label="Reg date"
+                            value={dateRange}
+                            onChange={(range) => {
+                                setDateRange(range);
+
+                                if (range.from && range.to) {
+                                    setPage(1);
+                                }
+                            }}
+                        />
                     </div>
                     <button
                         type="button"
@@ -336,82 +341,98 @@ const PatientList = () => {
                     </button>
                 </div>
 
-                {error && (
-                    <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+                {error ? (
+                    <div className="mb-3 shrink-0 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
                         {error}
                     </div>
-                )}
+                ) : null}
 
-                <PatientTable
-                    patients={items}
-                    loading={loading}
-                    sortBy={sortBy}
-                    sortOrder={sortOrder}
-                    onSort={handleSort}
-                    sortDisabled={loading}
-                />
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+                        <PatientTable
+                            patients={items}
+                            loading={loading}
+                            sortBy={sortBy}
+                            sortOrder={sortOrder}
+                            onSort={handleSort}
+                            sortDisabled={loading}
+                            onOpenAdt={(patient, intent) => setAdtModal({ patient, intent })}
+                        />
+                    </div>
 
-                {!loading && !error && (
-                    <div className="mt-6 flex flex-col gap-4 border-t border-white-light pt-5 dark:border-[#191e3a] sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                            {total === 0 ? (
-                                <>0 patients</>
-                            ) : (
-                                <>
-                                    Showing <span className="font-medium text-gray-900 dark:text-gray-100">{from}</span>
-                                    –
-                                    <span className="font-medium text-gray-900 dark:text-gray-100">{to}</span> of{' '}
-                                    <span className="font-medium text-gray-900 dark:text-gray-100">{total}</span>
-                                </>
-                            )}
-                        </p>
+                    {!loading && !error ? (
+                        <div className="mt-3 flex shrink-0 flex-col gap-3 border-t border-white-light pt-3 dark:border-[#191e3a] sm:flex-row sm:items-center sm:justify-between">
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                {total === 0 ? (
+                                    <>0 patients</>
+                                ) : (
+                                    <>
+                                        Showing <span className="font-medium text-gray-900 dark:text-gray-100">{from}</span>
+                                        –
+                                        <span className="font-medium text-gray-900 dark:text-gray-100">{to}</span> of{' '}
+                                        <span className="font-medium text-gray-900 dark:text-gray-100">{total}</span>
+                                    </>
+                                )}
+                            </p>
 
-                        <div className="flex flex-wrap items-center gap-3">
-                            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                <span>Rows</span>
-                                <select
-                                    value={limit}
-                                    onChange={(e) => {
-                                        setLimit(Number(e.target.value));
-                                        setPage(1);
-                                    }}
-                                    className="form-input cursor-pointer py-1.5 pl-3 pr-8 text-sm"
-                                >
-                                    {LIMIT_OPTIONS.map((n) => (
-                                        <option key={n} value={n}>
-                                            {n}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
+                            <div className="flex flex-wrap items-center gap-3">
+                                <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                                    <span>Rows</span>
+                                    <select
+                                        value={limit}
+                                        onChange={(e) => {
+                                            setLimit(Number(e.target.value));
+                                            setPage(1);
+                                        }}
+                                        className="form-input cursor-pointer py-1.5 pl-3 pr-8 text-sm"
+                                    >
+                                        {LIMIT_OPTIONS.map((n) => (
+                                            <option key={n} value={n}>
+                                                {n}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
 
-                            <div className="flex items-center gap-1">
-                                <button
-                                    type="button"
-                                    title="Previous page"
-                                    disabled={page <= 1 || loading}
-                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                                >
-                                    <ChevronLeft className="h-4 w-4" />
-                                </button>
-                                <span className="min-w-[5.5rem] text-center text-sm text-gray-600 dark:text-gray-400">
-                                    Page {page} / {totalPages}
-                                </span>
-                                <button
-                                    type="button"
-                                    title="Next page"
-                                    disabled={page >= totalPages || loading || total === 0}
-                                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                                >
-                                    <ChevronRight className="h-4 w-4" />
-                                </button>
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        type="button"
+                                        title="Previous page"
+                                        disabled={page <= 1 || loading}
+                                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                                    >
+                                        <ChevronLeft className="h-4 w-4" />
+                                    </button>
+                                    <span className="min-w-[5.5rem] text-center text-sm text-gray-600 dark:text-gray-400">
+                                        Page {page} / {totalPages}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        title="Next page"
+                                        disabled={page >= totalPages || loading || total === 0}
+                                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                                    >
+                                        <ChevronRight className="h-4 w-4" />
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
+                    ) : null}
+                </div>
             </div>
+
+            {adtModal ? (
+                <AdtPatientWorkflowModal
+                    open
+                    patientId={getPatientListRowId(adtModal.patient)}
+                    patientLabel={adtModal.patient.name}
+                    intent={adtModal.intent}
+                    onClose={() => setAdtModal(null)}
+                    onCompleted={() => void load()}
+                />
+            ) : null}
         </div>
     );
 };

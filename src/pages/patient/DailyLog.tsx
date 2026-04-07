@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { FaBook, FaPlus, FaMoon, FaSmile, FaRunning, FaTint, FaUtensils } from 'react-icons/fa6';
 import IconSearch from '../../components/Icon/IconSearch';
 import { usePatientId } from '../../hooks/usePatientId';
+import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { healthDailyLogAPI } from '../../services/healthMonitoringService';
 
 interface DailyLogEntry {
@@ -30,6 +31,7 @@ const LOGS_PER_PAGE = 9;
 
 const DailyLog: React.FC = () => {
   const patientId = usePatientId();
+  const { moduleRootClass } = useFacesheetChartLayout();
   const [logsList, setLogsList] = useState<DailyLogEntry[]>([]);
   const [filteredList, setFilteredList] = useState<DailyLogEntry[]>([]);
   const [searchText, setSearchText] = useState('');
@@ -210,8 +212,7 @@ const DailyLog: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="panel h-[calc(100vh-120px)] overflow-y-auto">
+    <div className={moduleRootClass}>
         <div className="mb-5">
           <ul className="flex items-center gap-2 text-sm">
             <li>
@@ -548,7 +549,6 @@ const DailyLog: React.FC = () => {
           )}
         </div>
         )}
-      </div>
     </div>
   );
 };

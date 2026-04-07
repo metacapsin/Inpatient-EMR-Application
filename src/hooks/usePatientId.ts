@@ -29,8 +29,12 @@ export function usePatientId(): string | null {
       const id = decodeURIComponent(m[1].trim());
       if (id) return id;
     }
+    if (location.pathname === '/app/adt' || location.pathname.startsWith('/app/adt/')) {
+      const q = new URLSearchParams(location.search).get('patientId')?.trim();
+      if (q) return decodeURIComponent(q);
+    }
     return patientIdFromLocalUser();
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
 }
 
 export default usePatientId;

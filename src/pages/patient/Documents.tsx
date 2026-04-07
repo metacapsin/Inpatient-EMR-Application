@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI, aiHealthInsightsAPI } from '../../services/api';
 import { usePatientId } from '../../hooks/usePatientId';
+import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
 import { FaEye, FaDownload,FaTimes  } from 'react-icons/fa';
 import { FaWandMagicSparkles } from 'react-icons/fa6';
@@ -19,6 +20,7 @@ interface DocumentRecord {
 
 const Documents: React.FC = () => {
   const patientId = usePatientId();
+  const { moduleRootClass } = useFacesheetChartLayout();
   const [documentsList, setDocumentsList] = useState<DocumentRecord[]>([]);
   const [filteredTableList, setFilteredTableList] = useState<DocumentRecord[]>([]);
   const [filteredCardList, setFilteredCardList] = useState<DocumentRecord[]>([]);
@@ -235,8 +237,7 @@ const Documents: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="panel h-[calc(100vh-120px)] overflow-y-auto">
+    <div className={moduleRootClass}>
         {/* Breadcrumb */}
         <div className="mb-5">
           <ul className="flex items-center gap-2 text-sm">
@@ -390,7 +391,6 @@ const Documents: React.FC = () => {
             )}
           </div>
         </div>
-      </div>
 
       {/* Preview modal */}
       {previewDocument && (

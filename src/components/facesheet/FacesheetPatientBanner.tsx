@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
-import { Phone, MapPin, Hash, Calendar, User2, ChevronRight } from 'lucide-react';
+import { Phone, MapPin, Hash, Calendar, User2, ChevronRight, BedDouble } from 'lucide-react';
 import type { FacesheetPatient } from '../../services/patient.service';
+import { formatLocationLine } from '../../types/patientLocation';
 
 function ageFromRawDob(raw: unknown): string | null {
     if (typeof raw !== 'string' || !raw.trim()) return null;
@@ -17,11 +18,19 @@ function ageFromRawDob(raw: unknown): string | null {
 interface FacesheetPatientBannerProps {
     patient: FacesheetPatient;
     patientListHref?: string;
+    /** Base chart path without trailing slash, e.g. `/app/facesheet/:id` */
+    moduleBase?: string;
 }
 
-export function FacesheetPatientBanner({ patient, patientListHref = '/app/patients/list' }: FacesheetPatientBannerProps) {
+export function FacesheetPatientBanner({
+    patient,
+    patientListHref = '/app/patients/list',
+    moduleBase,
+}: FacesheetPatientBannerProps) {
     const age = ageFromRawDob(patient.raw?.dOB);
     const initial = patient.fullName?.trim().charAt(0).toUpperCase() || '?';
+    const locationLine = formatLocationLine(patient.location);
+    const locationHref = moduleBase ? `${moduleBase.replace(/\/$/, '')}/location` : null;
 
     return (
         <header className="overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-[0_4px_24px_-10px_rgba(0,0,0,0.1)] dark:border-white/10 dark:bg-[#141210] dark:shadow-[0_4px_32px_-12px_rgba(0,0,0,0.5)]">
@@ -78,6 +87,25 @@ export function FacesheetPatientBanner({ patient, patientListHref = '/app/patien
                     <div className="min-w-0">
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Phone</p>
                         <p className="mt-0.5 truncate text-sm font-semibold text-gray-900 dark:text-white">{patient.mobilePhone}</p>
+                    </div>
+                </div>
+                <div className="flex items-start gap-3 rounded-xl bg-gray-50/80 px-3 py-2.5 sm:col-span-2 lg:col-span-4">
+                    <BedDouble className="mt-0.5 h-4 w-4 shrink-0 text-primary/80" aria-hidden />
+                    <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                            Patient location
+                        </p>
+                        <p className="mt-0.5 text-sm font-medium leading-snug text-gray-800 dark:text-gray-200">
+                            {locationLine.trim() ? locationLine : 'No bed assigned'}
+                        </p>
+                        {locationHref ? (
+                            <Link
+                                to={locationHref}
+                                className="mt-1 inline-flex text-xs font-semibold text-primary hover:underline"
+                            >
+                                Assign or change location
+                            </Link>
+                        ) : null}
                     </div>
                 </div>
                 <div className="flex items-start gap-3 rounded-xl bg-gray-50/80 px-3 py-2.5 sm:col-span-2 lg:col-span-4">

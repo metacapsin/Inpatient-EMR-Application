@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { NavLink } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { toast } from 'sonner';
 import { IRootState } from '../store';
@@ -150,6 +151,19 @@ const Settings: React.FC = () => {
                 </div>
 
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Settings</h1>
+
+                <div className="mb-6 rounded-xl border border-white-light dark:border-[#191e3a] p-4">
+                    <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Facility management</h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                        Manage wards, rooms, and beds for inpatient placement (mock-backed until facility APIs are live).
+                    </p>
+                    <NavLink
+                        to="/app/settings/facility"
+                        className="inline-flex items-center rounded-lg bg-primary/10 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/15"
+                    >
+                        Open facility settings
+                    </NavLink>
+                </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Profile Picture */}

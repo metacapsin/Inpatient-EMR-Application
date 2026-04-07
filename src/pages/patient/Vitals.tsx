@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { FaHeartbeat, FaPlus } from 'react-icons/fa';
 import IconSearch from '../../components/Icon/IconSearch';
 import { usePatientId } from '../../hooks/usePatientId';
+import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { healthMetricsAPI } from '../../services/healthMonitoringService';
 
 interface VitalsRecord {
@@ -37,6 +38,7 @@ const getLocalDateTime = (): string => {
 
 const Vitals: React.FC = () => {
   const patientId = usePatientId();
+  const { moduleRootClass } = useFacesheetChartLayout();
   const [vitalsList, setVitalsList] = useState<DisplayVital[]>([]);
   const [latestVital, setLatestVital] = useState<DisplayVital | null>(null);
   const [filteredCardList, setFilteredCardList] = useState<DisplayVital[]>([]);
@@ -379,8 +381,7 @@ const Vitals: React.FC = () => {
   const totalPages = Math.ceil(paginatedCardList.length / rowsPerPage) || 1;
 
   return (
-    <div>
-      <div className="panel h-[calc(100vh-120px)] overflow-y-auto">
+    <div className={moduleRootClass}>
         <div className="mb-5">
           <ul className="flex items-center gap-2 text-sm">
             <li><a href="#" className="text-primary hover:underline">Patient</a></li>
@@ -652,7 +653,6 @@ const Vitals: React.FC = () => {
             )}
           </div>
         )}
-      </div>
     </div>
   );
 };

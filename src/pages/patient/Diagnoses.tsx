@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { healthConditionsAPI } from '../../services/healthMonitoringService';
 import { usePatientId } from '../../hooks/usePatientId';
+import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
 import IconSearch from '../../components/Icon/IconSearch';
 import IconPlus from '../../components/Icon/IconPlus';
@@ -92,6 +93,7 @@ const ROWS_PER_PAGE = 5;
 
 const Diagnoses: React.FC = () => {
   const patientId = usePatientId();
+  const { moduleRootClass } = useFacesheetChartLayout();
 
   // Data state
   const [diagnosesList, setDiagnosesList] = useState<DiagnosisRecord[]>([]);
@@ -365,8 +367,7 @@ const Diagnoses: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="panel h-[calc(100vh-120px)] overflow-y-auto">
+    <div className={moduleRootClass}>
         {/* Breadcrumb */}
         <div className="mb-5">
           <ul className="flex items-center gap-2 text-sm">
@@ -525,7 +526,6 @@ const Diagnoses: React.FC = () => {
             </button>
           </div>
         )}
-      </div>
 
       {/* Add/Edit Modal */}
       {showModal && (

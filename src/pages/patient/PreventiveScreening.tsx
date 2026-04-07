@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI, aiHealthInsightsAPI } from '../../services/api';
 import { usePatientId } from '../../hooks/usePatientId';
+import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
 import { FaUserCheck, FaCalendarAlt, FaMapMarkerAlt, FaList, FaTimes } from 'react-icons/fa';
 import IconSparkles from '../../components/Icon/IconSparkles';
@@ -27,6 +28,7 @@ interface ScreeningRecord {
 
 const PreventiveScreening: React.FC = () => {
   const patientId = usePatientId();
+  const { moduleRootClass } = useFacesheetChartLayout();
   const [list, setList] = useState<ScreeningRecord[]>([]);
   const [filteredTableList, setFilteredTableList] = useState<ScreeningRecord[]>([]);
   const [paginatedCardList, setPaginatedCardList] = useState<ScreeningRecord[]>([]);
@@ -222,8 +224,7 @@ const PreventiveScreening: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="panel h-[calc(100vh-120px)] overflow-y-auto">
+    <div className={moduleRootClass}>
         {/* Breadcrumb */}
         <div className="mb-5">
           <ul className="flex items-center gap-2 text-sm">
@@ -409,7 +410,6 @@ const PreventiveScreening: React.FC = () => {
             )}
           </div>
         </div>
-      </div>
 
       {/* AI Preventive Suggestions Modal */}
       {showAISuggestionsModal && (

@@ -1,5 +1,6 @@
 import React, { Suspense } from 'react';
-import ReactDOM from 'react-dom/client'
+import ReactDOM from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // Perfect Scrollbar
 import 'react-perfect-scrollbar/dist/css/styles.css';
@@ -17,6 +18,7 @@ import router from './router/index';
 // Redux
 import { Provider } from 'react-redux';
 import store from './store/index';
+import { AdtLegacySessionMigration } from './components/adt/AdtLegacySessionMigration';
 
 // Contexts
 import { SettingsProvider } from './contexts/SettingsContext';
@@ -27,18 +29,27 @@ import { Toaster } from 'sonner';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: { staleTime: 60_000, retry: 1, refetchOnWindowFocus: false },
+    },
+});
+
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <React.StrictMode>
         <Suspense>
-            <Provider store={store}>
-                <SettingsProvider>
-                    <SidebarProvider>
-                        <RouterProvider router={router} />
-                        <Toaster position="top-right" />
-                        <ToastContainer position="top-right" />
-                    </SidebarProvider>
-                </SettingsProvider>
-            </Provider>
+            <QueryClientProvider client={queryClient}>
+                <Provider store={store}>
+                    <AdtLegacySessionMigration />
+                    <SettingsProvider>
+                        <SidebarProvider>
+                            <RouterProvider router={router} />
+                            <Toaster position="top-right" />
+                            <ToastContainer position="top-right" />
+                        </SidebarProvider>
+                    </SettingsProvider>
+                </Provider>
+            </QueryClientProvider>
         </Suspense>
     </React.StrictMode>
 );

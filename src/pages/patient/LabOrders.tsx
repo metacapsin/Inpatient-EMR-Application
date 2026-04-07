@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI, aiHealthInsightsAPI } from '../../services/api';
 import { usePatientId } from '../../hooks/usePatientId';
+import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
 import { FaFlask, FaTimes } from 'react-icons/fa';
 import IconSparkles from '../../components/Icon/IconSparkles';
@@ -40,6 +41,7 @@ const orDash = (v: unknown): string => {
 
 const LabOrders: React.FC = () => {
   const patientId = usePatientId();
+  const { moduleSurfaceClass } = useFacesheetChartLayout();
   const [labOrdersList, setLabOrdersList] = useState<LabOrder[]>([]);
   const [paginatedCardList, setPaginatedCardList] = useState<LabOrder[]>([]);
   const [filteredCardList, setFilteredCardList] = useState<LabOrder[]>([]);
@@ -199,8 +201,7 @@ const LabOrders: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="panel">
+    <div className={moduleSurfaceClass}>
         {/* Breadcrumb */}
         <div className="mb-5">
           <ul className="flex items-center gap-2 text-sm">
@@ -371,7 +372,6 @@ const LabOrders: React.FC = () => {
             </div>
           )}
         </div>
-      </div>
 
       {/* AI Explanation Modal */}
       {showAIModal && (

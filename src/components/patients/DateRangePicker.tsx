@@ -34,7 +34,7 @@ export function DateRangePicker({
     }
   };
 
-  // ✅ Range logic
+  //  Range logic
   const handleDateChange = (date: string) => {
     if (!value.from || (value.from && value.to)) {
       onChange({ from: date, to: '' });

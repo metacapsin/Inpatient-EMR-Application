@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI } from '../../services/api';
 import { usePatientId } from '../../hooks/usePatientId';
+import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
 import { FaSyringe, FaDownload } from 'react-icons/fa';
 import IconSearch from '../../components/Icon/IconSearch';
@@ -34,6 +35,7 @@ interface ImmunizationRecord {
 
 const Immunizations: React.FC = () => {
   const patientId = usePatientId();
+  const { moduleRootClass } = useFacesheetChartLayout();
   const [immunizationsList, setImmunizationsList] = useState<ImmunizationRecord[]>([]);
   const [filteredTableList, setFilteredTableList] = useState<ImmunizationRecord[]>([]);
   const [paginatedCardList, setPaginatedCardList] = useState<ImmunizationRecord[]>([]);
@@ -223,8 +225,7 @@ const Immunizations: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="panel h-[calc(100vh-120px)] overflow-y-auto">
+    <div className={moduleRootClass}>
         {/* Breadcrumb */}
         <div className="mb-5">
           <ul className="flex items-center gap-2 text-sm">
@@ -405,7 +406,6 @@ const Immunizations: React.FC = () => {
             )}
           </div>
         </div>
-      </div>
     </div>
   );
 };

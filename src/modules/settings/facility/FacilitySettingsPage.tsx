@@ -1,0 +1,831 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { Building2, Pencil, Plus, Trash2 } from 'lucide-react';
+import type { FacilityBed, FacilityRoom, FacilityWard } from '../../../types/facility';
+import {
+    getAllBeds,
+    getAllRooms,
+    getWards,
+    mockCreateBed,
+    mockCreateRoom,
+    mockCreateWard,
+    mockDeleteBed,
+    mockDeleteRoom,
+    mockDeleteWard,
+    mockUpdateBed,
+    mockUpdateRoom,
+    mockUpdateWard,
+} from '../../../services/rooms.service';
+import { AppModal } from '../../../components/shared/AppModal';
+import { SimpleDataTable } from '../../../components/shared/SimpleDataTable';
+import { useCanEditPatientLocation } from '../../../hooks/useCanEditPatientLocation';
+import { DEFAULT_ROOM_TYPE, ROOM_TYPES } from '../../../constants/facility';
+
+type TabId = 'wards' | 'rooms' | 'beds';
+
+const FacilitySettingsPage = () => {
+    const queryClient = useQueryClient();
+    const canEdit = useCanEditPatientLocation();
+    const [tab, setTab] = useState<TabId>('wards');
+
+    const wardsQuery = useQuery({ queryKey: ['settings', 'facility', 'wards'], queryFn: getWards });
+    const roomsQuery = useQuery({ queryKey: ['settings', 'facility', 'rooms'], queryFn: getAllRooms });
+    const bedsQuery = useQuery({ queryKey: ['settings', 'facility', 'beds'], queryFn: getAllBeds });
+
+    const wardNameById = useMemo(() => {
+        const m = new Map<string, string>();
+        for (const w of wardsQuery.data ?? []) m.set(String(w.id), w.name);
+        return m;
+    }, [wardsQuery.data]);
+
+    const roomLabelById = useMemo(() => {
+        const m = new Map<string, string>();
+        for (const r of roomsQuery.data ?? []) m.set(String(r.id), r.name);
+        return m;
+    }, [roomsQuery.data]);
+
+    const invalidateFacility = () => {
+        void queryClient.invalidateQueries({ queryKey: ['settings', 'facility'] });
+        void queryClient.invalidateQueries({ queryKey: ['facility'] });
+        void queryClient.invalidateQueries({ queryKey: ['patient-placement'] });
+        void queryClient.invalidateQueries({ queryKey: ['beds', 'emr-list'] });
+    };
+
+    const [wardModal, setWardModal] = useState<{ mode: 'add' | 'edit'; ward?: FacilityWard } | null>(null);
+    const [roomModal, setRoomModal] = useState<{ mode: 'add' | 'edit'; room?: FacilityRoom } | null>(null);
+    const [bedModal, setBedModal] = useState<{ mode: 'add' | 'edit'; bed?: FacilityBed } | null>(null);
+
+    const wardMut = useMutation({
+        mutationFn: async (payload: { mode: 'add' | 'edit'; ward?: FacilityWard; name: string; code: string }) => {
+            if (payload.mode === 'add') return mockCreateWard({ name: payload.name, code: payload.code || undefined });
+            if (!payload.ward) throw new Error('Missing ward');
+            return mockUpdateWard(String(payload.ward.id), { name: payload.name, code: payload.code });
+        },
+        onSuccess: () => {
+            toast.success('Ward saved');
+            setWardModal(null);
+            invalidateFacility();
+        },
+        onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Save failed'),
+    });
+
+    const wardDel = useMutation({
+        mutationFn: (id: string) => mockDeleteWard(id),
+        onSuccess: () => {
+            toast.success('Ward removed');
+            invalidateFacility();
+        },
+        onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Delete failed'),
+    });
+
+    const roomMut = useMutation({
+        mutationFn: async (payload: {
+            mode: 'add' | 'edit';
+            room?: FacilityRoom;
+            roomNumber: string;
+            wardId: string;
+            roomType: string;
+        }) => {
+            if (payload.mode === 'add') {
+                return mockCreateRoom({
+                    wardId: payload.wardId,
+                    roomNumber: payload.roomNumber,
+                    roomType: payload.roomType,
+                });
+            }
+            if (!payload.room) throw new Error('Missing room');
+            return mockUpdateRoom(String(payload.room.id), {
+                roomNumber: payload.roomNumber,
+                wardId: payload.wardId,
+                roomType: payload.roomType,
+            });
+        },
+        onSuccess: () => {
+            toast.success('Room saved');
+            setRoomModal(null);
+            invalidateFacility();
+        },
+        onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Save failed'),
+    });
+
+    const roomDel = useMutation({
+        mutationFn: (id: string) => mockDeleteRoom(id),
+        onSuccess: () => {
+            toast.success('Room removed');
+            invalidateFacility();
+        },
+        onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Delete failed'),
+    });
+
+    const bedMut = useMutation({
+        mutationFn: async (payload: { mode: 'add' | 'edit'; bed?: FacilityBed; bedName: string; roomId: string }) => {
+            if (payload.mode === 'add') return mockCreateBed({ roomId: payload.roomId, bedName: payload.bedName });
+            if (!payload.bed) throw new Error('Missing bed');
+            return mockUpdateBed(String(payload.bed.id), { bedName: payload.bedName, roomId: payload.roomId });
+        },
+        onSuccess: () => {
+            toast.success('Bed saved');
+            setBedModal(null);
+            invalidateFacility();
+        },
+        onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Save failed'),
+    });
+
+    const bedDel = useMutation({
+        mutationFn: (id: string) => mockDeleteBed(id),
+        onSuccess: () => {
+            toast.success('Bed removed');
+            invalidateFacility();
+        },
+        onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Delete failed'),
+    });
+
+    const tabs: { id: TabId; label: string }[] = [
+        { id: 'wards', label: 'Wards' },
+        { id: 'rooms', label: 'Rooms' },
+        { id: 'beds', label: 'Beds' },
+    ];
+
+    return (
+        <div className="panel">
+            <div className="mb-5 flex flex-wrap items-center gap-2 text-sm">
+                <a href="/app/dashboard" className="text-primary hover:underline">
+                    Dashboard
+                </a>
+                <span className="text-gray-400">/</span>
+                <a href="/app/settings" className="text-primary hover:underline">
+                    Settings
+                </a>
+                <span className="text-gray-400">/</span>
+                <span className="font-medium text-gray-900 dark:text-white">Facility</span>
+            </div>
+
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary dark:bg-primary/25">
+                        <Building2 className="h-5 w-5" aria-hidden />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Facility management</h1>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                            Configure wards, rooms, and beds. Data is loaded from Wards, Rooms, and Beds APIs (set{' '}
+                            <code className="rounded bg-gray-100 px-1 dark:bg-white/10">VITE_USE_MOCK_FACILITY=true</code> for offline mock
+                            mode).
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            {!canEdit ? (
+                <div className="mb-6 rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-3 text-sm text-gray-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200">
+                    Read-only: your role cannot modify facility structure.
+                </div>
+            ) : null}
+
+            <div className="mb-6 flex flex-wrap gap-2 border-b border-gray-200 pb-3 dark:border-[#191e3a]">
+                {tabs.map((t) => (
+                    <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setTab(t.id)}
+                        className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                            tab === t.id
+                                ? 'bg-primary text-white shadow-sm'
+                                : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5'
+                        }`}
+                    >
+                        {t.label}
+                    </button>
+                ))}
+            </div>
+
+            {tab === 'wards' ? (
+                <WardsSection
+                    canEdit={canEdit}
+                    loading={wardsQuery.isLoading}
+                    wards={wardsQuery.data ?? []}
+                    onAdd={() => setWardModal({ mode: 'add' })}
+                    onEdit={(w) => setWardModal({ mode: 'edit', ward: w })}
+                    onDelete={(w) => {
+                        if (window.confirm(`Delete ward "${w.name}"? Nested rooms and beds may be removed per server rules.`)) {
+                            wardDel.mutate(w.id);
+                        }
+                    }}
+                    deleting={wardDel.isPending}
+                />
+            ) : null}
+
+            {tab === 'rooms' ? (
+                <RoomsSection
+                    canEdit={canEdit}
+                    loading={roomsQuery.isLoading}
+                    rooms={roomsQuery.data ?? []}
+                    wardNameById={wardNameById}
+                    onAdd={() => setRoomModal({ mode: 'add' })}
+                    onEdit={(r) => setRoomModal({ mode: 'edit', room: r })}
+                    onDelete={(r) => {
+                        if (window.confirm(`Delete room "${r.name}"?`)) roomDel.mutate(r.id);
+                    }}
+                    deleting={roomDel.isPending}
+                />
+            ) : null}
+
+            {tab === 'beds' ? (
+                <BedsSection
+                    canEdit={canEdit}
+                    loading={bedsQuery.isLoading}
+                    beds={bedsQuery.data ?? []}
+                    roomLabelById={roomLabelById}
+                    onAdd={() => setBedModal({ mode: 'add' })}
+                    onEdit={(b) => setBedModal({ mode: 'edit', bed: b })}
+                    onDelete={(b) => {
+                        if (window.confirm(`Delete bed "${b.name}"?`)) bedDel.mutate(b.id);
+                    }}
+                    deleting={bedDel.isPending}
+                />
+            ) : null}
+
+            <WardFormModal
+                open={wardModal !== null}
+                mode={wardModal?.mode ?? 'add'}
+                ward={wardModal?.ward}
+                saving={wardMut.isPending}
+                errorMessage={wardMut.isError && wardMut.error instanceof Error ? wardMut.error.message : null}
+                onClose={() => {
+                    wardMut.reset();
+                    setWardModal(null);
+                }}
+                onSave={(name, code) => {
+                    if (!wardModal) return;
+                    wardMut.mutate({ mode: wardModal.mode, ward: wardModal.ward, name, code });
+                }}
+            />
+
+            <RoomFormModal
+                open={roomModal !== null}
+                mode={roomModal?.mode ?? 'add'}
+                room={roomModal?.room}
+                wards={wardsQuery.data ?? []}
+                saving={roomMut.isPending}
+                errorMessage={roomMut.isError && roomMut.error instanceof Error ? roomMut.error.message : null}
+                onClose={() => {
+                    roomMut.reset();
+                    setRoomModal(null);
+                }}
+                onSave={(wardId, roomNumber, roomType) => {
+                    if (!roomModal) return;
+                    roomMut.mutate({
+                        mode: roomModal.mode,
+                        room: roomModal.room,
+                        wardId,
+                        roomNumber,
+                        roomType,
+                    });
+                }}
+            />
+
+            <BedFormModal
+                open={bedModal !== null}
+                mode={bedModal?.mode ?? 'add'}
+                bed={bedModal?.bed}
+                rooms={roomsQuery.data ?? []}
+                wardNameById={wardNameById}
+                saving={bedMut.isPending}
+                errorMessage={bedMut.isError && bedMut.error instanceof Error ? bedMut.error.message : null}
+                onClose={() => {
+                    bedMut.reset();
+                    setBedModal(null);
+                }}
+                onSave={(roomId, bedName) => {
+                    if (!bedModal) return;
+                    bedMut.mutate({ mode: bedModal.mode, bed: bedModal.bed, roomId, bedName });
+                }}
+            />
+        </div>
+    );
+};
+
+function WardsSection({
+    canEdit,
+    loading,
+    wards,
+    onAdd,
+    onEdit,
+    onDelete,
+    deleting,
+}: {
+    canEdit: boolean;
+    loading: boolean;
+    wards: FacilityWard[];
+    onAdd: () => void;
+    onEdit: (w: FacilityWard) => void;
+    onDelete: (w: FacilityWard) => void;
+    deleting: boolean;
+}) {
+    return (
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Wards</h2>
+                {canEdit ? (
+                    <button type="button" onClick={onAdd} className="btn btn-primary inline-flex items-center gap-2 text-sm">
+                        <Plus className="h-4 w-4" />
+                        Add ward
+                    </button>
+                ) : null}
+            </div>
+            {loading ? (
+                <div className="h-40 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
+            ) : (
+                <SimpleDataTable
+                    columns={[
+                        { key: 'name', header: 'Name', render: (w) => w.name },
+                        { key: 'code', header: 'Code', render: (w) => w.code ?? '—' },
+                        {
+                            key: 'actions',
+                            header: '',
+                            className: 'w-28 text-right',
+                            render: (w) =>
+                                canEdit ? (
+                                    <div className="flex justify-end gap-1">
+                                        <button
+                                            type="button"
+                                            title="Edit"
+                                            onClick={() => onEdit(w)}
+                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
+                                        >
+                                            <Pencil className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            title="Delete"
+                                            disabled={deleting}
+                                            onClick={() => onDelete(w)}
+                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    '—'
+                                ),
+                        },
+                    ]}
+                    rows={wards}
+                    rowKey={(w) => String(w.id)}
+                    emptyMessage="No wards configured"
+                />
+            )}
+        </div>
+    );
+}
+
+function RoomsSection({
+    canEdit,
+    loading,
+    rooms,
+    wardNameById,
+    onAdd,
+    onEdit,
+    onDelete,
+    deleting,
+}: {
+    canEdit: boolean;
+    loading: boolean;
+    rooms: FacilityRoom[];
+    wardNameById: Map<string, string>;
+    onAdd: () => void;
+    onEdit: (r: FacilityRoom) => void;
+    onDelete: (r: FacilityRoom) => void;
+    deleting: boolean;
+}) {
+    return (
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Rooms</h2>
+                {canEdit ? (
+                    <button type="button" onClick={onAdd} className="btn btn-primary inline-flex items-center gap-2 text-sm">
+                        <Plus className="h-4 w-4" />
+                        Add room
+                    </button>
+                ) : null}
+            </div>
+            {loading ? (
+                <div className="h-40 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
+            ) : (
+                <SimpleDataTable
+                    columns={[
+                        { key: 'ward', header: 'Ward', render: (r) => wardNameById.get(String(r.wardId)) ?? '—' },
+                        { key: 'name', header: 'Room number', render: (r) => r.name },
+                        { key: 'roomType', header: 'Type', render: (r) => r.roomType ?? DEFAULT_ROOM_TYPE },
+                        {
+                            key: 'actions',
+                            header: '',
+                            className: 'w-28 text-right',
+                            render: (r) =>
+                                canEdit ? (
+                                    <div className="flex justify-end gap-1">
+                                        <button
+                                            type="button"
+                                            title="Edit"
+                                            onClick={() => onEdit(r)}
+                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
+                                        >
+                                            <Pencil className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            title="Delete"
+                                            disabled={deleting}
+                                            onClick={() => onDelete(r)}
+                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    '—'
+                                ),
+                        },
+                    ]}
+                    rows={rooms}
+                    rowKey={(r) => String(r.id)}
+                    emptyMessage="No rooms configured"
+                />
+            )}
+        </div>
+    );
+}
+
+function BedsSection({
+    canEdit,
+    loading,
+    beds,
+    roomLabelById,
+    onAdd,
+    onEdit,
+    onDelete,
+    deleting,
+}: {
+    canEdit: boolean;
+    loading: boolean;
+    beds: FacilityBed[];
+    roomLabelById: Map<string, string>;
+    onAdd: () => void;
+    onEdit: (b: FacilityBed) => void;
+    onDelete: (b: FacilityBed) => void;
+    deleting: boolean;
+}) {
+    return (
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Beds</h2>
+                {canEdit ? (
+                    <button type="button" onClick={onAdd} className="btn btn-primary inline-flex items-center gap-2 text-sm">
+                        <Plus className="h-4 w-4" />
+                        Add bed
+                    </button>
+                ) : null}
+            </div>
+            {loading ? (
+                <div className="h-40 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
+            ) : (
+                <SimpleDataTable
+                    columns={[
+                        { key: 'room', header: 'Room', render: (b) => roomLabelById.get(String(b.roomId)) ?? '—' },
+                        { key: 'name', header: 'Bed', render: (b) => b.name },
+                        {
+                            key: 'occ',
+                            header: 'Status',
+                            render: (b) =>
+                                b.occupied ? (
+                                    <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800 dark:bg-red-950/60 dark:text-red-200">
+                                        Occupied
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200">
+                                        Available
+                                    </span>
+                                ),
+                        },
+                        {
+                            key: 'actions',
+                            header: '',
+                            className: 'w-28 text-right',
+                            render: (b) =>
+                                canEdit ? (
+                                    <div className="flex justify-end gap-1">
+                                        <button
+                                            type="button"
+                                            title="Edit"
+                                            onClick={() => onEdit(b)}
+                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
+                                        >
+                                            <Pencil className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            title="Delete"
+                                            disabled={deleting}
+                                            onClick={() => onDelete(b)}
+                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    '—'
+                                ),
+                        },
+                    ]}
+                    rows={beds}
+                    rowKey={(b) => String(b.id)}
+                    emptyMessage="No beds configured"
+                />
+            )}
+        </div>
+    );
+}
+
+function WardFormModal({
+    open,
+    mode,
+    ward,
+    saving,
+    errorMessage,
+    onClose,
+    onSave,
+}: {
+    open: boolean;
+    mode: 'add' | 'edit';
+    ward?: FacilityWard;
+    saving: boolean;
+    errorMessage?: string | null;
+    onClose: () => void;
+    onSave: (name: string, code: string) => void;
+}) {
+    const [name, setName] = useState('');
+    const [code, setCode] = useState('');
+    useEffect(() => {
+        if (!open) return;
+        setName(ward?.name ?? '');
+        setCode(ward?.code ?? '');
+    }, [open, ward]);
+
+    return (
+        <AppModal
+            open={open}
+            title={mode === 'add' ? 'Add ward' : 'Edit ward'}
+            onClose={onClose}
+            footer={
+                <div className="flex justify-end gap-2">
+                    <button type="button" onClick={onClose} className="btn btn-outline-primary">
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        disabled={saving || !name.trim()}
+                        onClick={() => onSave(name.trim(), code.trim())}
+                        className="btn btn-primary"
+                    >
+                        {saving ? 'Saving…' : 'Save'}
+                    </button>
+                </div>
+            }
+        >
+            <div className="space-y-4">
+                {errorMessage ? (
+                    <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
+                        {errorMessage}
+                    </p>
+                ) : null}
+                <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Ward name <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                        className="form-input w-full"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="e.g. ICU"
+                        required
+                        aria-required
+                    />
+                </div>
+                <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Code (optional)</label>
+                    <input className="form-input w-full" value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. ICU" />
+                </div>
+            </div>
+        </AppModal>
+    );
+}
+
+function RoomFormModal({
+    open,
+    mode,
+    room,
+    wards,
+    saving,
+    errorMessage,
+    onClose,
+    onSave,
+}: {
+    open: boolean;
+    mode: 'add' | 'edit';
+    room?: FacilityRoom;
+    wards: FacilityWard[];
+    saving: boolean;
+    errorMessage?: string | null;
+    onClose: () => void;
+    onSave: (wardId: string, roomNumber: string, roomType: string) => void;
+}) {
+    const [wardId, setWardId] = useState('');
+    const [roomNumber, setRoomNumber] = useState('');
+    const [roomType, setRoomType] = useState<string>(DEFAULT_ROOM_TYPE);
+    useEffect(() => {
+        if (!open) return;
+        setRoomNumber(room?.name ?? '');
+        setRoomType(room?.roomType ?? DEFAULT_ROOM_TYPE);
+        setWardId(room ? String(room.wardId) : wards[0] ? String(wards[0].id) : '');
+    }, [open, room, wards]);
+
+    const canSave = Boolean(wardId.trim() && roomNumber.trim() && roomType.trim() && wards.length > 0);
+
+    return (
+        <AppModal
+            open={open}
+            title={mode === 'add' ? 'Add room' : 'Edit room'}
+            onClose={onClose}
+            footer={
+                <div className="flex justify-end gap-2">
+                    <button type="button" onClick={onClose} className="btn btn-outline-primary">
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        disabled={saving || !canSave}
+                        onClick={() => onSave(wardId.trim(), roomNumber.trim(), roomType.trim())}
+                        className="btn btn-primary"
+                    >
+                        {saving ? 'Saving…' : 'Save'}
+                    </button>
+                </div>
+            }
+        >
+            <div className="space-y-4">
+                {errorMessage ? (
+                    <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
+                        {errorMessage}
+                    </p>
+                ) : null}
+                {wards.length === 0 ? (
+                    <p className="text-sm text-amber-800 dark:text-amber-200">Create a ward before adding rooms.</p>
+                ) : null}
+                <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Ward <span className="text-red-600">*</span>
+                    </label>
+                    <select
+                        className="form-input w-full"
+                        value={wardId}
+                        onChange={(e) => setWardId(e.target.value)}
+                        disabled={wards.length === 0}
+                        required
+                    >
+                        <option value="">Select ward…</option>
+                        {wards.map((w) => (
+                            <option key={w.id} value={w.id}>
+                                {w.name}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Room number <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                        className="form-input w-full"
+                        value={roomNumber}
+                        onChange={(e) => setRoomNumber(e.target.value)}
+                        placeholder="e.g. 301"
+                        required
+                    />
+                </div>
+                <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Room type <span className="text-red-600">*</span>
+                    </label>
+                    <select className="form-input w-full" value={roomType} onChange={(e) => setRoomType(e.target.value)} required>
+                        {ROOM_TYPES.map((t) => (
+                            <option key={t} value={t}>
+                                {t}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+        </AppModal>
+    );
+}
+
+function BedFormModal({
+    open,
+    mode,
+    bed,
+    rooms,
+    wardNameById,
+    saving,
+    errorMessage,
+    onClose,
+    onSave,
+}: {
+    open: boolean;
+    mode: 'add' | 'edit';
+    bed?: FacilityBed;
+    rooms: FacilityRoom[];
+    wardNameById: Map<string, string>;
+    saving: boolean;
+    errorMessage?: string | null;
+    onClose: () => void;
+    onSave: (roomId: string, bedName: string) => void;
+}) {
+    const [roomId, setRoomId] = useState('');
+    const [bedName, setBedName] = useState('');
+    useEffect(() => {
+        if (!open) return;
+        setBedName(bed?.name ?? '');
+        setRoomId(bed ? String(bed.roomId) : '');
+    }, [open, bed, rooms]);
+
+    const canSave = Boolean(roomId.trim() && bedName.trim() && rooms.length > 0);
+
+    return (
+        <AppModal
+            open={open}
+            title={mode === 'add' ? 'Add bed' : 'Edit bed'}
+            onClose={onClose}
+            footer={
+                <div className="flex justify-end gap-2">
+                    <button type="button" onClick={onClose} className="btn btn-outline-primary">
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        disabled={saving || !canSave}
+                        onClick={() => onSave(roomId.trim(), bedName.trim())}
+                        className="btn btn-primary"
+                    >
+                        {saving ? 'Saving…' : 'Save'}
+                    </button>
+                </div>
+            }
+        >
+            <div className="space-y-4">
+                {errorMessage ? (
+                    <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
+                        {errorMessage}
+                    </p>
+                ) : null}
+                {rooms.length === 0 ? (
+                    <p className="text-sm text-amber-800 dark:text-amber-200">Create at least one room before adding beds.</p>
+                ) : null}
+                <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Room <span className="text-red-600">*</span>
+                    </label>
+                    <select
+                        className="form-input w-full"
+                        value={roomId}
+                        onChange={(e) => setRoomId(e.target.value)}
+                        disabled={rooms.length === 0}
+                        required
+                    >
+                        <option value="">Select room…</option>
+                        {rooms.map((r) => (
+                            <option key={r.id} value={r.id}>
+                                {wardNameById.get(String(r.wardId)) ?? 'Ward'} · {r.name}
+                                {r.roomType ? ` (${r.roomType})` : ''}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Bed name <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                        className="form-input w-full"
+                        value={bedName}
+                        onChange={(e) => setBedName(e.target.value)}
+                        placeholder="e.g. Bed-A"
+                        required
+                    />
+                </div>
+            </div>
+        </AppModal>
+    );
+}
+
+export default FacilitySettingsPage;
