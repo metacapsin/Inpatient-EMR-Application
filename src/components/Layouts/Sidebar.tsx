@@ -111,9 +111,9 @@ const Sidebar = () => {
                                                 <li>
                                                     <NavLink to="/app/patients/list">Patient List</NavLink>
                                                 </li>
-                                                <li>
+                                                {/* <li>
                                                     <NavLink to="/app/adt">ADT workspace</NavLink>
-                                                </li>
+                                                </li> */}
                                             </ul>
                                         )}
                                     </li>
