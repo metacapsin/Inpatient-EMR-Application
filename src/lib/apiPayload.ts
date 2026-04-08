@@ -60,3 +60,16 @@ export function pickString(row: Record<string, unknown>, ...keys: string[]): str
     }
     return '';
 }
+
+/**
+ * Reads `{ status: 'success' | 'ok', data: object }` envelopes without coercing `data` to a list.
+ * Returns the inner object, or null if the payload is not a success object envelope.
+ */
+export function unwrapSuccessObjectData(payload: unknown): Record<string, unknown> | null {
+    const o = asRecord(payload);
+    if (!o) return null;
+    const st = typeof o.status === 'string' ? o.status.toLowerCase() : '';
+    if (st !== 'success' && st !== 'ok') return null;
+    if (o.data === undefined || o.data === null) return null;
+    return asRecord(o.data);
+}

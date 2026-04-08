@@ -115,6 +115,8 @@ const AdtModulePage = () => {
         void queryClient.invalidateQueries({ queryKey: ['patient-placement'] });
         void queryClient.invalidateQueries({ queryKey: ['settings', 'facility'] });
         void queryClient.invalidateQueries({ queryKey: ['facility'] });
+        void queryClient.invalidateQueries({ queryKey: ['liveBedBoard'] });
+        void queryClient.invalidateQueries({ queryKey: ['activeEncounters'] });
     };
 
     const admitMutation = useMutation({

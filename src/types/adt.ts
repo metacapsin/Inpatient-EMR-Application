@@ -70,3 +70,8 @@ export type DischargeConfirmData = {
     dischargeTimestamp: string;
     patientId: string;
 };
+
+/** GET /api/admissions/active — in-progress encounter row (shape varies by backend; id required). */
+export type ActiveEncounterRow = Record<string, unknown> & {
+    id: string;
+};

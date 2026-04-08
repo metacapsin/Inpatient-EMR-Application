@@ -19,7 +19,7 @@ export function bedStatusIndicatorClass(status: string): string {
     if (s === 'available' || s === '') {
         return 'bg-emerald-500';
     }
-    if (s === 'occupied' || s === 'assigned' || s === 'held') {
+    if (s === 'occupied' || s === 'assigned' || s === 'held' || s === 'hold') {
         return 'bg-amber-500';
     }
     if (s === 'maintenance' || s === 'blocked' || s === 'unavailable') {

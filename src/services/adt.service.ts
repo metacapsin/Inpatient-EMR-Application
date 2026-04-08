@@ -1,5 +1,6 @@
 import type { AxiosError } from 'axios';
 import type {
+    ActiveEncounterRow,
     AdmitRequest,
     AdmitResponseData,
     AdtApiError,
@@ -10,6 +11,8 @@ import type {
     TransferRequest,
     TransferResponseData,
 } from '../types/adt';
+import { asRecord, extractIdString, unwrapList } from '../lib/apiPayload';
+import { getApiErrorMessage } from '../lib/httpError';
 import api from './api';
 
 export type AdtPostOk<TData> = {
@@ -73,6 +76,9 @@ export function formatAdtUserMessage(result: AdtPostErr): string {
     if (result.status === 401) {
         return 'Your session has expired. Please sign in again.';
     }
+    if (result.status === 403) {
+        return 'You do not have permission to perform this action.';
+    }
     if (result.status === 409) {
         return (
             result.message ||
@@ -83,6 +89,47 @@ export function formatAdtUserMessage(result: AdtPostErr): string {
         return result.message || 'The request was invalid. Check bed selection and patient state, then try again.';
     }
     return result.message;
+}
+
+export type ListActiveEncountersParams = {
+    patientId?: string;
+    bedId?: string;
+};
+
+function normalizeActiveEncounterRow(item: unknown): ActiveEncounterRow | null {
+    const row = asRecord(item);
+    if (!row) return null;
+    const id = extractIdString(row.id ?? row._id ?? row.encounterId);
+    if (!id) return null;
+    return { ...row, id };
+}
+
+/**
+ * GET /api/admissions/active — in-progress admissions, newest first (server ordering).
+ */
+export async function listActiveEncounters(params?: ListActiveEncountersParams): Promise<ActiveEncounterRow[]> {
+    const q: Record<string, string> = {};
+    const p = params?.patientId?.trim();
+    const b = params?.bedId?.trim();
+    if (p) q.patientId = p;
+    if (b) q.bedId = b;
+    try {
+        const { data } = await api.get<unknown>('/api/admissions/active', { params: Object.keys(q).length ? q : undefined });
+        const top = asRecord(data);
+        if (top && top.status === 'error') {
+            const msg = typeof top.message === 'string' ? top.message : 'Failed to load active encounters';
+            throw new Error(msg);
+        }
+        const rows = unwrapList(data);
+        const out: ActiveEncounterRow[] = [];
+        for (const item of rows) {
+            const row = normalizeActiveEncounterRow(item);
+            if (row) out.push(row);
+        }
+        return out;
+    } catch (e) {
+        throw new Error(getApiErrorMessage(e, 'Failed to load active encounters'));
+    }
 }
 
 export const adtApi = {

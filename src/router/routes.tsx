@@ -8,6 +8,7 @@ const ForgotPasswordPage = lazy(() => import('../pages/auth/ForgotPasswordPage')
 const Dashboard = lazy(() => import('../pages/Dashboard'));
 const PatientList = lazy(() => import('../pages/patients/PatientList'));
 const AdtStandalonePage = lazy(() => import('../pages/adt/AdtStandalonePage'));
+const LiveBedBoardPage = lazy(() => import('../pages/bed-board/LiveBedBoardPage'));
 const FacesheetPage = lazy(() => import('../pages/facesheet/FacesheetPage'));
 const HealthMonitoring = lazy(() => import('../pages/patient/HealthSummary'));
 const AppointmentList = lazy(() => import('../pages/appointments/AppointmentList'));
@@ -76,6 +77,11 @@ const routes = [
     {
         path: '/app/adt',
         element: guard(<AdtStandalonePage />),
+        layout: 'default' as const,
+    },
+    {
+        path: '/app/bed-board',
+        element: guard(<LiveBedBoardPage />),
         layout: 'default' as const,
     },
     {
