@@ -1,6 +1,19 @@
 import api from './api';
 import { asRecord, extractIdString, pickString, unwrapList } from '../lib/apiPayload';
 
+/** Body for CreateVisitor / CreateFamilyContact (and matching updates) — matches backend schema. */
+export type PatientContactWritePayload = {
+    patientId: string;
+    firstName: string;
+    lastName: string;
+    mobilePhone: string;
+    emailAddress: string;
+    relationship: string;
+    isEmergencyContact: boolean;
+    isAuthorizedForInfo: boolean;
+    status: boolean;
+};
+
 export type VisitorStatusUi = 'checked-in' | 'checked-out' | 'scheduled';
 
 export interface VisitorRecord {
@@ -39,6 +52,36 @@ function visitorStatusToApi(s: VisitorStatusUi): string {
     return 'scheduled';
 }
 
+function buildFamilyContactWritePayload(patientId: string, c: Omit<FamilyContactRecord, 'id'>): PatientContactWritePayload {
+    const pid = patientId.trim();
+    return {
+        patientId: pid,
+        firstName: c.name.trim(),
+        lastName: '',
+        mobilePhone: c.phone.trim(),
+        emailAddress: (c.email ?? '').trim(),
+        relationship: c.relationship.trim(),
+        isEmergencyContact: Boolean(c.isNOK),
+        isAuthorizedForInfo: true,
+        status: true,
+    };
+}
+
+function buildVisitorWritePayload(patientId: string, v: Omit<VisitorRecord, 'id'>): PatientContactWritePayload {
+    const pid = patientId.trim();
+    return {
+        patientId: pid,
+        firstName: v.name.trim(),
+        lastName: '',
+        mobilePhone: '',
+        emailAddress: '',
+        relationship: v.relationship.trim(),
+        isEmergencyContact: false,
+        isAuthorizedForInfo: true,
+        status: true,
+    };
+}
+
 function normalizeRole(s: string): ContactRoleUi {
     const t = s.trim();
     const opts: ContactRoleUi[] = ['Next of Kin', 'Guardian', 'Emergency Contact', 'Family', 'Other'];
@@ -55,9 +98,13 @@ function parseVisitorRow(row: Record<string, unknown>): VisitorRecord | null {
         new Date().toISOString().slice(0, 16);
     const checkOut = pickString(row, 'checkOut', 'checkOutTime', 'checkout', 'visitEnd', 'endTime', 'departureTime') || undefined;
     const statusRaw = pickString(row, 'status', 'visitorStatus', 'visitStatus');
+    const first = pickString(row, 'firstName', 'visitorName', 'name', 'fullName', 'visitor');
+    const last = pickString(row, 'lastName');
+    const nameFromParts = [first, last].filter(Boolean).join(' ').trim();
+    const name = nameFromParts || pickString(row, 'visitorName', 'name', 'fullName', 'visitor') || id;
     return {
         id,
-        name: pickString(row, 'visitorName', 'name', 'fullName', 'visitor') || id,
+        name,
         relationship: pickString(row, 'relationship', 'relation', 'relationShip') || '—',
         checkIn,
         checkOut,
@@ -70,17 +117,22 @@ function parseFamilyRow(row: Record<string, unknown>): FamilyContactRecord | nul
     const id = extractIdString(row._id ?? row.id ?? row.familyContactId ?? row.contactId);
     if (!id) return null;
     const nok =
+        row.isEmergencyContact === true ||
         row.isNOK === true ||
         row.isNextOfKin === true ||
         row.nextOfKin === true ||
-        String(row.isNOK ?? row.isNextOfKin ?? '').toLowerCase() === 'true';
+        String(row.isEmergencyContact ?? row.isNOK ?? row.isNextOfKin ?? '').toLowerCase() === 'true';
+    const first = pickString(row, 'firstName', 'name', 'fullName', 'familyContactName', 'contactName');
+    const last = pickString(row, 'lastName');
+    const nameFromParts = [first, last].filter(Boolean).join(' ').trim();
+    const name = nameFromParts || pickString(row, 'name', 'fullName', 'familyContactName', 'contactName') || id;
     return {
         id,
-        name: pickString(row, 'name', 'fullName', 'familyContactName', 'contactName') || id,
+        name,
         relationship: pickString(row, 'relationship', 'relation') || '',
         role: normalizeRole(pickString(row, 'role', 'contactRole', 'type', 'contactType')),
-        phone: pickString(row, 'phone', 'phoneNumber', 'mobile', 'cellPhone') || '',
-        email: pickString(row, 'email', 'emailAddress') || undefined,
+        phone: pickString(row, 'mobilePhone', 'phone', 'phoneNumber', 'mobile', 'cellPhone') || '',
+        email: pickString(row, 'emailAddress', 'email') || undefined,
         isNOK: Boolean(nok),
     };
 }
@@ -108,18 +160,11 @@ export async function createVisitorForPatient(patientId: string, v: Omit<Visitor
     const pid = patientId.trim();
     if (!pid) throw new Error('Patient is required.');
     await api.post('/Visitors/CreateVisitor', {
-        patientId: pid,
-        visitorName: v.name,
-        name: v.name,
-        relationship: v.relationship,
+        ...buildVisitorWritePayload(pid, v),
         checkInTime: v.checkIn,
         checkOutTime: v.checkOut ?? '',
-        checkIn: v.checkIn,
-        checkOut: v.checkOut,
-        status: visitorStatusToApi(v.status),
         visitorStatus: visitorStatusToApi(v.status),
         restrictions: v.restrictions ?? '',
-        notes: v.restrictions ?? '',
     });
 }
 
@@ -127,18 +172,11 @@ export async function updateVisitorRecord(id: string, patientId: string, v: Omit
     await api.put('/Visitors/updateVisitorById', {
         id,
         _id: id,
-        patientId: patientId.trim(),
-        visitorName: v.name,
-        name: v.name,
-        relationship: v.relationship,
+        ...buildVisitorWritePayload(patientId, v),
         checkInTime: v.checkIn,
         checkOutTime: v.checkOut ?? '',
-        checkIn: v.checkIn,
-        checkOut: v.checkOut,
-        status: visitorStatusToApi(v.status),
         visitorStatus: visitorStatusToApi(v.status),
         restrictions: v.restrictions ?? '',
-        notes: v.restrictions ?? '',
     });
 }
 
@@ -164,42 +202,14 @@ export async function fetchFamilyContactsForPatient(patientId: string): Promise<
 export async function createFamilyContactForPatient(patientId: string, c: Omit<FamilyContactRecord, 'id'>): Promise<void> {
     const pid = patientId.trim();
     if (!pid) throw new Error('Patient is required.');
-    await api.post('/PatientFamily/CreateFamilyContact', {
-        patientId: pid,
-        name: c.name,
-        familyContactName: c.name,
-        fullName: c.name,
-        relationship: c.relationship,
-        role: c.role,
-        contactRole: c.role,
-        phone: c.phone,
-        phoneNumber: c.phone,
-        email: c.email ?? '',
-        emailAddress: c.email ?? '',
-        isNOK: c.isNOK,
-        isNextOfKin: c.isNOK,
-        nextOfKin: c.isNOK,
-    });
+    await api.post('/PatientFamily/CreateFamilyContact', buildFamilyContactWritePayload(pid, c));
 }
 
 export async function updateFamilyContactRecord(id: string, patientId: string, c: Omit<FamilyContactRecord, 'id'>): Promise<void> {
     await api.put('/PatientFamily/updateFamilyContactById', {
         id,
         _id: id,
-        patientId: patientId.trim(),
-        name: c.name,
-        familyContactName: c.name,
-        fullName: c.name,
-        relationship: c.relationship,
-        role: c.role,
-        contactRole: c.role,
-        phone: c.phone,
-        phoneNumber: c.phone,
-        email: c.email ?? '',
-        emailAddress: c.email ?? '',
-        isNOK: c.isNOK,
-        isNextOfKin: c.isNOK,
-        nextOfKin: c.isNOK,
+        ...buildFamilyContactWritePayload(patientId, c),
     });
 }
 
