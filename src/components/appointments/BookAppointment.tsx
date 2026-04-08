@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { format, parse } from 'date-fns';
@@ -29,6 +29,157 @@ const EMPTY_FORM: FormState = {
   notes: '',
   patientEmail: '',
   patientPhone: '',
+};
+
+// Custom Dropdown Component
+interface CustomDropdownProps {
+  value: string;
+  onChange: (value: string) => void;
+  options: Option[];
+  placeholder: string;
+  label?: string;
+  error?: string;
+  disabled?: boolean;
+  loading?: boolean;
+}
+
+const CustomDropdown: React.FC<CustomDropdownProps> = ({
+  value,
+  onChange,
+  options,
+  placeholder,
+  error,
+  disabled = false,
+  loading = false,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const selectedOption = options.find((opt) => opt.id === value);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () =>
+      document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative w-full" ref={dropdownRef}>
+      
+      {/* Selected Box */}
+      <div
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`
+          w-full px-4 py-3
+          border border-[#3b2d1f]
+          rounded-lg
+          flex items-center justify-between
+          cursor-pointer
+          transition-all duration-200
+          bg-[#111111]
+          hover:border-[#6b4d2e]
+          ${
+            disabled
+              ? "opacity-50 cursor-not-allowed"
+              : ""
+          }
+        `}
+      >
+        <span
+          className={`
+            text-sm md:text-base
+            ${
+              selectedOption
+                ? "text-[#94a3b8]"
+                : "text-gray-500"
+            }
+          `}
+        >
+          {selectedOption ? selectedOption.label : placeholder}
+        </span>
+
+        <svg
+          className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${
+            isOpen ? "rotate-180" : ""
+          }`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M19 9l-7 7-7-7"
+          />
+        </svg>
+      </div>
+
+      {/* Dropdown Options */}
+      {isOpen && !disabled && (
+        <div
+          className="
+            absolute z-50 w-full mt-2
+            bg-[#111111]
+            border border-[#3b2d1f]
+            rounded-lg
+            shadow-xl
+            overflow-y-auto
+          "
+          style={{ maxHeight: "250px" }}
+        >
+          {loading ? (
+            <div className="px-4 py-3 text-gray-400">
+              Loading...
+            </div>
+          ) : options.length === 0 ? (
+            <div className="px-4 py-3 text-gray-400">
+              No options available
+            </div>
+          ) : (
+            options.map((option) => (
+              <div
+                key={option.id}
+                onClick={() => {
+                  onChange(option.id);
+                  setIsOpen(false);
+                }}
+                className={`
+                  px-4 py-3
+                  cursor-pointer
+                  transition-all duration-200
+                  text-sm md:text-base
+                  ${
+                    value === option.id
+                      ? "bg-blue-600 text-white"
+                      : "text-[#94a3b8] hover:bg-[#1e1e1e]"
+                  }
+                `}
+              >
+                {option.label}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {error && (
+        <p className="text-danger text-xs mt-1">
+          {error}
+        </p>
+      )}
+    </div>
+  );
 };
 
 function toOptions(rows: any[], key: string): Option[] {
@@ -194,8 +345,8 @@ export default function BookAppointment() {
     const phone = pickPatientPhone(selectedPatient.raw);
     setForm((prev) => ({
       ...prev,
-      patientEmail: email,
-      patientPhone: phone,
+      patientEmail: email || prev.patientEmail,
+      patientPhone: phone || prev.patientPhone,
     }));
   }, [selectedPatient?.id]);
 
@@ -305,25 +456,102 @@ export default function BookAppointment() {
     }
   };
 
+  // Convert time slots to options format
+  const timeSlotOptions: Option[] = timeSlots.map(slot => ({ id: slot, label: slot }));
+
   if (loading) return <div className="panel">Loading appointment form...</div>;
 
   return (
     <div className="panel">
+      <style>{`
+        /* Remove any default select styling that might cause double arrows */
+        select.form-select {
+          appearance: none;
+          -webkit-appearance: none;
+          -moz-appearance: none;
+          background-image: none !important;
+        }
+        
+        /* Ensure custom dropdown doesn't inherit any select styles */
+        .relative > div:first-child {
+          background-image: none !important;
+        }
+        
+        /* Responsive styles for custom dropdown */
+        @media (max-width: 768px) {
+          .relative > div:first-child {
+            font-size: 14px;
+          }
+        }
+        
+        @media (max-width: 640px) {
+          .relative > div:first-child {
+            font-size: 13px;
+          }
+        }
+        
+        /* Custom scrollbar for dropdown */
+        .overflow-auto::-webkit-scrollbar {
+          width: 8px;
+        }
+        
+        .overflow-auto::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 4px;
+        }
+        
+        .overflow-auto::-webkit-scrollbar-thumb {
+          background: #c1c1c1;
+          border-radius: 4px;
+        }
+        
+        .overflow-auto::-webkit-scrollbar-thumb:hover {
+          background: #a8a8a8;
+        }
+        
+        /* Animation for dropdown */
+        .absolute {
+          animation: fadeIn 0.2s ease-out;
+        }
+        
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        /* Make all input fields consistent size */
+        .form-input, .form-textarea, .custom-dropdown {
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        /* Ensure consistent height for all form controls */
+        input, .custom-dropdown > div:first-child, textarea {
+          width: 100%;
+        }
+      `}</style>
+      
       <h2 className="text-xl font-semibold mb-4">{isEditMode ? 'Edit Appointment' : 'Create Appointment'}</h2>
       {topErrorMessage && (
         <div className="mb-4 flex justify-center">
           <p className="text-danger text-sm text-center">{topErrorMessage}</p>
         </div>
       )}
-      <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="md:col-span-2">
-          <label className="form-label">Patient *</label>
-          <select
-            className="form-select"
+      
+      <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-6 gap-4">
+        {/* Patient - Takes 6 columns on mobile, 3 columns on md and above */}
+        <div className="col-span-6 md:col-span-3 lg:col-span-3">
+          <label className="form-label block mb-2">Patient *</label>
+          <CustomDropdown
             value={form.patientId}
-            onChange={(e) => {
-              const nextPatientId = e.target.value;
-              setForm((p) => ({ ...p, patientId: nextPatientId, patientEmail: '', patientPhone: '' }));
+            onChange={(value) => {
+              setForm((p) => ({ ...p, patientId: value, patientEmail: '', patientPhone: '' }));
               if (errors.patientId) {
                 setErrors((prev) => {
                   const next = { ...prev };
@@ -332,93 +560,139 @@ export default function BookAppointment() {
                 });
               }
             }}
-          >
-            <option value="">Select patient</option>
-            {patients.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
-          </select>
-          {errors.patientId && <p className="text-danger text-xs mt-1">{errors.patientId}</p>}
+            options={patients}
+            placeholder="Select patient"
+            error={errors.patientId}
+          />
         </div>
-        <div>
-          <label className="form-label">Email</label>
-          <input type="text" className="form-input" value={form.patientEmail} readOnly placeholder="Auto-filled from patient" />
+
+        {/* Email - Takes 6 columns on mobile, 3 columns on md and above */}
+        <div className="col-span-6 md:col-span-3 lg:col-span-3">
+          <label className="form-label block mb-2">Email</label>
+          <input 
+            type="email" 
+            className="w-full px-4 py-3 border border-[#3b2d1f] rounded-lg bg-[#111111] text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            style={{ minHeight: '50px' }}
+            value={form.patientEmail} 
+            onChange={(e) => setForm((p) => ({ ...p, patientEmail: e.target.value }))}
+            placeholder={selectedPatient ? "Auto-filled if available, or type email" : "Select patient first"}
+          />
+          <p className="text-gray-500 text-xs mt-1">Auto-fills from patient record if available, but you can edit manually.</p>
         </div>
-        <div>
-          <label className="form-label">Phone</label>
-          <input type="text" className="form-input" value={form.patientPhone} readOnly placeholder="Auto-filled from patient" />
+
+        {/* Phone - Takes 6 columns on mobile, 3 columns on md and above */}
+        <div className="col-span-6 md:col-span-3 lg:col-span-3">
+          <label className="form-label block mb-2">Phone</label>
+          <input 
+            type="tel" 
+            className="w-full px-4 py-3 border border-[#3b2d1f] rounded-lg bg-[#111111] text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            style={{ minHeight: '50px' }}
+            value={form.patientPhone} 
+            onChange={(e) => setForm((p) => ({ ...p, patientPhone: e.target.value }))}
+            placeholder={selectedPatient ? "Auto-filled if available, or type phone" : "Select patient first"}
+          />
+          <p className="text-gray-500 text-xs mt-1">Auto-fills from patient record if available, but you can edit manually.</p>
         </div>
-        <div>
-          <label className="form-label">Provider *</label>
-          <select
-            className="form-select"
+
+        {/* Provider - Takes 6 columns on mobile, 3 columns on md and above */}
+        <div className="col-span-6 md:col-span-3 lg:col-span-3">
+          <label className="form-label block mb-2">Provider *</label>
+          <CustomDropdown
             value={form.providerId}
-            onChange={(e) => setForm((p) => ({ ...p, providerId: e.target.value, time: '' }))}
-          >
-            <option value="">Select provider</option>
-            {providers.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
-          </select>
-          {errors.providerId && <p className="text-danger text-xs mt-1">{errors.providerId}</p>}
+            onChange={(value) => setForm((p) => ({ ...p, providerId: value, time: '' }))}
+            options={providers}
+            placeholder="Select provider"
+            error={errors.providerId}
+          />
         </div>
-        <div>
-          <label className="form-label">Visit Reason Type *</label>
-          <select className="form-select" value={form.visitReasonId} onChange={(e) => setForm((p) => ({ ...p, visitReasonId: e.target.value }))}>
-            <option value="">Select visit reason type</option>
-            {visitReasonTypes.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
-          </select>
-          {errors.visitReasonId && <p className="text-danger text-xs mt-1">{errors.visitReasonId}</p>}
+
+        {/* Visit Reason Type - Takes 6 columns on mobile, 3 columns on md and above */}
+        <div className="col-span-6 md:col-span-3 lg:col-span-3">
+          <label className="form-label block mb-2">Visit Reason Type *</label>
+          <CustomDropdown
+            value={form.visitReasonId}
+            onChange={(value) => setForm((p) => ({ ...p, visitReasonId: value }))}
+            options={visitReasonTypes}
+            placeholder="Select visit reason type"
+            error={errors.visitReasonId}
+          />
         </div>
-        <div>
-          <label className="form-label">Service Location *</label>
-          <select
-            className="form-select"
+
+        {/* Service Location - Takes 6 columns on mobile, 3 columns on md and above */}
+        <div className="col-span-6 md:col-span-3 lg:col-span-3">
+          <label className="form-label block mb-2">Service Location *</label>
+          <CustomDropdown
             value={form.serviceLocationId}
-            onChange={(e) => setForm((p) => ({ ...p, serviceLocationId: e.target.value, time: '' }))}
-          >
-            <option value="">Select service location</option>
-            {serviceLocations.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
-          </select>
-          {errors.serviceLocationId && <p className="text-danger text-xs mt-1">{errors.serviceLocationId}</p>}
+            onChange={(value) => setForm((p) => ({ ...p, serviceLocationId: value, time: '' }))}
+            options={serviceLocations}
+            placeholder="Select service location"
+            error={errors.serviceLocationId}
+          />
         </div>
-        <div>
-          <label className="form-label">Date *</label>
-          <input type="date" className="form-input" value={form.date} onChange={(e) => setForm((p) => ({ ...p, date: e.target.value, time: '' }))} />
+
+        {/* Date - Takes 6 columns on mobile, 3 columns on md and above */}
+        <div className="col-span-6 md:col-span-3 lg:col-span-3">
+          <label className="form-label block mb-2">Date *</label>
+          <input 
+            type="date" 
+            className="w-full px-4 py-3 border border-[#3b2d1f] rounded-lg bg-[#111111] text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            style={{ minHeight: '50px' }}
+            value={form.date} 
+            onChange={(e) => setForm((p) => ({ ...p, date: e.target.value, time: '' }))} 
+          />
           {errors.date && <p className="text-danger text-xs mt-1">{errors.date}</p>}
         </div>
-        <div>
-          <label className="form-label">Time *</label>
-          <select
-            className="form-select"
+
+        {/* Time - Takes 6 columns on mobile, 3 columns on md and above */}
+        <div className="col-span-6 md:col-span-3 lg:col-span-3">
+          <label className="form-label block mb-2">Time *</label>
+          <CustomDropdown
             value={form.time}
-            onChange={(e) => setForm((p) => ({ ...p, time: e.target.value }))}
-            disabled={!form.providerId || !form.date || !form.serviceLocationId || loadingSlots}
-          >
-            <option value="">
-              {!form.providerId || !form.date || !form.serviceLocationId
+            onChange={(value) => setForm((p) => ({ ...p, time: value }))}
+            options={timeSlotOptions}
+            placeholder={
+              !form.providerId || !form.date || !form.serviceLocationId
                 ? 'Select provider, location and date first'
                 : loadingSlots
                   ? 'Loading time slots...'
                   : timeSlots.length
                     ? 'Select time slot'
-                    : 'No available time slots'}
-            </option>
-            {timeSlots.map((slot) => <option key={slot} value={slot}>{slot}</option>)}
-          </select>
-          {errors.time && <p className="text-danger text-xs mt-1">{errors.time}</p>}
+                    : 'No available time slots'
+            }
+            error={errors.time}
+            disabled={!form.providerId || !form.date || !form.serviceLocationId || loadingSlots}
+            loading={loadingSlots}
+          />
         </div>
-        <div className="md:col-span-2">
-          <label className="form-label">Visit Reason *</label>
-          <select className="form-select" value={form.visitReason} onChange={(e) => setForm((p) => ({ ...p, visitReason: e.target.value }))}>
-            <option value="">Select visit reason</option>
-            {visitReasons.map((x) => <option key={x.id} value={x.label}>{x.label}</option>)}
-          </select>
-          {errors.visitReason && <p className="text-danger text-xs mt-1">{errors.visitReason}</p>}
+
+        {/* Visit Reason - Takes full width */}
+        <div className="col-span-6">
+          <label className="form-label block mb-2">Visit Reason *</label>
+          <CustomDropdown
+            value={form.visitReason}
+            onChange={(value) => setForm((p) => ({ ...p, visitReason: value }))}
+            options={visitReasons}
+            placeholder="Select visit reason"
+            error={errors.visitReason}
+          />
         </div>
-        <div className="md:col-span-2">
-          <label className="form-label">Notes</label>
-          <textarea rows={3} className="form-textarea" value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} />
+
+        {/* Notes - Takes full width */}
+        <div className="col-span-6">
+          <label className="form-label block mb-2">Notes</label>
+          <textarea 
+            rows={3} 
+            className="w-full px-4 py-3 border border-[#3b2d1f] rounded-lg bg-[#111111] text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            style={{ minHeight: '80px' }}
+            value={form.notes} 
+            onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} 
+          />
         </div>
-        <div className="md:col-span-2 flex justify-end gap-2">
-          <button type="button" className="btn btn-outline-secondary" onClick={() => navigate('/app/appointments')}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Saving...' : isEditMode ? 'Update Appointment' : 'Create Appointment'}</button>
+
+        {/* Buttons - Takes full width */}
+        <div className="col-span-6 flex justify-end gap-2 mt-4">
+          <button type="button" className="btn btn-outline-secondary px-6 py-2 rounded-lg" onClick={() => navigate('/app/appointments')}>Cancel</button>
+          <button type="submit" className="btn btn-primary px-6 py-2 rounded-lg" disabled={submitting}>{submitting ? 'Saving...' : isEditMode ? 'Update Appointment' : 'Create Appointment'}</button>
         </div>
       </form>
     </div>
