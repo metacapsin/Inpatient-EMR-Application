@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Building2, Pencil, Plus, Trash2, AlertTriangle, X } from 'lucide-react';
+import { Building2, Pencil, Plus, Trash2, AlertTriangle, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { FacilityBed, FacilityRoom, FacilityWard } from '../../../types/facility';
 import {
     getAllBeds,
@@ -86,6 +86,60 @@ const ConfirmationDialog = ({
                         </button>
                     </div>
                 </div>
+            </div>
+        </div>
+    );
+};
+
+// Pagination Component
+const Pagination = ({
+    currentPage,
+    totalPages,
+    onPageChange,
+    totalItems,
+    itemsPerPage,
+}: {
+    currentPage: number;
+    totalPages: number;
+    onPageChange: (page: number) => void;
+    totalItems: number;
+    itemsPerPage: number;
+}) => {
+    if (totalPages <= 1) return null;
+
+    const from = (currentPage - 1) * itemsPerPage + 1;
+    const to = Math.min(currentPage * itemsPerPage, totalItems);
+
+    return (
+        <div className="mt-4 flex flex-col gap-3 border-t border-gray-200 pt-4 dark:border-gray-700 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+                Showing <span className="font-medium text-gray-900 dark:text-gray-100">{from}</span>
+                –<span className="font-medium text-gray-900 dark:text-gray-100">{to}</span> of{' '}
+                <span className="font-medium text-gray-900 dark:text-gray-100">{totalItems}</span>
+            </p>
+
+            <div className="flex items-center gap-1">
+                <button
+                    type="button"
+                    title="Previous page"
+                    disabled={currentPage <= 1}
+                    onClick={() => onPageChange(currentPage - 1)}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                    <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="min-w-[5.5rem] text-center text-sm text-gray-600 dark:text-gray-400">
+                    Page {currentPage} / {totalPages}
+                </span>
+                <button
+                    type="button"
+                    title="Next page"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => onPageChange(currentPage + 1)}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                    <ChevronRight className="h-4 w-4" />
+                </button>
             </div>
         </div>
     );
@@ -444,6 +498,21 @@ function WardsSection({
     onDelete: (w: FacilityWard) => void;
     deleting: boolean;
 }) {
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 5;
+
+    // Calculate pagination
+    const totalItems = wards.length;
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const currentItems = wards.slice(startIndex, endIndex);
+
+    // Reset to first page when data changes
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [wards.length]);
+
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -458,44 +527,53 @@ function WardsSection({
             {loading ? (
                 <div className="h-40 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
             ) : (
-                <SimpleDataTable
-                    columns={[
-                        { key: 'name', header: 'Name', render: (w) => w.name },
-                        { key: 'code', header: 'Code', render: (w) => w.code ?? '—' },
-                        {
-                            key: 'actions',
-                            header: '',
-                            className: 'w-28 text-right',
-                            render: (w) =>
-                                canEdit ? (
-                                    <div className="flex justify-end gap-1">
-                                        <button
-                                            type="button"
-                                            title="Edit"
-                                            onClick={() => onEdit(w)}
-                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
-                                        >
-                                            <Pencil className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            title="Delete"
-                                            disabled={deleting}
-                                            onClick={() => onDelete(w)}
-                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                ) : (
-                                    '—'
-                                ),
-                        },
-                    ]}
-                    rows={wards}
-                    rowKey={(w) => String(w.id)}
-                    emptyMessage="No wards configured"
-                />
+                <>
+                    <SimpleDataTable
+                        columns={[
+                            { key: 'name', header: 'Name', render: (w) => w.name },
+                            { key: 'code', header: 'Code', render: (w) => w.code ?? '—' },
+                            {
+                                key: 'actions',
+                                header: '',
+                                className: 'w-28 text-right',
+                                render: (w) =>
+                                    canEdit ? (
+                                        <div className="flex justify-end gap-1">
+                                            <button
+                                                type="button"
+                                                title="Edit"
+                                                onClick={() => onEdit(w)}
+                                                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
+                                            >
+                                                <Pencil className="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                title="Delete"
+                                                disabled={deleting}
+                                                onClick={() => onDelete(w)}
+                                                className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        '—'
+                                    ),
+                            },
+                        ]}
+                        rows={currentItems}
+                        rowKey={(w) => String(w.id)}
+                        emptyMessage="No wards configured"
+                    />
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        onPageChange={setCurrentPage}
+                        totalItems={totalItems}
+                        itemsPerPage={itemsPerPage}
+                    />
+                </>
             )}
         </div>
     );
@@ -520,6 +598,21 @@ function RoomsSection({
     onDelete: (r: FacilityRoom) => void;
     deleting: boolean;
 }) {
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 5;
+
+    // Calculate pagination
+    const totalItems = rooms.length;
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const currentItems = rooms.slice(startIndex, endIndex);
+
+    // Reset to first page when data changes
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [rooms.length]);
+
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -534,45 +627,54 @@ function RoomsSection({
             {loading ? (
                 <div className="h-40 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
             ) : (
-                <SimpleDataTable
-                    columns={[
-                        { key: 'ward', header: 'Ward', render: (r) => wardNameById.get(String(r.wardId)) ?? '—' },
-                        { key: 'name', header: 'Room number', render: (r) => r.name },
-                        { key: 'roomType', header: 'Type', render: (r) => r.roomType ?? DEFAULT_ROOM_TYPE },
-                        {
-                            key: 'actions',
-                            header: '',
-                            className: 'w-28 text-right',
-                            render: (r) =>
-                                canEdit ? (
-                                    <div className="flex justify-end gap-1">
-                                        <button
-                                            type="button"
-                                            title="Edit"
-                                            onClick={() => onEdit(r)}
-                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
-                                        >
-                                            <Pencil className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            title="Delete"
-                                            disabled={deleting}
-                                            onClick={() => onDelete(r)}
-                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                ) : (
-                                    '—'
-                                ),
-                        },
-                    ]}
-                    rows={rooms}
-                    rowKey={(r) => String(r.id)}
-                    emptyMessage="No rooms configured"
-                />
+                <>
+                    <SimpleDataTable
+                        columns={[
+                            { key: 'ward', header: 'Ward', render: (r) => wardNameById.get(String(r.wardId)) ?? '—' },
+                            { key: 'name', header: 'Room number', render: (r) => r.name },
+                            { key: 'roomType', header: 'Type', render: (r) => r.roomType ?? DEFAULT_ROOM_TYPE },
+                            {
+                                key: 'actions',
+                                header: '',
+                                className: 'w-28 text-right',
+                                render: (r) =>
+                                    canEdit ? (
+                                        <div className="flex justify-end gap-1">
+                                            <button
+                                                type="button"
+                                                title="Edit"
+                                                onClick={() => onEdit(r)}
+                                                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
+                                            >
+                                                <Pencil className="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                title="Delete"
+                                                disabled={deleting}
+                                                onClick={() => onDelete(r)}
+                                                className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        '—'
+                                    ),
+                            },
+                        ]}
+                        rows={currentItems}
+                        rowKey={(r) => String(r.id)}
+                        emptyMessage="No rooms configured"
+                    />
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        onPageChange={setCurrentPage}
+                        totalItems={totalItems}
+                        itemsPerPage={itemsPerPage}
+                    />
+                </>
             )}
         </div>
     );
@@ -597,6 +699,21 @@ function BedsSection({
     onDelete: (b: FacilityBed) => void;
     deleting: boolean;
 }) {
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 5;
+
+    // Calculate pagination
+    const totalItems = beds.length;
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const currentItems = beds.slice(startIndex, endIndex);
+
+    // Reset to first page when data changes
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [beds.length]);
+
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -611,58 +728,67 @@ function BedsSection({
             {loading ? (
                 <div className="h-40 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
             ) : (
-                <SimpleDataTable
-                    columns={[
-                        { key: 'room', header: 'Room', render: (b) => roomLabelById.get(String(b.roomId)) ?? '—' },
-                        { key: 'name', header: 'Bed', render: (b) => b.name },
-                        {
-                            key: 'occ',
-                            header: 'Status',
-                            render: (b) =>
-                                b.occupied ? (
-                                    <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800 dark:bg-red-950/60 dark:text-red-200">
-                                        Occupied
-                                    </span>
-                                ) : (
-                                    <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200">
-                                        Available
-                                    </span>
-                                ),
-                        },
-                        {
-                            key: 'actions',
-                            header: '',
-                            className: 'w-28 text-right',
-                            render: (b) =>
-                                canEdit ? (
-                                    <div className="flex justify-end gap-1">
-                                        <button
-                                            type="button"
-                                            title="Edit"
-                                            onClick={() => onEdit(b)}
-                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
-                                        >
-                                            <Pencil className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            title="Delete"
-                                            disabled={deleting}
-                                            onClick={() => onDelete(b)}
-                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                ) : (
-                                    '—'
-                                ),
-                        },
-                    ]}
-                    rows={beds}
-                    rowKey={(b) => String(b.id)}
-                    emptyMessage="No beds configured"
-                />
+                <>
+                    <SimpleDataTable
+                        columns={[
+                            { key: 'room', header: 'Room', render: (b) => roomLabelById.get(String(b.roomId)) ?? '—' },
+                            { key: 'name', header: 'Bed', render: (b) => b.name },
+                            {
+                                key: 'occ',
+                                header: 'Status',
+                                render: (b) =>
+                                    b.occupied ? (
+                                        <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800 dark:bg-red-950/60 dark:text-red-200">
+                                            Occupied
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200">
+                                            Available
+                                        </span>
+                                    ),
+                            },
+                            {
+                                key: 'actions',
+                                header: '',
+                                className: 'w-28 text-right',
+                                render: (b) =>
+                                    canEdit ? (
+                                        <div className="flex justify-end gap-1">
+                                            <button
+                                                type="button"
+                                                title="Edit"
+                                                onClick={() => onEdit(b)}
+                                                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
+                                            >
+                                                <Pencil className="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                title="Delete"
+                                                disabled={deleting}
+                                                onClick={() => onDelete(b)}
+                                                className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        '—'
+                                    ),
+                            },
+                        ]}
+                        rows={currentItems}
+                        rowKey={(b) => String(b.id)}
+                        emptyMessage="No beds configured"
+                    />
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        onPageChange={setCurrentPage}
+                        totalItems={totalItems}
+                        itemsPerPage={itemsPerPage}
+                    />
+                </>
             )}
         </div>
     );
