@@ -81,18 +81,20 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
         onClick={() => !disabled && setIsOpen(!isOpen)}
         className={`
           w-full px-4 py-3
-          border border-[#3b2d1f]
-          rounded-lg
+          border rounded-lg
           flex items-center justify-between
           cursor-pointer
           transition-all duration-200
-          bg-[#111111]
-          hover:border-[#6b4d2e]
           ${
             disabled
               ? "opacity-50 cursor-not-allowed"
-              : ""
+              : "hover:border-[#6b4d2e]"
           }
+          /* Light mode styles */
+          bg-white border-gray-300 text-gray-900
+          /* Dark mode styles */
+          dark:bg-[#111111] dark:border-[#3b2d1f] dark:text-[#94a3b8]
+          hover:dark:border-[#6b4d2e]
         `}
       >
         <span
@@ -100,8 +102,8 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
             text-sm md:text-base
             ${
               selectedOption
-                ? "text-[#94a3b8]"
-                : "text-gray-500"
+                ? "text-gray-900 dark:text-[#94a3b8]"
+                : "text-gray-400 dark:text-gray-500"
             }
           `}
         >
@@ -130,20 +132,22 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
         <div
           className="
             absolute z-50 w-full mt-2
-            bg-[#111111]
-            border border-[#3b2d1f]
             rounded-lg
             shadow-xl
             overflow-y-auto
+            /* Light mode styles */
+            bg-white border border-gray-200
+            /* Dark mode styles */
+            dark:bg-[#111111] dark:border-[#3b2d1f]
           "
           style={{ maxHeight: "250px" }}
         >
           {loading ? (
-            <div className="px-4 py-3 text-gray-400">
+            <div className="px-4 py-3 text-gray-400 dark:text-gray-400">
               Loading...
             </div>
           ) : options.length === 0 ? (
-            <div className="px-4 py-3 text-gray-400">
+            <div className="px-4 py-3 text-gray-400 dark:text-gray-400">
               No options available
             </div>
           ) : (
@@ -162,7 +166,7 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
                   ${
                     value === option.id
                       ? "bg-blue-600 text-white"
-                      : "text-[#94a3b8] hover:bg-[#1e1e1e]"
+                      : "text-gray-700 hover:bg-gray-100 dark:text-[#94a3b8] dark:hover:bg-[#1e1e1e]"
                   }
                 `}
               >
@@ -547,7 +551,7 @@ export default function BookAppointment() {
       <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-6 gap-4">
         {/* Patient - Takes 6 columns on mobile, 3 columns on md and above */}
         <div className="col-span-6 md:col-span-3 lg:col-span-3">
-          <label className="form-label block mb-2">Patient *</label>
+          <label className="form-label block mb-2 text-gray-700 dark:text-gray-300">Patient *</label>
           <CustomDropdown
             value={form.patientId}
             onChange={(value) => {
@@ -568,10 +572,10 @@ export default function BookAppointment() {
 
         {/* Email - Takes 6 columns on mobile, 3 columns on md and above */}
         <div className="col-span-6 md:col-span-3 lg:col-span-3">
-          <label className="form-label block mb-2">Email</label>
+          <label className="form-label block mb-2 text-gray-700 dark:text-gray-300">Email</label>
           <input 
             type="email" 
-            className="w-full px-4 py-3 border border-[#3b2d1f] rounded-lg bg-[#111111] text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white border-gray-300 text-gray-900 dark:bg-[#111111] dark:border-[#3b2d1f] dark:text-[#94a3b8]"
             style={{ minHeight: '50px' }}
             value={form.patientEmail} 
             onChange={(e) => setForm((p) => ({ ...p, patientEmail: e.target.value }))}
@@ -582,10 +586,10 @@ export default function BookAppointment() {
 
         {/* Phone - Takes 6 columns on mobile, 3 columns on md and above */}
         <div className="col-span-6 md:col-span-3 lg:col-span-3">
-          <label className="form-label block mb-2">Phone</label>
+          <label className="form-label block mb-2 text-gray-700 dark:text-gray-300">Phone</label>
           <input 
             type="tel" 
-            className="w-full px-4 py-3 border border-[#3b2d1f] rounded-lg bg-[#111111] text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white border-gray-300 text-gray-900 dark:bg-[#111111] dark:border-[#3b2d1f] dark:text-[#94a3b8]"
             style={{ minHeight: '50px' }}
             value={form.patientPhone} 
             onChange={(e) => setForm((p) => ({ ...p, patientPhone: e.target.value }))}
@@ -596,7 +600,7 @@ export default function BookAppointment() {
 
         {/* Provider - Takes 6 columns on mobile, 3 columns on md and above */}
         <div className="col-span-6 md:col-span-3 lg:col-span-3">
-          <label className="form-label block mb-2">Provider *</label>
+          <label className="form-label block mb-2 text-gray-700 dark:text-gray-300">Provider *</label>
           <CustomDropdown
             value={form.providerId}
             onChange={(value) => setForm((p) => ({ ...p, providerId: value, time: '' }))}
@@ -608,7 +612,7 @@ export default function BookAppointment() {
 
         {/* Visit Reason Type - Takes 6 columns on mobile, 3 columns on md and above */}
         <div className="col-span-6 md:col-span-3 lg:col-span-3">
-          <label className="form-label block mb-2">Visit Reason Type *</label>
+          <label className="form-label block mb-2 text-gray-700 dark:text-gray-300">Visit Reason Type *</label>
           <CustomDropdown
             value={form.visitReasonId}
             onChange={(value) => setForm((p) => ({ ...p, visitReasonId: value }))}
@@ -620,7 +624,7 @@ export default function BookAppointment() {
 
         {/* Service Location - Takes 6 columns on mobile, 3 columns on md and above */}
         <div className="col-span-6 md:col-span-3 lg:col-span-3">
-          <label className="form-label block mb-2">Service Location *</label>
+          <label className="form-label block mb-2 text-gray-700 dark:text-gray-300">Service Location *</label>
           <CustomDropdown
             value={form.serviceLocationId}
             onChange={(value) => setForm((p) => ({ ...p, serviceLocationId: value, time: '' }))}
@@ -632,10 +636,10 @@ export default function BookAppointment() {
 
         {/* Date - Takes 6 columns on mobile, 3 columns on md and above */}
         <div className="col-span-6 md:col-span-3 lg:col-span-3">
-          <label className="form-label block mb-2">Date *</label>
+          <label className="form-label block mb-2 text-gray-700 dark:text-gray-300">Date *</label>
           <input 
             type="date" 
-            className="w-full px-4 py-3 border border-[#3b2d1f] rounded-lg bg-[#111111] text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white border-gray-300 text-gray-900 dark:bg-[#111111] dark:border-[#3b2d1f] dark:text-[#94a3b8]"
             style={{ minHeight: '50px' }}
             value={form.date} 
             onChange={(e) => setForm((p) => ({ ...p, date: e.target.value, time: '' }))} 
@@ -645,7 +649,7 @@ export default function BookAppointment() {
 
         {/* Time - Takes 6 columns on mobile, 3 columns on md and above */}
         <div className="col-span-6 md:col-span-3 lg:col-span-3">
-          <label className="form-label block mb-2">Time *</label>
+          <label className="form-label block mb-2 text-gray-700 dark:text-gray-300">Time *</label>
           <CustomDropdown
             value={form.time}
             onChange={(value) => setForm((p) => ({ ...p, time: value }))}
@@ -667,7 +671,7 @@ export default function BookAppointment() {
 
         {/* Visit Reason - Takes full width */}
         <div className="col-span-6">
-          <label className="form-label block mb-2">Visit Reason *</label>
+          <label className="form-label block mb-2 text-gray-700 dark:text-gray-300">Visit Reason *</label>
           <CustomDropdown
             value={form.visitReason}
             onChange={(value) => setForm((p) => ({ ...p, visitReason: value }))}
@@ -679,10 +683,10 @@ export default function BookAppointment() {
 
         {/* Notes - Takes full width */}
         <div className="col-span-6">
-          <label className="form-label block mb-2">Notes</label>
+          <label className="form-label block mb-2 text-gray-700 dark:text-gray-300">Notes</label>
           <textarea 
             rows={3} 
-            className="w-full px-4 py-3 border border-[#3b2d1f] rounded-lg bg-[#111111] text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white border-gray-300 text-gray-900 dark:bg-[#111111] dark:border-[#3b2d1f] dark:text-[#94a3b8]"
             style={{ minHeight: '80px' }}
             value={form.notes} 
             onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} 
@@ -691,8 +695,8 @@ export default function BookAppointment() {
 
         {/* Buttons - Takes full width */}
         <div className="col-span-6 flex justify-end gap-2 mt-4">
-          <button type="button" className="btn btn-outline-secondary px-6 py-2 rounded-lg" onClick={() => navigate('/app/appointments')}>Cancel</button>
-          <button type="submit" className="btn btn-primary px-6 py-2 rounded-lg" disabled={submitting}>{submitting ? 'Saving...' : isEditMode ? 'Update Appointment' : 'Create Appointment'}</button>
+          <button type="button" className="px-6 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 transition" onClick={() => navigate('/app/appointments')}>Cancel</button>
+          <button type="submit" className="px-6 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed" disabled={submitting}>{submitting ? 'Saving...' : isEditMode ? 'Update Appointment' : 'Create Appointment'}</button>
         </div>
       </form>
     </div>
