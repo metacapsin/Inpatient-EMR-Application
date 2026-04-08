@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 // CSRF disabled because JWT-based authentication is used
 // import { patientAPI, securityAPI } from '../../services/api';
 import { patientAPI } from '../../services/api';
+import { persistAuthPair } from '../../services/auth-tokens';
 import IconEye from '../../components/Icon/IconEye';
 
 const AuthPage: React.FC = () => {
@@ -76,7 +77,7 @@ const AuthPage: React.FC = () => {
             const patientEmail =
                 data.patientEmail ?? userData?.patientEmail ?? userData?.email ?? userData?.emailAddress;
 
-            // Update Redux store (reducers handle localStorage automatically)
+            persistAuthPair(data.token, data.refreshToken ?? null);
             dispatch(setToken(data.token));
             if (userData) dispatch(setUser(userData));
             if (roleData) dispatch(setRole(roleData));

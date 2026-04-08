@@ -25,15 +25,29 @@ export function normalizeLoginToken(data: unknown): string | null {
   return null;
 }
 
+export function normalizeRefreshToken(data: unknown): string | null {
+  if (data === null || data === undefined || typeof data !== 'object') return null;
+  const root = data as Record<string, unknown>;
+  if (typeof root.refreshToken === 'string' && root.refreshToken.length > 0) return root.refreshToken;
+  const nested = root.data;
+  if (nested && typeof nested === 'object') {
+    const r = (nested as Record<string, unknown>).refreshToken;
+    if (typeof r === 'string' && r.length > 0) return r;
+  }
+  return null;
+}
+
 export function parseLoginResponse(data: unknown): {
   token: string;
+  refreshToken: string | null;
   user: Record<string, unknown> | null;
   role: string | null;
 } | null {
   const token = normalizeLoginToken(data);
   if (!token) return null;
+  const refreshToken = normalizeRefreshToken(data);
   if (typeof data !== 'object' || data === null) {
-    return { token, user: null, role: null };
+    return { token, refreshToken, user: null, role: null };
   }
   const root = data as Record<string, unknown>;
   const user =
@@ -47,7 +61,7 @@ export function parseLoginResponse(data: unknown): {
   const role =
     (typeof root.role === 'string' ? root.role : null) ??
     (user && typeof user.role === 'string' ? user.role : null);
-  return { token, user, role };
+  return { token, refreshToken, user, role };
 }
 
 export const authService = {
@@ -65,6 +79,7 @@ export const authService = {
   /** Clears persisted auth and default axios header (call with Redux logout in UI). */
   clearClientAuth: () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
     localStorage.removeItem('role');
     localStorage.removeItem('user');
     localStorage.removeItem('patientData');

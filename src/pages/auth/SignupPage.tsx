@@ -19,6 +19,7 @@ import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { toast } from 'sonner';
 import api, { patientAPI, commonAPI, settingsAPI } from '@/services/api';
+import { persistAuthPair } from '@/services/auth-tokens';
 import { HealthIntakeForm } from '@/components/auth/HealthIntakeForm';
 import { InsuranceForm } from '@/components/auth/InsuranceForm';
 import { LabsDocumentsForm, formatFileSize, type UploadedFile } from '@/components/auth/LabsDocumentsForm';
@@ -1149,6 +1150,7 @@ dispatch(logout());
         });
 
         if (res?.data?.token) {
+          persistAuthPair(res.data.token, (res.data as { refreshToken?: string }).refreshToken ?? null);
           dispatch(setToken(res.data.token));
           sessionStorage.setItem("token", res.data.token);
         }

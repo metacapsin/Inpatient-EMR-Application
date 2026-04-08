@@ -3,6 +3,11 @@ import axios from 'axios';
 import type { PremiumStatus } from '../types/premium';
 import api from '../services/api';
 import { parseLoginResponse } from '../services/auth.service';
+import {
+    getStoredRefreshToken,
+    isAccessTokenExpired,
+    persistAuthPair,
+} from '../services/auth-tokens';
 
 const BASE_URL = 'https://devapi.mdcareproviders.com';
 
@@ -36,32 +41,19 @@ interface AuthState {
     loading: boolean;
 }
 
-// Check if token is expired
-const isTokenExpired = (token: string): boolean => {
-    try {
-        const parts = token.split('.');
-        if (parts.length === 3) {
-            const payload = JSON.parse(atob(parts[1]));
-            const currentTime = Date.now() / 1000;
-            return payload.exp < currentTime;
-        }
-        return false;
-    } catch (error) {
-        return false;
-    }
-};
-
 const getInitialToken = (): string | null => {
     const token = localStorage.getItem('token');
-    if (token && !isTokenExpired(token)) {
+    if (!token) return null;
+    if (!isAccessTokenExpired(token)) {
         return token;
     }
-    if (token && isTokenExpired(token)) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        localStorage.removeItem('role');
-        localStorage.removeItem('patientData');
+    if (getStoredRefreshToken()) {
+        return token;
     }
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('role');
+    localStorage.removeItem('patientData');
     return null;
 };
 
@@ -126,7 +118,7 @@ export const loginUser = createAsyncThunk(
                 ? ({ ...parsed.user, email: String((parsed.user as User).email ?? email) } as User)
                 : ({ email } as User);
 
-            localStorage.setItem('token', parsed.token);
+            persistAuthPair(parsed.token, parsed.refreshToken);
             localStorage.setItem('user', JSON.stringify(userPayload));
             if (parsed.role) localStorage.setItem('role', parsed.role);
 
@@ -171,9 +163,14 @@ export const registerUser = createAsyncThunk(
                 industry,
                 subdomain,
             });
-            const { token, user, role } = response.data;
+            const { token, user, role, refreshToken } = response.data as {
+                token: string;
+                user: User;
+                role: string;
+                refreshToken?: string;
+            };
 
-            localStorage.setItem('token', token);
+            persistAuthPair(token, refreshToken ?? null);
             localStorage.setItem('role', role);
             localStorage.setItem('user', JSON.stringify(user));
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -213,6 +210,7 @@ const authSlice = createSlice({
                 axios.defaults.headers.common['Authorization'] = `Bearer ${action.payload}`;
             } else {
                 localStorage.removeItem('token');
+                localStorage.removeItem('refreshToken');
                 delete axios.defaults.headers.common['Authorization'];
             }
         },
@@ -256,6 +254,7 @@ const authSlice = createSlice({
             state.premiumSubscription = null;
             state.patientData = null;
             localStorage.removeItem('token');
+            localStorage.removeItem('refreshToken');
             localStorage.removeItem('role');
             localStorage.removeItem('user');
             localStorage.removeItem('patientData');
@@ -275,32 +274,24 @@ const authSlice = createSlice({
             }
         },
         checkTokenExpiration: (state) => {
-            if (state.token) {
-                try {
-                    const parts = state.token.split('.');
-                    if (parts.length === 3) {
-                        const payload = JSON.parse(atob(parts[1]));
-                        const currentTime = Date.now() / 1000;
-                        if (payload.exp < currentTime) {
-                            // Token expired
-                            state.token = null;
-                            state.user = null;
-                            state.role = null;
-                            state.cloudSubscriptions = null;
-                            state.premiumSubscription = null;
-                            state.patientData = null;
-                            localStorage.removeItem('token');
-                            localStorage.removeItem('role');
-                            localStorage.removeItem('user');
-                            localStorage.removeItem('patientData');
-                            localStorage.removeItem('premiumSubscription');
-                            delete axios.defaults.headers.common['Authorization'];
-                        }
-                    }
-                } catch (error) {
-                    // If we can't parse, assume it's valid
-                }
+            if (!state.token) return;
+            if (!isAccessTokenExpired(state.token)) return;
+            if (getStoredRefreshToken()) {
+                return;
             }
+            state.token = null;
+            state.user = null;
+            state.role = null;
+            state.cloudSubscriptions = null;
+            state.premiumSubscription = null;
+            state.patientData = null;
+            localStorage.removeItem('token');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem('role');
+            localStorage.removeItem('user');
+            localStorage.removeItem('patientData');
+            localStorage.removeItem('premiumSubscription');
+            delete axios.defaults.headers.common['Authorization'];
         },
     },
     extraReducers: (builder) => {

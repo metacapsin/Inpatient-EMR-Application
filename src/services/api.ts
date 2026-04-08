@@ -1,7 +1,16 @@
 // api.ts
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import {
+  API_BASE_URL,
+  accessTokenNeedsRefresh,
+  clearSessionAfterAuthFailure,
+  getStoredAccessToken,
+  getStoredRefreshToken,
+  refreshAccessToken,
+  shouldBypassRefreshForUrl,
+} from './auth-tokens';
 
-export const BASE_URL = (import.meta.env.VITE_EMR_API_BASE_URL as string | undefined)?.replace(/\/$/, '') || 'https://devapi.mdcareproviders.com';
+export const BASE_URL = API_BASE_URL;
 // http://101.53.133.39:4000
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,
@@ -11,24 +20,32 @@ const api: AxiosInstance = axios.create({
   withCredentials: false,
 });
 
-// Request interceptor to add auth token
+// Request interceptor: proactive refresh (same backend contract as provider Angular app)
 api.interceptors.request.use(
-  (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
+  async (config: InternalAxiosRequestConfig): Promise<InternalAxiosRequestConfig> => {
     if (config.data instanceof FormData) {
       delete (config.headers as Record<string, unknown>)['Content-Type'];
     }
-    const token = localStorage.getItem('token');
+
+    const url = config.url || '';
+    if (!shouldBypassRefreshForUrl(url)) {
+      const refreshTok = getStoredRefreshToken();
+      let access = getStoredAccessToken();
+      if (refreshTok && accessTokenNeedsRefresh(access)) {
+        const newToken = await refreshAccessToken();
+        if (!newToken) {
+          clearSessionAfterAuthFailure();
+          return Promise.reject(new AxiosError('Session expired', undefined, config));
+        }
+        access = newToken;
+      }
+    }
+
+    const token = getStoredAccessToken();
     if (token) {
       config.headers.set('Authorization', `Bearer ${token}`);
     }
 
-    // CSRF disabled because JWT-based authentication is used
-    // const csrfToken = localStorage.getItem('csrfToken');
-    // if (csrfToken) {
-    //   config.headers.set('X-CSRF-Token', csrfToken);
-    // }
-    
-    // Add tenant ID header if available
     const user = localStorage.getItem('user');
     if (user) {
       try {
@@ -40,57 +57,40 @@ api.interceptors.request.use(
         console.warn('Failed to parse user data for tenant ID:', error);
       }
     }
-    
+
     return config;
   },
   (error: AxiosError) => Promise.reject(error)
 );
 
-// Response interceptor to handle authentication errors
+// Response interceptor: 401 → refresh + single retry (aligned with provider portal)
 api.interceptors.response.use(
   (response: AxiosResponse): AxiosResponse => response,
   async (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      // Check if this is a refresh token request to avoid infinite loops
-      if (error.config?.url?.includes('/refresh-token')) {
-        // Refresh token failed, clear all data and redirect
-        localStorage.removeItem('token');
-        // CSRF disabled because JWT-based authentication is used
-        // localStorage.removeItem('csrfToken');
-        localStorage.removeItem('user');
-        localStorage.removeItem('role');
-        delete axios.defaults.headers.common['Authorization'];
-        // window.location.href = '/';
-        return Promise.reject(new Error('Authentication failed - redirecting to login'));
+    const originalRequest = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
+    const reqUrl = originalRequest?.url || '';
+
+    if (error.response?.status === 401 && originalRequest) {
+      if (shouldBypassRefreshForUrl(reqUrl)) {
+        return Promise.reject(error);
       }
 
-      // Try to refresh the token
-      // try {
-      //   // const refreshResponse = await userAPI.refreshToken();
-      //   // if (refreshResponse.data.token) {
-      //   //   // Update token in localStorage and axios headers
-      //   //   localStorage.setItem('token', refreshResponse.data.token);
-      //   //   axios.defaults.headers.common['Authorization'] = `Bearer ${refreshResponse.data.token}`;
-          
-      //   //   // Retry the original request
-      //   //   const originalRequest = error.config;
-      //   //   if (originalRequest) {
-      //   //     originalRequest.headers.Authorization = `Bearer ${refreshResponse.data.token}`;
-      //   //     return axios(originalRequest);
-      //   //   }
-      //   // }
-      // } catch (refreshError) {
-      //   // Refresh failed, clear all data and redirect
-      //   localStorage.removeItem('token');
-      // CSRF disabled because JWT-based authentication is used
-      //   localStorage.removeItem('csrfToken');
-      //   localStorage.removeItem('user');
-      //   localStorage.removeItem('role');
-      //   delete axios.defaults.headers.common['Authorization'];
-      //   // window.location.href = '/';
-      //   return Promise.reject(new Error('Token refresh failed - redirecting to login'));
-      // }
+      if (originalRequest._retry) {
+        clearSessionAfterAuthFailure();
+        return Promise.reject(error);
+      }
+
+      originalRequest._retry = true;
+      const newToken = await refreshAccessToken();
+      if (!newToken) {
+        clearSessionAfterAuthFailure();
+        return Promise.reject(error);
+      }
+
+      originalRequest.headers.set('Authorization', `Bearer ${newToken}`);
+      return api(originalRequest);
     }
+
     return Promise.reject(error);
   }
 );
@@ -114,8 +114,16 @@ export const authAPI = {
   resetPassword: (data: { token: string; newPassword: string; confirmPassword: string }) =>
     api.post('/auth/reset-password', data),
   
-  refreshToken: () =>
-    api.post('/auth/refresh-token'),
+  /** Uses stored refresh token; prefer automatic refresh via interceptors. */
+  refreshToken: () => {
+    const rt = getStoredRefreshToken();
+    if (!rt) return Promise.reject(new Error('No refresh token'));
+    return axios.post<{ token?: string; refreshToken?: string }>(
+      `${API_BASE_URL}/auth/refresh`,
+      { refreshToken: rt },
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+  },
 };
 
 // User API
@@ -130,9 +138,7 @@ export const userAPI = {
   updatePreferences: (preferences: Record<string, any>) =>
     api.put('/auth/profile', { preferences }),
   
-  // Token refresh
-  refreshToken: () => 
-    api.post('/auth/refresh-token'),
+  refreshToken: () => authAPI.refreshToken(),
   
   // User management (for admins)
   registerUser: (userData: Record<string, any>) => {

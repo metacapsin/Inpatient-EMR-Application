@@ -18,6 +18,15 @@ import router from './router/index';
 // Redux
 import { Provider } from 'react-redux';
 import store from './store/index';
+import { registerAccessTokenSync, registerAuthClear } from './services/auth-events';
+import { setToken, logout } from './store/authSlice';
+
+registerAccessTokenSync((token) => {
+    store.dispatch(setToken(token));
+});
+registerAuthClear(() => {
+    store.dispatch(logout());
+});
 import { AdtLegacySessionMigration } from './components/adt/AdtLegacySessionMigration';
 
 // Contexts
