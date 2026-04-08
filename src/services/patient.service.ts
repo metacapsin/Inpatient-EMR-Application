@@ -505,7 +505,8 @@ function toApiYmd(value: string | undefined): string | undefined {
 }
 
 /**
- * GET /Patient/getAllPatientListPaginated — pagination, search, sort, filters.
+ * GET /Patient/getAllPatientListPaginated — pagination, sort, filters.
+ * Text filter is sent as `query` (maps from params.search / UI `search` URL key).
  */
 export async function getPatientsList(params: GetPatientsListParams): Promise<PaginatedPatientsResult> {
     const qp: Record<string, unknown> = {
@@ -520,7 +521,7 @@ export async function getPatientsList(params: GetPatientsListParams): Promise<Pa
     else if (params.status === 'inactive') qp.status = false;
 
     const q = params.search?.trim();
-    if (q) qp.search = q;
+    if (q) qp.query = q;
 
     if (params.gender && params.gender !== 'all') {
         const g = params.gender.trim().toUpperCase();

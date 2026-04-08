@@ -111,6 +111,17 @@ function serializeListQuery(q: ListQueryState): URLSearchParams {
     return p;
 }
 
+/** True if two query strings have the same keys and values (order-insensitive). Avoids sync churn when only param ordering differs. */
+function patientListQueryStringEqual(a: string, b: string): boolean {
+    const pa = new URLSearchParams(a);
+    const pb = new URLSearchParams(b);
+    const keys = new Set<string>([...pa.keys(), ...pb.keys()]);
+    for (const k of keys) {
+        if ((pa.get(k) ?? '') !== (pb.get(k) ?? '')) return false;
+    }
+    return true;
+}
+
 const PatientList = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -157,7 +168,10 @@ const PatientList = () => {
 
     useEffect(() => {
         const cur = searchParams.toString();
-        if (lastSyncedSearchParams.current !== null && cur === lastSyncedSearchParams.current) {
+        if (
+            lastSyncedSearchParams.current !== null &&
+            patientListQueryStringEqual(cur, lastSyncedSearchParams.current)
+        ) {
             return;
         }
     
@@ -199,7 +213,7 @@ const PatientList = () => {
             search: debouncedSearch,
         }).toString();
     
-        if (next === searchParams.toString()) return;
+        if (patientListQueryStringEqual(next, searchParams.toString())) return;
     
         lastSyncedSearchParams.current = next;
         setSearchParams(new URLSearchParams(next), { replace: true });
