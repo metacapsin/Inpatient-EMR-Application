@@ -15,7 +15,7 @@ interface PatientTableProps {
 
 /** Column hints for `table-fixed` so the grid fits the viewport without horizontal scroll. */
 function PatientTableColGroup() {
-    const widths = ['20%', '9%', '4%', '8%', '5%', '5%', '7%', '13%', '10%', '10%', '9%'] as const;
+    const widths = ['22%', '10%', '5%', '9%', '16%', '14%', '12%', '12%'] as const;
     return (
         <colgroup>
             {widths.map((w, i) => (
@@ -30,7 +30,7 @@ function TableSkeleton() {
         <>
             {Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i}>
-                    <td className="px-2 py-2" colSpan={11}>
+                    <td className="px-2 py-2" colSpan={8}>
                         <div className="flex min-w-0 items-center gap-2">
                             <div className="h-8 w-8 shrink-0 animate-pulse rounded-md bg-gray-200 dark:bg-gray-700" />
                             <div className="min-w-0 flex-1 space-y-1.5">
@@ -84,9 +84,9 @@ const PatientTable = ({
                                 <SortableHeader {...headerProps('patient')}>Patient</SortableHeader>
                                 <SortableHeader {...headerProps('dob')}>DOB / Age</SortableHeader>
                                 <SortableHeader {...headerProps('gender')}>Gender</SortableHeader>
-                                <SortableHeader {...headerProps('ward')}>Ward</SortableHeader>
+                                {/* <SortableHeader {...headerProps('ward')}>Ward</SortableHeader>
                                 <SortableHeader {...headerProps('room')}>Room</SortableHeader>
-                                <SortableHeader {...headerProps('bed')}>Bed</SortableHeader>
+                                <SortableHeader {...headerProps('bed')}>Bed</SortableHeader> */}
                                 <SortableHeader {...headerProps('status')}>Status</SortableHeader>
                                 <SortableHeader isSortable={false}>Inpatient</SortableHeader>
                                 <SortableHeader {...headerProps('phone')}>Phone</SortableHeader>
@@ -132,9 +132,9 @@ const PatientTable = ({
                                 <SortableHeader {...headerProps('patient')}>Patient</SortableHeader>
                                 <SortableHeader {...headerProps('dob')}>DOB / Age</SortableHeader>
                                 <SortableHeader {...headerProps('gender')}>Gender</SortableHeader>
-                                <SortableHeader {...headerProps('ward')}>Ward</SortableHeader>
+                                {/* <SortableHeader {...headerProps('ward')}>Ward</SortableHeader>
                                 <SortableHeader {...headerProps('room')}>Room</SortableHeader>
-                                <SortableHeader {...headerProps('bed')}>Bed</SortableHeader>
+                                <SortableHeader {...headerProps('bed')}>Bed</SortableHeader> */}
                                 <SortableHeader {...headerProps('status')}>Status</SortableHeader>
                                 <SortableHeader isSortable={false}>Inpatient</SortableHeader>
                                 <SortableHeader {...headerProps('phone')}>Phone</SortableHeader>

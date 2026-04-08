@@ -57,6 +57,7 @@ function InpatientAdtCell({
     const session = useSelector((s: IRootState) => selectAdtEncounter(s, chartId));
     const admitted = !!session;
     const dischargePending = !!session?.dischargeInitiated;
+    const transferred = admitted && !dischargePending && session?.lastPlacementAction === 'transfer';
 
     const open = (intent: AdtWorkflowIntent) => (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -72,11 +73,19 @@ function InpatientAdtCell({
                 className={`inline-flex max-w-full items-center truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
                     dischargePending
                         ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-500/25 dark:bg-amber-950/50 dark:text-amber-100'
-                        : 'bg-emerald-100 text-emerald-900 ring-1 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-100'
+                        : transferred
+                          ? 'bg-sky-100 text-sky-900 ring-1 ring-sky-600/20 dark:bg-sky-950/45 dark:text-sky-100'
+                          : 'bg-emerald-100 text-emerald-900 ring-1 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-100'
                 }`}
-                title={dischargePending ? 'Discharge initiated — confirm in chart or here' : 'Active inpatient encounter in workspace'}
+                title={
+                    dischargePending
+                        ? 'Discharge initiated — confirm in chart or here'
+                        : transferred
+                          ? 'Patient moved to another bed in this session'
+                          : 'Active inpatient encounter in workspace'
+                }
             >
-                {dischargePending ? 'Discharge…' : 'Admitted'}
+                {dischargePending ? 'Discharge…' : transferred ? 'Transferred' : 'Admitted'}
             </span>
         ) : (
             <span className="inline-flex max-w-full truncate rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600 ring-1 ring-gray-500/10 dark:bg-gray-800 dark:text-gray-300">
@@ -181,7 +190,7 @@ export function PatientTableRow({ patient, onOpenAdt }: PatientRowProps) {
                 </div>
             </td>
             <td className="px-2 py-2 text-center text-xs text-gray-700">{patient.gender}</td>
-            <td className="max-w-0 truncate px-2 py-2 text-xs text-gray-700" title={patient.ward}>
+            {/* <td className="max-w-0 truncate px-2 py-2 text-xs text-gray-700" title={patient.ward}>
                 {patient.ward}
             </td>
             <td className="max-w-0 truncate px-2 py-2 text-xs text-gray-700 tabular-nums" title={patient.room}>
@@ -189,7 +198,7 @@ export function PatientTableRow({ patient, onOpenAdt }: PatientRowProps) {
             </td>
             <td className="max-w-0 truncate px-2 py-2 text-xs text-gray-700 tabular-nums" title={patient.bed}>
                 {patient.bed}
-            </td>
+            </td> */}
             <td className="max-w-0 px-2 py-2 text-xs text-gray-700">
                 <PatientStatusCell label={patient.statusLabel} />
             </td>
@@ -280,12 +289,12 @@ export function PatientMobileCard({ patient, onOpenAdt }: PatientRowProps) {
                                 {formatAgeLabelFromDobRaw(patient.dobRaw)}
                             </span>
                         </span>
-                        <span className="text-gray-400">Ward</span>
+                        {/* <span className="text-gray-400">Ward</span>
                         <span className="truncate text-right">{patient.ward}</span>
                         <span className="text-gray-400">Room</span>
                         <span className="text-right tabular-nums">{patient.room}</span>
                         <span className="text-gray-400">Bed</span>
-                        <span className="text-right tabular-nums">{patient.bed}</span>
+                        <span className="text-right tabular-nums">{patient.bed}</span> */}
                         <span className="text-gray-400">Status</span>
                         <span className="flex justify-end">
                             <PatientStatusCell label={patient.statusLabel} />

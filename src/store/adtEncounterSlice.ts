@@ -7,6 +7,8 @@ export interface AdtEncounterState {
     dischargeInitiated: boolean;
     /** Mongo bed id from last successful admit/transfer; used for same-bed validation. */
     currentBedMongoId: string | null;
+    /** After a successful transfer in this workspace, UI shows "Transferred" until discharge. */
+    lastPlacementAction?: 'admit' | 'transfer';
 }
 
 export interface AdtEncounterSliceState {
@@ -43,6 +45,7 @@ const adtEncounterSlice = createSlice({
                 encounterId: action.payload.encounterId.trim(),
                 dischargeInitiated: false,
                 currentBedMongoId: action.payload.bedMongoId.trim() || null,
+                lastPlacementAction: 'admit',
             };
         },
         setAdtDischargeInitiated: (
@@ -55,12 +58,22 @@ const adtEncounterSlice = createSlice({
             if (!cur || cur.encounterId !== action.payload.encounterId.trim()) return;
             state.byPatientId[id] = { ...cur, dischargeInitiated: true };
         },
-        setAdtCurrentBed: (state, action: PayloadAction<{ patientId: string; bedMongoId: string }>) => {
+        setAdtCurrentBed: (
+            state,
+            action: PayloadAction<{ patientId: string; bedMongoId: string; fromTransfer?: boolean }>
+        ) => {
             const id = normPid(action.payload.patientId);
             if (!id) return;
             const cur = state.byPatientId[id];
             if (!cur) return;
-            state.byPatientId[id] = { ...cur, currentBedMongoId: action.payload.bedMongoId.trim() || null };
+            const next: AdtEncounterState = {
+                ...cur,
+                currentBedMongoId: action.payload.bedMongoId.trim() || null,
+            };
+            if (action.payload.fromTransfer) {
+                next.lastPlacementAction = 'transfer';
+            }
+            state.byPatientId[id] = next;
         },
         clearAdtEncounter: (state, action: PayloadAction<{ patientId: string }>) => {
             const id = normPid(action.payload.patientId);
@@ -72,10 +85,15 @@ const adtEncounterSlice = createSlice({
             for (const [k, v] of Object.entries(incoming)) {
                 const id = normPid(k);
                 if (!id || !v.encounterId?.trim()) continue;
+                const placement =
+                    v.lastPlacementAction === 'transfer' || v.lastPlacementAction === 'admit'
+                        ? v.lastPlacementAction
+                        : undefined;
                 state.byPatientId[id] = {
                     encounterId: v.encounterId.trim(),
                     dischargeInitiated: Boolean(v.dischargeInitiated),
                     currentBedMongoId: v.currentBedMongoId?.trim() ? v.currentBedMongoId.trim() : null,
+                    ...(placement ? { lastPlacementAction: placement } : {}),
                 };
             }
         },

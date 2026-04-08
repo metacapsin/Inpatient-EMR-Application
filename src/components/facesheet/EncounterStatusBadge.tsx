@@ -8,6 +8,8 @@ const VARIANT_STYLES: Record<
         'bg-gray-100 text-gray-700 ring-gray-400/20 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-500/25',
     active:
         'bg-emerald-100 text-emerald-900 ring-emerald-500/25 dark:bg-emerald-950/55 dark:text-emerald-100 dark:ring-emerald-400/20',
+    transferred:
+        'bg-sky-100 text-sky-900 ring-sky-500/25 dark:bg-sky-950/50 dark:text-sky-100 dark:ring-sky-400/20',
     discharge_initiated:
         'bg-amber-100 text-amber-950 ring-amber-500/30 dark:bg-amber-950/45 dark:text-amber-100 dark:ring-amber-400/25',
 };

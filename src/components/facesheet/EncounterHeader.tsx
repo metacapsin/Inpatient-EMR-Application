@@ -28,6 +28,9 @@ function resolveStatus(session: ReturnType<typeof selectAdtEncounter>): {
     if (session.dischargeInitiated) {
         return { variant: 'discharge_initiated', label: 'Discharge initiated' };
     }
+    if (session.lastPlacementAction === 'transfer') {
+        return { variant: 'transferred', label: 'Transferred' };
+    }
     return { variant: 'active', label: 'Active' };
 }
 

@@ -180,7 +180,13 @@ const AdtModulePage = () => {
             }
             const nextBed = result.data.currentBedId?.trim() || transferTargetBedId.trim();
             if (nextBed) {
-                dispatch(setAdtCurrentBed({ patientId: patientId.trim(), bedMongoId: nextBed }));
+                dispatch(
+                    setAdtCurrentBed({
+                        patientId: patientId.trim(),
+                        bedMongoId: nextBed,
+                        fromTransfer: true,
+                    })
+                );
             }
             toast.success(result.message || 'Transfer completed');
             setTransferBedId('');
@@ -330,6 +336,10 @@ const AdtModulePage = () => {
                                 {session.dischargeInitiated ? (
                                     <span className="ml-2 inline-flex rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-100">
                                         Discharge pending confirm
+                                    </span>
+                                ) : session.lastPlacementAction === 'transfer' ? (
+                                    <span className="ml-2 inline-flex rounded-md bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-900 dark:text-sky-100">
+                                        Transferred
                                     </span>
                                 ) : null}
                             </>

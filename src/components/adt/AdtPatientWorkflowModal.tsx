@@ -180,7 +180,7 @@ export function AdtPatientWorkflowModal({
             const pid = patientId.trim();
             const nextBed = result.data.currentBedId?.trim() || transferTargetBedId.trim();
             if (nextBed) {
-                dispatch(setAdtCurrentBed({ patientId: pid, bedMongoId: nextBed }));
+                dispatch(setAdtCurrentBed({ patientId: pid, bedMongoId: nextBed, fromTransfer: true }));
             }
             toast.success(result.message || 'Transfer completed');
             refreshChart();
