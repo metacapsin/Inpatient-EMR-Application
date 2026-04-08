@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Building2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Building2, Pencil, Plus, Trash2, AlertTriangle, X } from 'lucide-react';
 import type { FacilityBed, FacilityRoom, FacilityWard } from '../../../types/facility';
 import {
     getAllBeds,
@@ -23,6 +23,73 @@ import { useCanEditPatientLocation } from '../../../hooks/useCanEditPatientLocat
 import { DEFAULT_ROOM_TYPE, ROOM_TYPES } from '../../../constants/facility';
 
 type TabId = 'wards' | 'rooms' | 'beds';
+
+// Confirmation Dialog Component
+const ConfirmationDialog = ({
+    open,
+    title,
+    message,
+    onConfirm,
+    onCancel,
+    isDeleting,
+}: {
+    open: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+    isDeleting?: boolean;
+}) => {
+    if (!open) return null;
+
+    return (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black/50 backdrop-blur-sm">
+            <div className="relative mx-auto w-full max-w-md animate-fadeIn p-4">
+                <div className="relative rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800">
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
+                                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                            </div>
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
+                        </div>
+                        <button
+                            onClick={onCancel}
+                            className="rounded-lg p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                        >
+                            <X className="h-5 w-5" />
+                        </button>
+                    </div>
+
+                    {/* Body */}
+                    <div className="p-4">
+                        <p className="text-sm text-gray-600 dark:text-gray-300">{message}</p>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="flex justify-end gap-2 border-t border-gray-200 p-4 dark:border-gray-700">
+                        <button
+                            type="button"
+                            onClick={onCancel}
+                            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onConfirm}
+                            disabled={isDeleting}
+                            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-red-700 dark:hover:bg-red-800"
+                        >
+                            {isDeleting ? 'Deleting...' : 'Delete'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const FacilitySettingsPage = () => {
     const queryClient = useQueryClient();
@@ -56,6 +123,19 @@ const FacilitySettingsPage = () => {
     const [roomModal, setRoomModal] = useState<{ mode: 'add' | 'edit'; room?: FacilityRoom } | null>(null);
     const [bedModal, setBedModal] = useState<{ mode: 'add' | 'edit'; bed?: FacilityBed } | null>(null);
 
+    // Confirmation dialogs state
+    const [confirmDialog, setConfirmDialog] = useState<{
+        open: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+    }>({
+        open: false,
+        title: '',
+        message: '',
+        onConfirm: () => {},
+    });
+
     const wardMut = useMutation({
         mutationFn: async (payload: { mode: 'add' | 'edit'; ward?: FacilityWard; name: string; code: string }) => {
             if (payload.mode === 'add') return mockCreateWard({ name: payload.name, code: payload.code || undefined });
@@ -75,8 +155,12 @@ const FacilitySettingsPage = () => {
         onSuccess: () => {
             toast.success('Ward removed');
             invalidateFacility();
+            setConfirmDialog({ open: false, title: '', message: '', onConfirm: () => {} });
         },
-        onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Delete failed'),
+        onError: (e: unknown) => {
+            toast.error(e instanceof Error ? e.message : 'Delete failed');
+            setConfirmDialog({ open: false, title: '', message: '', onConfirm: () => {} });
+        },
     });
 
     const roomMut = useMutation({
@@ -114,8 +198,12 @@ const FacilitySettingsPage = () => {
         onSuccess: () => {
             toast.success('Room removed');
             invalidateFacility();
+            setConfirmDialog({ open: false, title: '', message: '', onConfirm: () => {} });
         },
-        onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Delete failed'),
+        onError: (e: unknown) => {
+            toast.error(e instanceof Error ? e.message : 'Delete failed');
+            setConfirmDialog({ open: false, title: '', message: '', onConfirm: () => {} });
+        },
     });
 
     const bedMut = useMutation({
@@ -137,8 +225,12 @@ const FacilitySettingsPage = () => {
         onSuccess: () => {
             toast.success('Bed removed');
             invalidateFacility();
+            setConfirmDialog({ open: false, title: '', message: '', onConfirm: () => {} });
         },
-        onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Delete failed'),
+        onError: (e: unknown) => {
+            toast.error(e instanceof Error ? e.message : 'Delete failed');
+            setConfirmDialog({ open: false, title: '', message: '', onConfirm: () => {} });
+        },
     });
 
     const tabs: { id: TabId; label: string }[] = [
@@ -146,6 +238,33 @@ const FacilitySettingsPage = () => {
         { id: 'rooms', label: 'Rooms' },
         { id: 'beds', label: 'Beds' },
     ];
+
+    const handleDeleteWard = (ward: FacilityWard) => {
+        setConfirmDialog({
+            open: true,
+            title: 'Delete Ward',
+            message: `Are you sure you want to delete ward "${ward.name}"? Nested rooms and beds may be removed per server rules. This action cannot be undone.`,
+            onConfirm: () => wardDel.mutate(ward.id),
+        });
+    };
+
+    const handleDeleteRoom = (room: FacilityRoom) => {
+        setConfirmDialog({
+            open: true,
+            title: 'Delete Room',
+            message: `Are you sure you want to delete room "${room.name}"? This action cannot be undone.`,
+            onConfirm: () => roomDel.mutate(room.id),
+        });
+    };
+
+    const handleDeleteBed = (bed: FacilityBed) => {
+        setConfirmDialog({
+            open: true,
+            title: 'Delete Bed',
+            message: `Are you sure you want to delete bed "${bed.name}"? This action cannot be undone.`,
+            onConfirm: () => bedDel.mutate(bed.id),
+        });
+    };
 
     return (
         <div className="panel">
@@ -207,11 +326,7 @@ const FacilitySettingsPage = () => {
                     wards={wardsQuery.data ?? []}
                     onAdd={() => setWardModal({ mode: 'add' })}
                     onEdit={(w) => setWardModal({ mode: 'edit', ward: w })}
-                    onDelete={(w) => {
-                        if (window.confirm(`Delete ward "${w.name}"? Nested rooms and beds may be removed per server rules.`)) {
-                            wardDel.mutate(w.id);
-                        }
-                    }}
+                    onDelete={handleDeleteWard}
                     deleting={wardDel.isPending}
                 />
             ) : null}
@@ -224,9 +339,7 @@ const FacilitySettingsPage = () => {
                     wardNameById={wardNameById}
                     onAdd={() => setRoomModal({ mode: 'add' })}
                     onEdit={(r) => setRoomModal({ mode: 'edit', room: r })}
-                    onDelete={(r) => {
-                        if (window.confirm(`Delete room "${r.name}"?`)) roomDel.mutate(r.id);
-                    }}
+                    onDelete={handleDeleteRoom}
                     deleting={roomDel.isPending}
                 />
             ) : null}
@@ -239,9 +352,7 @@ const FacilitySettingsPage = () => {
                     roomLabelById={roomLabelById}
                     onAdd={() => setBedModal({ mode: 'add' })}
                     onEdit={(b) => setBedModal({ mode: 'edit', bed: b })}
-                    onDelete={(b) => {
-                        if (window.confirm(`Delete bed "${b.name}"?`)) bedDel.mutate(b.id);
-                    }}
+                    onDelete={handleDeleteBed}
                     deleting={bedDel.isPending}
                 />
             ) : null}
@@ -301,6 +412,16 @@ const FacilitySettingsPage = () => {
                     if (!bedModal) return;
                     bedMut.mutate({ mode: bedModal.mode, bed: bedModal.bed, roomId, bedName });
                 }}
+            />
+
+            {/* Confirmation Dialog */}
+            <ConfirmationDialog
+                open={confirmDialog.open}
+                title={confirmDialog.title}
+                message={confirmDialog.message}
+                onConfirm={confirmDialog.onConfirm}
+                onCancel={() => setConfirmDialog({ open: false, title: '', message: '', onConfirm: () => {} })}
+                isDeleting={wardDel.isPending || roomDel.isPending || bedDel.isPending}
             />
         </div>
     );
