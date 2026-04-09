@@ -200,7 +200,7 @@ const PatientList = () => {
     
         setSortBy(r.sortBy);
         setSortOrder(r.sortOrder);
-    
+        
         if (typeof document !== 'undefined' && document.activeElement !== searchInputRef.current) {
             setSearchInput(r.search);
             setDebouncedSearch(r.search);
@@ -235,7 +235,7 @@ const PatientList = () => {
         gender,
         ageRange,
         recent,
-        dateRange, // 🔥 FIX
+        dateRange, 
         sortBy,
         sortOrder,
         debouncedSearch,

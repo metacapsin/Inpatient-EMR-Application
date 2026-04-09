@@ -6,72 +6,61 @@ import api from './api';
 
 // --- Health Metrics ---
 export const healthMetricsAPI = {
-  add: (data: Record<string, any>) =>
-    api.post('/api/health/metrics/add', data),
+    add: (data: Record<string, any>) => api.post('/api/health/metrics/add', data),
 
-  getByPatient: (patientId: string) =>
-    api.get(`/api/health/metrics/patient/${patientId}`),
+    getByPatient: (patientId: string) => api.get(`/api/health/metrics/patient/${patientId}`),
 
-  getTrend: (params?: Record<string, any>) =>
-    api.get('/api/health/metrics/trend', { params }),
+    getTrend: (params?: Record<string, any>) => api.get('/api/health/metrics/trend', { params }),
 
-  getLatest: (params?: Record<string, any>) =>
-    api.get('/api/health/metrics/latest', { params }),
+    getLatest: (params?: Record<string, any>) => api.get('/api/health/metrics/latest', { params }),
 };
 
 // --- Conditions ---
 export const healthConditionsAPI = {
-  create: (data: Record<string, any>) =>
-    api.post('/api/health/conditions', data),
+    create: (data: Record<string, any>) => api.post('/api/health/conditions', data),
 
-  getByPatient: (patientId: string) =>
-    api.get(`/api/health/conditions/patient/${patientId}`),
+    // getByPatient: (patientId: string) =>
+    //   api.get(`/api/health/conditions/patient/${patientId}`),
 
-  update: (id: string, data: Record<string, any>) =>
-    api.put(`/api/health/conditions/${id}`, data),
+    // NEW API - Using the external endpoint
+    getByPatient: (patientId: string) => api.get(`/Patient/getAllDiagnosesList?rcopiaID=${patientId}`),
 
-  delete: (id: string) =>
-    api.delete(`/api/health/conditions/${id}`),
+    update: (id: string, data: Record<string, any>) => api.put(`/api/health/conditions/${id}`, data),
+
+    delete: (id: string) => api.delete(`/api/health/conditions/${id}`),
 };
 
 // --- Daily Log ---
 export const healthDailyLogAPI = {
-  create: (data: Record<string, any>) =>
-    api.post('/api/health/daily-log', data),
+    create: (data: Record<string, any>) => api.post('/api/health/daily-log', data),
 
-  getByPatient: (patientId: string) =>
-    api.get(`/api/health/daily-log/patient/${patientId}`),
+    getByPatient: (patientId: string) => api.get(`/api/health/daily-log/patient/${patientId}`),
 };
 
 // --- Alerts ---
 export const healthAlertsAPI = {
-  getByPatient: (patientId: string) =>
-    api.get(`/api/health/alerts/patient/${patientId}`),
+    getByPatient: (patientId: string) => api.get(`/api/health/alerts/patient/${patientId}`),
 
-  acknowledge: (id: string) =>
-    api.put(`/api/health/alerts/${id}/acknowledge`),
+    acknowledge: (id: string) => api.put(`/api/health/alerts/${id}/acknowledge`),
 
-  resolve: (id: string) =>
-    api.put(`/api/health/alerts/${id}/resolve`),
+    resolve: (id: string) => api.put(`/api/health/alerts/${id}/resolve`),
 };
 
 // --- Chronic Care Dashboard ---
 export const chronicDashboardAPI = {
-  get: (patientId: string) =>
-    api.get(`/api/chronic/dashboard/${patientId}`),
+    get: (patientId: string) => api.get(`/api/chronic/dashboard/${patientId}`),
 };
 
 // --- Provider ---
 export const providerAPI = {
-  getPatientRiskList: (params?: Record<string, any>) =>
-    api.get('/api/provider/patient-risk-list', { params }),
+    getPatientRiskList: (params?: Record<string, any>) => api.get('/api/provider/patient-risk-list', { params }),
 };
 
 export default {
-  metrics: healthMetricsAPI,
-  conditions: healthConditionsAPI,
-  dailyLog: healthDailyLogAPI,
-  alerts: healthAlertsAPI,
-  chronicDashboard: chronicDashboardAPI,
-  provider: providerAPI,
+    metrics: healthMetricsAPI,
+    conditions: healthConditionsAPI,
+    dailyLog: healthDailyLogAPI,
+    alerts: healthAlertsAPI,
+    chronicDashboard: chronicDashboardAPI,
+    provider: providerAPI,
 };
