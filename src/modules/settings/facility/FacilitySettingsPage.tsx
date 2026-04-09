@@ -524,24 +524,54 @@ function WardsSection({
     const [search, setSearch] = useState("");
     const itemsPerPage = 5;
 
-    
+    // 1) First apply search on full list
+const filteredItems = wards.filter((w) =>
+    w.name.toLowerCase().includes(search.toLowerCase()) ||
+    (w.code ?? "").toLowerCase().includes(search.toLowerCase())
+);
 
-    const totalItems = wards.length;
-    const totalPages = Math.ceil(totalItems / itemsPerPage);
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const currentItems = wards.slice(startIndex, endIndex);
+// 2) Now pagination should apply on filtered list
+const totalItems = filteredItems.length;
+const totalPages = Math.ceil(totalItems / itemsPerPage);
+
+const startIndex = (currentPage - 1) * itemsPerPage;
+const endIndex = startIndex + itemsPerPage;
+
+// 3) Final items to show
+const currentItems = filteredItems.slice(startIndex, endIndex);
+
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [wards.length]);
+    }, [wards.length, search]);
 
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Wards</h2>
-
-
+  <div className="relative w-48">
+            <input
+                type="text"
+                placeholder="Search..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2 pl-9 text-sm
+                           focus:outline-none focus:ring-2focus:ring-blue-500
+                           dark:bg-gray-800 dark:text-white"
+            />
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4 absolute left-3 top-2.5 text-gray-500"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+            >
+                <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M21 21l-4.35-4.35m1.6-5.4a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+            </svg>
+        </div>
 
                 {canEdit ? (
                     <button type="button" onClick={onAdd} className="btn btn-primary inline-flex items-center gap-2 text-sm">
@@ -596,7 +626,7 @@ function WardsSection({
                         currentPage={currentPage}
                         totalPages={totalPages}
                         onPageChange={setCurrentPage}
-                        totalItems={totalItems}
+                        totalItems={filteredItems.length}
                         itemsPerPage={itemsPerPage}
                     />
                 </>
@@ -628,17 +658,20 @@ function RoomsSection({
     const [search, setSearch] = useState("");
     const itemsPerPage = 5;
 
-    const totalItems = rooms.length;
-    const totalPages = Math.ceil(totalItems / itemsPerPage);
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const currentItems = rooms.slice(startIndex, endIndex);
+    const filteredRooms = rooms.filter((r) =>
+    r.name.toLowerCase().includes(search.toLowerCase()) ||
+    (r.roomType ?? "").toLowerCase().includes(search.toLowerCase()) ||
+    (wardNameById.get(String(r.wardId)) ?? "").toLowerCase().includes(search.toLowerCase())
+);
 
-    const filteredItems = currentItems.filter((r) =>
-        r.name.toLowerCase().includes(search.toLowerCase()) ||
-        (wardNameById.get(String(r.wardId)) ?? "").toLowerCase().includes(search.toLowerCase()) ||
-        (r.roomType ?? DEFAULT_ROOM_TYPE).toLowerCase().includes(search.toLowerCase())
-    );
+const totalItems = filteredRooms.length;
+const totalPages = Math.ceil(totalItems / itemsPerPage);
+
+const startIndex = (currentPage - 1) * itemsPerPage;
+const endIndex = startIndex + itemsPerPage;
+
+const currentItems = filteredRooms.slice(startIndex, endIndex);
+
 
     useEffect(() => {
         setCurrentPage(1);
@@ -649,6 +682,29 @@ function RoomsSection({
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Rooms</h2>
+                 <div className="relative w-48">
+            <input
+                type="text"
+                placeholder="Search..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2 pl-9 text-sm
+                           focus:outline-none focus:ring-2focus:ring-blue-500
+                           dark:bg-gray-800 dark:text-white"
+            />
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4 absolute left-3 top-2.5 text-gray-500"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+            >
+                <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M21 21l-4.35-4.35m1.6-5.4a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+            </svg>
+        </div>
                 {canEdit ? (
                     <button type="button" onClick={onAdd} className="btn btn-primary inline-flex items-center gap-2 text-sm">
                         <Plus className="h-4 w-4" />
@@ -703,7 +759,7 @@ function RoomsSection({
                         currentPage={currentPage}
                         totalPages={totalPages}
                         onPageChange={setCurrentPage}
-                        totalItems={totalItems}
+                        totalItems={filteredRooms.length}
                         itemsPerPage={itemsPerPage}
                     />
                 </>
@@ -732,22 +788,55 @@ function BedsSection({
     deleting: boolean;
 }) {
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 5;
+const [search, setSearch] = useState("");
+const itemsPerPage = 5;
 
-    const totalItems = beds.length;
-    const totalPages = Math.ceil(totalItems / itemsPerPage);
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const currentItems = beds.slice(startIndex, endIndex);
-
+// 1) SEARCH should happen on full list
+const filteredBeds = beds.filter((b) =>
+    b.name.toLowerCase().includes(search.toLowerCase()) ||
+    (roomLabelById.get(String(b.roomId)) ?? "").toLowerCase().includes(search.toLowerCase()) ||
+    (b.occupied ? "occupied" : "available").toLowerCase().includes(search.toLowerCase())
+);
+// 2) PAGINATION should apply on filteredBeds (not beds)
+const totalItems = filteredBeds.length;
+const totalPages = Math.ceil(totalItems / itemsPerPage);
+const startIndex = (currentPage - 1) * itemsPerPage;
+const endIndex = startIndex + itemsPerPage;
+// 3) Final list to show
+const currentItems = filteredBeds.slice(startIndex, endIndex);
     useEffect(() => {
         setCurrentPage(1);
     }, [beds.length]);
 
     return (
+        
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Beds</h2>
+                   <div className="relative w-48">
+            <input
+                type="text"
+                placeholder="Search..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2 pl-9 text-sm
+                           focus:outline-none focus:ring-2focus:ring-blue-500
+                           dark:bg-gray-800 dark:text-white"
+            />
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4 absolute left-3 top-2.5 text-gray-500"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+            >
+                <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M21 21l-4.35-4.35m1.6-5.4a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+            </svg>
+        </div>
+                
                 {canEdit ? (
                     <button type="button" onClick={onAdd} className="btn btn-primary inline-flex items-center gap-2 text-sm">
                         <Plus className="h-4 w-4" />
@@ -815,7 +904,7 @@ function BedsSection({
                         currentPage={currentPage}
                         totalPages={totalPages}
                         onPageChange={setCurrentPage}
-                        totalItems={totalItems}
+                        totalItems={filteredBeds.length}
                         itemsPerPage={itemsPerPage}
                     />
                 </>
