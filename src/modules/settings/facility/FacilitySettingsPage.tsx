@@ -549,7 +549,7 @@ const currentItems = filteredItems.slice(startIndex, endIndex);
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Wards</h2>
-  <div className="relative w-48">
+  <div className="relative w-48 mr-auto">
             <input
                 type="text"
                 placeholder="Search..."
@@ -682,7 +682,7 @@ const currentItems = filteredRooms.slice(startIndex, endIndex);
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Rooms</h2>
-                 <div className="relative w-48">
+                 <div className="relative w-48 mr-auto">
             <input
                 type="text"
                 placeholder="Search..."
@@ -813,7 +813,7 @@ const currentItems = filteredBeds.slice(startIndex, endIndex);
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Beds</h2>
-                   <div className="relative w-48">
+                   <div className="relative w-48 mr-auto">
             <input
                 type="text"
                 placeholder="Search..."
