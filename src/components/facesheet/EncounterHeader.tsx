@@ -8,6 +8,7 @@ import { formatPatientHeaderBedLine } from '../../types/patientLocation';
 import type { IRootState } from '../../store';
 import { selectAdtEncounter } from '../../store/adtEncounterSlice';
 import { fetchEmrBedList, filterAvailableBeds, formatBedHeaderLine } from '../../services/emrBeds.service';
+import { hasValidAdtBedForDischarge } from '../../services/adt.service';
 import { AdtPatientWorkflowModal } from '../adt/AdtPatientWorkflowModal';
 import { EncounterStatusBadge } from './EncounterStatusBadge';
 import { EncounterActionButtons } from './EncounterActionButtons';
@@ -15,6 +16,17 @@ import type { EncounterHeaderAdtModalState, EncounterStatusVariant } from './enc
 
 const HEADER_VALUE_BADGE_CLASS =
     'inline-flex max-w-full shrink-0 items-center truncate rounded-full px-2 py-0.5 text-[11px] font-semibold normal-case tracking-normal ring-1 bg-gray-100 text-gray-800 ring-gray-400/20 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-500/25';
+
+/** Strip leading "Bed " when formatters already include it; header shows "Bed" as its own label. */
+function headerBedBadgeValue(raw: string): string {
+    const t = raw.trim();
+    if (t === '—') return t;
+    if (/^Bed\s+/i.test(t)) {
+        const rest = t.replace(/^Bed\s+/i, '').trim();
+        return rest || '—';
+    }
+    return t;
+}
 
 export interface EncounterHeaderProps {
     patient: FacesheetPatient;
@@ -62,10 +74,13 @@ export function EncounterHeader({ patient, patientListHref = '/app/patients/list
     }, [session?.currentBedMongoId, session?.encounterId, bedsQuery.data]);
 
     const patientLocBedLine = formatPatientHeaderBedLine(patient.location);
-    const bedDisplay = encounterBedLabel.trim() || patientLocBedLine.trim() || '—';
+    const bedDisplay = headerBedBadgeValue(
+        encounterBedLabel.trim() || patientLocBedLine.trim() || '—'
+    );
 
     const status = resolveStatus(session);
     const admitted = Boolean(session?.encounterId?.trim());
+    const bedReadyForDischarge = hasValidAdtBedForDischarge(session);
 
     const transferBlockedNoBeds = admitted && bedsQuery.isSuccess && availableBeds.length === 0;
 
@@ -119,6 +134,7 @@ export function EncounterHeader({ patient, patientListHref = '/app/patients/list
                     <EncounterActionButtons
                         admitted={admitted}
                         dischargeInitiated={!!session?.dischargeInitiated}
+                        bedReadyForDischarge={bedReadyForDischarge}
                         transferBlockedNoBeds={transferBlockedNoBeds}
                         bedsFetchError={bedsQuery.isError}
                         onOpenAdt={setAdtModal}
