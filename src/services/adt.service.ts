@@ -11,7 +11,9 @@ import type {
     TransferRequest,
     TransferResponseData,
 } from '../types/adt';
-import { asRecord, extractIdString, unwrapList } from '../lib/apiPayload';
+
+export type { ActiveEncounterRow };
+import { extractIdString, pickString } from '../lib/apiPayload';
 import { getApiErrorMessage } from '../lib/httpError';
 import api from './api';
 
@@ -91,19 +93,6 @@ export function formatAdtUserMessage(result: AdtPostErr): string {
     return result.message;
 }
 
-/** Row from GET /api/admissions/active (in-progress ADT encounter). */
-export type ActiveEncounterRow = {
-    id: string;
-    patientId: string;
-    /** Resolved from patient-details when available */
-    patientName?: string;
-    currentBedId?: string;
-    status?: string;
-    admissionTimestamp?: string;
-    admissionType?: string;
-    [key: string]: unknown;
-};
-
 export type ListActiveEncountersOk = {
     ok: true;
     data: ActiveEncounterRow[];
@@ -167,6 +156,61 @@ function pickEncounterId(row: Record<string, unknown>): string {
         return String((_id as { toString(): string }).toString());
     }
     return typeof row.id === 'string' ? row.id : '';
+}
+
+/** Patient ids with an in-progress encounter (same source as bed board “Active encounters”). */
+export function patientIdSetFromActiveEncounters(rows: ActiveEncounterRow[]): Set<string> {
+    const set = new Set<string>();
+    for (const e of rows) {
+        const rec = e as Record<string, unknown>;
+        const pid =
+            extractIdString(e.patientId ?? rec.patient_id) || pickString(rec, 'patientId', 'patient_id');
+        const t = pid.trim();
+        if (t) set.add(t);
+    }
+    return set;
+}
+
+/** One entry per patient (last row wins) for Redux ADT workspace hydration. */
+export type ActiveEncounterAdtMerge = {
+    patientId: string;
+    encounterId: string;
+    bedMongoId: string | null;
+};
+
+function pickActiveEncounterBedId(rec: Record<string, unknown>): string | null {
+    const raw =
+        extractIdString(
+            rec.currentBedId ??
+                rec.currentBedMongoId ??
+                rec.bedId ??
+                rec.bed_id ??
+                rec.newBedId ??
+                rec.bed
+        ) ||
+        pickString(rec, 'currentBedId', 'currentBedMongoId', 'bedId', 'newBedId', 'bed');
+    const t = raw.trim();
+    return t || null;
+}
+
+/** Map GET /api/admissions/active rows into encounter id + bed id for `mergeActiveEncountersFromServer`. */
+export function activeEncounterRowsToAdtMergePayload(rows: ActiveEncounterRow[]): ActiveEncounterAdtMerge[] {
+    const byPatient = new Map<string, ActiveEncounterAdtMerge>();
+    for (const e of rows) {
+        const rec = e as Record<string, unknown>;
+        const patientId =
+            extractIdString(e.patientId ?? rec.patient_id) || pickString(rec, 'patientId', 'patient_id');
+        const pid = patientId.trim();
+        const encounterId = extractIdString(e.id) || pickEncounterId(rec);
+        const enc = encounterId.trim();
+        if (!pid || !enc) continue;
+        byPatient.set(pid, {
+            patientId: pid,
+            encounterId: enc,
+            bedMongoId: pickActiveEncounterBedId(rec),
+        });
+    }
+    return Array.from(byPatient.values());
 }
 
 export const adtApi = {

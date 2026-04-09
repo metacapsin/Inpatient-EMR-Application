@@ -97,6 +97,47 @@ const adtEncounterSlice = createSlice({
                 };
             }
         },
+        /**
+         * Merge server active encounters (e.g. after GET /api/admissions/active) into workspace state
+         * so transfer/discharge work without a prior admit in this browser.
+         */
+        mergeActiveEncountersFromServer: (
+            state,
+            action: PayloadAction<
+                { patientId: string; encounterId: string; bedMongoId: string | null }[]
+            >
+        ) => {
+            for (const row of action.payload) {
+                const id = normPid(row.patientId);
+                const enc = row.encounterId?.trim();
+                if (!id || !enc) continue;
+                const bed = row.bedMongoId?.trim() ? row.bedMongoId.trim() : null;
+                const cur = state.byPatientId[id];
+
+                if (!cur) {
+                    state.byPatientId[id] = {
+                        encounterId: enc,
+                        dischargeInitiated: false,
+                        currentBedMongoId: bed,
+                    };
+                    continue;
+                }
+
+                if (cur.encounterId === enc) {
+                    state.byPatientId[id] = {
+                        ...cur,
+                        currentBedMongoId: bed ?? cur.currentBedMongoId,
+                    };
+                    continue;
+                }
+
+                state.byPatientId[id] = {
+                    encounterId: enc,
+                    dischargeInitiated: false,
+                    currentBedMongoId: bed,
+                };
+            }
+        },
     },
     extraReducers: (builder) => {
         builder.addCase(logout, () => initialState);
@@ -110,6 +151,7 @@ export const {
     setAdtCurrentBed,
     clearAdtEncounter,
     hydrateAdtEncounters,
+    mergeActiveEncountersFromServer,
 } = adtEncounterSlice.actions;
 
 export function selectAdtEncounter(

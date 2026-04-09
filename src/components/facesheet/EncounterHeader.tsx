@@ -22,7 +22,7 @@ function resolveStatus(session: ReturnType<typeof selectAdtEncounter>): {
     variant: EncounterStatusVariant;
     label: string;
 } {
-    if (!session) {
+    if (!session?.encounterId?.trim()) {
         return { variant: 'not_admitted', label: 'Not admitted' };
     }
     if (session.dischargeInitiated) {
@@ -55,7 +55,7 @@ export function EncounterHeader({ patient, patientListHref = '/app/patients/list
     const bedDisplay = locationLine.trim() ? locationLine : '—';
 
     const status = resolveStatus(session);
-    const admitted = !!session;
+    const admitted = Boolean(session?.encounterId?.trim());
 
     const transferBlockedNoBeds = admitted && bedsQuery.isSuccess && availableBeds.length === 0;
 

@@ -1,12 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDispatch, useSelector } from 'react-redux';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Hospital } from 'lucide-react';
 import { usePatientId } from '../../../hooks/usePatientId';
 import type { AdmissionType } from '../../../types/adt';
-import { adtApi, formatAdtUserMessage } from '../../../services/adt.service';
+import {
+    activeEncounterRowsToAdtMergePayload,
+    adtApi,
+    formatAdtUserMessage,
+    listActiveEncounters,
+} from '../../../services/adt.service';
 import { fetchEmrBedList, filterAvailableBeds, type EmrBedListItem } from '../../../services/emrBeds.service';
 import { LabeledDropdown } from '../../../components/shared/LabeledDropdown';
 import { AppModal } from '../../../components/shared/AppModal';
@@ -16,6 +21,7 @@ import type { AppDispatch, IRootState } from '../../../store';
 import { fetchFacesheetPatient } from '../../../store/facesheetSlice';
 import {
     clearAdtEncounter,
+    mergeActiveEncountersFromServer,
     selectAdtEncounter,
     setAdtAfterAdmit,
     setAdtCurrentBed,
@@ -30,6 +36,7 @@ const ADMISSION_TYPES: { value: AdmissionType; label: string }[] = [
 ];
 
 const FACESHEET_ADT_PATH = /\/app\/facesheet\/[^/]+\/adt$/;
+const BED_BOARD_PATH = '/app/bed-board';
 
 function BedStatusLegend({ beds }: { beds: EmrBedListItem[] }) {
     const counts = useMemo(() => {
@@ -69,12 +76,29 @@ function BedStatusLegend({ beds }: { beds: EmrBedListItem[] }) {
 }
 
 const AdtModulePage = () => {
+    const navigate = useNavigate();
     const location = useLocation();
     const isFacesheetAdt = FACESHEET_ADT_PATH.test(location.pathname);
     const patientId = usePatientId();
     const dispatch = useDispatch<AppDispatch>();
     const queryClient = useQueryClient();
     const session = useSelector((s: IRootState) => selectAdtEncounter(s, patientId));
+    const adtSession = session?.encounterId?.trim() ? session : null;
+
+    useEffect(() => {
+        if (isFacesheetAdt) return;
+        const pid = patientId?.trim();
+        if (!pid) return;
+        let cancelled = false;
+        void (async () => {
+            const res = await listActiveEncounters({ patientId: pid });
+            if (cancelled || !res.ok) return;
+            dispatch(mergeActiveEncountersFromServer(activeEncounterRowsToAdtMergePayload(res.data)));
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [isFacesheetAdt, patientId, dispatch]);
 
     const [admitBedId, setAdmitBedId] = useState<string>('');
     const [admissionType, setAdmissionType] = useState<AdmissionType | ''>('');
@@ -104,7 +128,7 @@ const AdtModulePage = () => {
 
     const admitTargetBedId = admitBedId.trim();
     const transferTargetBedId = transferBedId.trim();
-    const currentBedId = session?.currentBedMongoId?.trim() ?? '';
+    const currentBedId = adtSession?.currentBedMongoId?.trim() ?? '';
     const transferSameBed =
         !!transferTargetBedId.trim() && transferTargetBedId.trim() === currentBedId && currentBedId !== '';
 
@@ -154,6 +178,7 @@ const AdtModulePage = () => {
             );
             toast.success(result.message || 'Patient admitted');
             refreshPatient();
+            navigate(BED_BOARD_PATH);
         },
         onError: (e: unknown) => {
             toast.error(e instanceof Error ? e.message : 'Admission failed');
@@ -162,14 +187,14 @@ const AdtModulePage = () => {
 
     const transferMutation = useMutation({
         mutationFn: async () => {
-            if (!session?.encounterId) throw new Error('No active encounter in this workspace');
+            if (!adtSession?.encounterId) throw new Error('No active encounter in this workspace');
             const newBedId = transferTargetBedId.trim();
             if (!newBedId) throw new Error('Select an available destination bed.');
-            if (session.currentBedMongoId && newBedId === session.currentBedMongoId.trim()) {
+            if (adtSession.currentBedMongoId && newBedId === adtSession.currentBedMongoId.trim()) {
                 throw new Error('Choose a different bed than the current assignment.');
             }
             return adtApi.transfer({
-                encounterId: session.encounterId,
+                encounterId: adtSession.encounterId,
                 newBedId,
                 ...(transferReason.trim() ? { reason: transferReason.trim() } : {}),
             });
@@ -194,6 +219,7 @@ const AdtModulePage = () => {
             setTransferBedId('');
             setTransferReason('');
             refreshPatient();
+            navigate(BED_BOARD_PATH);
         },
         onError: (e: unknown) => {
             toast.error(e instanceof Error ? e.message : 'Transfer failed');
@@ -202,7 +228,7 @@ const AdtModulePage = () => {
 
     const dischargeInitMutation = useMutation({
         mutationFn: async () => {
-            const encounterId = session?.encounterId;
+            const encounterId = adtSession?.encounterId;
             if (!encounterId) throw new Error('No active encounter in this workspace');
             const result = await adtApi.dischargeInitiate(
                 encounterId,
@@ -228,8 +254,8 @@ const AdtModulePage = () => {
 
     const dischargeConfirmMutation = useMutation({
         mutationFn: async () => {
-            if (!session?.encounterId) throw new Error('No active encounter in this workspace');
-            return adtApi.dischargeConfirm(session.encounterId);
+            if (!adtSession?.encounterId) throw new Error('No active encounter in this workspace');
+            return adtApi.dischargeConfirm(adtSession.encounterId);
         },
         onSuccess: (result) => {
             if (!patientId?.trim()) return;
@@ -243,6 +269,7 @@ const AdtModulePage = () => {
             setDischargeSummary('');
             toast.success(result.message || 'Discharge confirmed');
             refreshPatient();
+            navigate(BED_BOARD_PATH);
         },
         onError: (e: unknown) => {
             toast.error(e instanceof Error ? e.message : 'Could not confirm discharge');
@@ -331,15 +358,15 @@ const AdtModulePage = () => {
             <div className="rounded-lg border border-gray-200/80 bg-gray-50/60 px-3 py-3 dark:border-white/10 dark:bg-white/[0.03]">
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                     <div className="min-w-0 text-xs text-gray-600 dark:text-gray-300">
-                        {session ? (
+                        {adtSession ? (
                             <>
                                 <span className="font-medium text-gray-800 dark:text-gray-100">Encounter</span>{' '}
-                                <span className="font-mono text-[11px]">{session.encounterId}</span>
-                                {session.dischargeInitiated ? (
+                                <span className="font-mono text-[11px]">{adtSession.encounterId}</span>
+                                {adtSession.dischargeInitiated ? (
                                     <span className="ml-2 inline-flex rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-100">
                                         Discharge pending confirm
                                     </span>
-                                ) : session.lastPlacementAction === 'transfer' ? (
+                                ) : adtSession.lastPlacementAction === 'transfer' ? (
                                     <span className="ml-2 inline-flex rounded-md bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-900 dark:text-sky-100">
                                         Transferred
                                     </span>
@@ -360,7 +387,7 @@ const AdtModulePage = () => {
                         </button>
                         <button
                             type="button"
-                            disabled={busy || !session}
+                            disabled={busy || !adtSession}
                             onClick={forgetEncounter}
                             className="inline-flex h-8 items-center justify-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-800 transition hover:bg-gray-50 disabled:opacity-50 dark:border-white/12 dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/5"
                         >
@@ -402,7 +429,7 @@ const AdtModulePage = () => {
                 ) : null}
             </div>
 
-            {!session ? (
+            {!adtSession ? (
                 <section className={sectionClass}>
                     <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Admit</h3>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -486,7 +513,7 @@ const AdtModulePage = () => {
                         <p className="text-xs text-gray-500 dark:text-gray-400">
                             Destination must be available. Occupied beds are excluded when the current bed is known.
                         </p>
-                        {session.dischargeInitiated ? (
+                        {adtSession.dischargeInitiated ? (
                             <p className="text-sm text-amber-800 dark:text-amber-200">Complete or confirm discharge before transferring.</p>
                         ) : null}
                         {transferSameBed ? (
@@ -507,7 +534,7 @@ const AdtModulePage = () => {
                                     }
                                     options={transferOptions.map((o) => ({ value: o.value, label: o.label }))}
                                     onChange={setTransferBedId}
-                                    disabled={busy || bedsQuery.isLoading || session.dischargeInitiated}
+                                    disabled={busy || bedsQuery.isLoading || adtSession.dischargeInitiated}
                                 />
                             </div>
                             <div className="space-y-2 sm:col-span-2">
@@ -518,14 +545,14 @@ const AdtModulePage = () => {
                                     id="adt-transfer-reason"
                                     value={transferReason}
                                     onChange={(e) => setTransferReason(e.target.value)}
-                                    disabled={session.dischargeInitiated}
+                                    disabled={adtSession.dischargeInitiated}
                                     className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm dark:border-white/12 dark:bg-[#1a1816]"
                                 />
                             </div>
                         </div>
                         <button
                             type="button"
-                            disabled={busy || !transferTargetBedId.trim() || session.dischargeInitiated || transferSameBed}
+                            disabled={busy || !transferTargetBedId.trim() || adtSession.dischargeInitiated || transferSameBed}
                             onClick={() => transferMutation.mutate()}
                             className="inline-flex h-9 items-center justify-center rounded-lg border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-800 transition hover:bg-gray-50 dark:border-white/12 dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/5 disabled:pointer-events-none disabled:opacity-50"
                         >
@@ -547,7 +574,7 @@ const AdtModulePage = () => {
                                     id="adt-disposition"
                                     value={disposition}
                                     onChange={(e) => setDisposition(e.target.value)}
-                                    disabled={session.dischargeInitiated || busy}
+                                    disabled={adtSession.dischargeInitiated || busy}
                                     className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm disabled:opacity-60 dark:border-white/12 dark:bg-[#1a1816]"
                                     placeholder="e.g. home"
                                 />
@@ -560,7 +587,7 @@ const AdtModulePage = () => {
                                     id="adt-summary"
                                     value={dischargeSummary}
                                     onChange={(e) => setDischargeSummary(e.target.value)}
-                                    disabled={session.dischargeInitiated || busy}
+                                    disabled={adtSession.dischargeInitiated || busy}
                                     rows={3}
                                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-white/12 dark:bg-[#1a1816]"
                                 />
@@ -569,7 +596,7 @@ const AdtModulePage = () => {
                         <div className="flex flex-wrap gap-2">
                             <button
                                 type="button"
-                                disabled={busy || session.dischargeInitiated}
+                                disabled={busy || adtSession.dischargeInitiated}
                                 onClick={() => dischargeInitMutation.mutate()}
                                 className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:pointer-events-none disabled:opacity-50"
                             >
@@ -577,7 +604,7 @@ const AdtModulePage = () => {
                             </button>
                             <button
                                 type="button"
-                                disabled={busy || !session.dischargeInitiated}
+                                disabled={busy || !adtSession.dischargeInitiated}
                                 onClick={() => setConfirmDischargeOpen(true)}
                                 className="inline-flex h-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-900 transition hover:bg-red-100 disabled:pointer-events-none disabled:opacity-50 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100 dark:hover:bg-red-950/60"
                             >

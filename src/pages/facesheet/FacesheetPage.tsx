@@ -3,6 +3,8 @@ import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import type { AppDispatch, IRootState } from '../../store';
 import { fetchFacesheetPatient } from '../../store/facesheetSlice';
+import { mergeActiveEncountersFromServer } from '../../store/adtEncounterSlice';
+import { activeEncounterRowsToAdtMergePayload, listActiveEncounters } from '../../services/adt.service';
 import { Loader2 } from 'lucide-react';
 import { EncounterHeader } from '../../components/facesheet/EncounterHeader';
 import { ModuleContainer } from '../../components/facesheet/ModuleContainer';
@@ -43,6 +45,20 @@ const FacesheetPage = () => {
     useEffect(() => {
         if (!id?.trim()) return;
         dispatch(fetchFacesheetPatient(id.trim()));
+    }, [id, dispatch]);
+
+    useEffect(() => {
+        const pid = id?.trim();
+        if (!pid) return;
+        let cancelled = false;
+        void (async () => {
+            const res = await listActiveEncounters({ patientId: pid });
+            if (cancelled || !res.ok) return;
+            dispatch(mergeActiveEncountersFromServer(activeEncounterRowsToAdtMergePayload(res.data)));
+        })();
+        return () => {
+            cancelled = true;
+        };
     }, [id, dispatch]);
 
     if (!id?.trim()) {

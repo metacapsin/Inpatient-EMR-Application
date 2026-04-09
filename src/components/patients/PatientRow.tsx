@@ -8,6 +8,7 @@ import type { AdtWorkflowIntent } from '../adt/AdtPatientWorkflowModal';
 
 interface PatientRowProps {
     patient: PatientListItem;
+    serverActivePatientIds?: ReadonlySet<string>;
     onOpenAdt?: (patient: PatientListItem, intent: AdtWorkflowIntent) => void;
 }
 
@@ -46,18 +47,25 @@ function PatientStatusCell({ label }: { label: string }) {
 function InpatientAdtCell({
     patient,
     chartId,
+    serverActivePatientIds,
     onOpenAdt,
     layout = 'stacked',
 }: {
     patient: PatientListItem;
     chartId: string;
+    serverActivePatientIds?: ReadonlySet<string>;
     onOpenAdt?: (patient: PatientListItem, intent: AdtWorkflowIntent) => void;
     layout?: 'stacked' | 'inline';
 }) {
     const session = useSelector((s: IRootState) => selectAdtEncounter(s, chartId));
-    const admitted = !!session;
+    const pid = chartId.trim();
+    const serverAdmitted = Boolean(pid && serverActivePatientIds?.has(pid));
+    const encounterReady = Boolean(session?.encounterId?.trim());
+    const workspaceAdmitted = encounterReady;
+    const showAdmittedBadge = serverAdmitted || workspaceAdmitted;
     const dischargePending = !!session?.dischargeInitiated;
-    const transferred = admitted && !dischargePending && session?.lastPlacementAction === 'transfer';
+    const transferred =
+        workspaceAdmitted && !dischargePending && session?.lastPlacementAction === 'transfer';
 
     const open = (intent: AdtWorkflowIntent) => (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -67,8 +75,17 @@ function InpatientAdtCell({
     const btnClass =
         'flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-transparent text-gray-500 transition-colors hover:border-gray-200 hover:bg-gray-100 hover:text-primary disabled:pointer-events-none disabled:opacity-40 dark:hover:border-white/10 dark:hover:bg-white/10';
 
+    const admittedTitle =
+        dischargePending
+            ? 'Discharge initiated — confirm in chart or here'
+            : transferred
+              ? 'Patient moved to another bed in this session'
+              : serverAdmitted && !workspaceAdmitted
+                ? 'Active inpatient encounter (synced from server / bed board)'
+                : 'Active inpatient encounter in workspace';
+
     const badge =
-        admitted ? (
+        showAdmittedBadge ? (
             <span
                 className={`inline-flex max-w-full items-center truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
                     dischargePending
@@ -77,13 +94,7 @@ function InpatientAdtCell({
                           ? 'bg-sky-100 text-sky-900 ring-1 ring-sky-600/20 dark:bg-sky-950/45 dark:text-sky-100'
                           : 'bg-emerald-100 text-emerald-900 ring-1 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-100'
                 }`}
-                title={
-                    dischargePending
-                        ? 'Discharge initiated — confirm in chart or here'
-                        : transferred
-                          ? 'Patient moved to another bed in this session'
-                          : 'Active inpatient encounter in workspace'
-                }
+                title={admittedTitle}
             >
                 {dischargePending ? 'Discharge…' : transferred ? 'Transferred' : 'Admitted'}
             </span>
@@ -93,15 +104,25 @@ function InpatientAdtCell({
             </span>
         );
 
+    const hideAdmit = serverAdmitted || workspaceAdmitted;
+
     const actions = onOpenAdt ? (
         <div className="flex flex-wrap gap-1">
-            <button type="button" title="Admit" disabled={admitted} onClick={open('admit')} className={btnClass}>
-                <UserPlus className="h-3.5 w-3.5" aria-hidden />
-            </button>
-            <button type="button" title="Transfer" disabled={!admitted || dischargePending} onClick={open('transfer')} className={btnClass}>
+            {!hideAdmit ? (
+                <button type="button" title="Admit" onClick={open('admit')} className={btnClass}>
+                    <UserPlus className="h-3.5 w-3.5" aria-hidden />
+                </button>
+            ) : null}
+            <button
+                type="button"
+                title="Transfer"
+                disabled={!encounterReady || dischargePending}
+                onClick={open('transfer')}
+                className={btnClass}
+            >
                 <ArrowRightLeft className="h-3.5 w-3.5" aria-hidden />
             </button>
-            <button type="button" title="Discharge" disabled={!admitted} onClick={open('discharge')} className={btnClass}>
+            <button type="button" title="Discharge" disabled={!encounterReady} onClick={open('discharge')} className={btnClass}>
                 <DoorOpen className="h-3.5 w-3.5" aria-hidden />
             </button>
         </div>
@@ -124,17 +145,12 @@ function InpatientAdtCell({
     );
 }
 
-export function PatientTableRow({ patient, onOpenAdt }: PatientRowProps) {
+export function PatientTableRow({ patient, serverActivePatientIds, onOpenAdt }: PatientRowProps) {
     const navigate = useNavigate();
     const chartId = getPatientListRowId(patient);
 
     const goToFacesheet = () => {
         navigate(`/app/facesheet/${encodeURIComponent(chartId)}`);
-    };
-
-    const handleRowClick = (e: React.MouseEvent<HTMLTableRowElement>) => {
-        if ((e.target as HTMLElement).closest('button')) return;
-        goToFacesheet();
     };
 
     const handleView = (e: React.MouseEvent) => {
@@ -148,18 +164,7 @@ export function PatientTableRow({ patient, onOpenAdt }: PatientRowProps) {
     };
 
     return (
-        <tr
-            role="button"
-            tabIndex={0}
-            onClick={handleRowClick}
-            onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    goToFacesheet();
-                }
-            }}
-            className="cursor-pointer transition-colors hover:bg-gray-50/80"
-        >
+        <tr className="transition-colors hover:bg-gray-50/40">
             <td className="max-w-0 px-2 py-2 align-middle">
                 <div className="flex min-w-0 items-center gap-2">
                     {patient.profilePicture ? (
@@ -203,7 +208,12 @@ export function PatientTableRow({ patient, onOpenAdt }: PatientRowProps) {
                 <PatientStatusCell label={patient.statusLabel} />
             </td>
             <td className="max-w-0 px-2 py-2 align-top">
-                <InpatientAdtCell patient={patient} chartId={chartId} onOpenAdt={onOpenAdt} />
+                <InpatientAdtCell
+                    patient={patient}
+                    chartId={chartId}
+                    serverActivePatientIds={serverActivePatientIds}
+                    onOpenAdt={onOpenAdt}
+                />
             </td>
             <td className="max-w-0 truncate px-2 py-2 text-xs text-gray-700 tabular-nums" title={patient.phone || undefined}>
                 {patient.phone}
@@ -235,7 +245,7 @@ export function PatientTableRow({ patient, onOpenAdt }: PatientRowProps) {
     );
 }
 
-export function PatientMobileCard({ patient, onOpenAdt }: PatientRowProps) {
+export function PatientMobileCard({ patient, serverActivePatientIds, onOpenAdt }: PatientRowProps) {
     const navigate = useNavigate();
     const chartId = getPatientListRowId(patient);
 
@@ -254,18 +264,7 @@ export function PatientMobileCard({ patient, onOpenAdt }: PatientRowProps) {
     };
 
     return (
-        <div
-            role="button"
-            tabIndex={0}
-            onClick={goToFacesheet}
-            onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    goToFacesheet();
-                }
-            }}
-            className="cursor-pointer rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-colors hover:border-gray-300"
-        >
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-start gap-3">
                 {patient.profilePicture ? (
                     <img
@@ -307,7 +306,13 @@ export function PatientMobileCard({ patient, onOpenAdt }: PatientRowProps) {
                             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
                                 Inpatient (ADT)
                             </p>
-                            <InpatientAdtCell patient={patient} chartId={chartId} onOpenAdt={onOpenAdt} layout="inline" />
+                            <InpatientAdtCell
+                                patient={patient}
+                                chartId={chartId}
+                                serverActivePatientIds={serverActivePatientIds}
+                                onOpenAdt={onOpenAdt}
+                                layout="inline"
+                            />
                         </div>
                     ) : null}
                     <div className="mt-3 flex flex-wrap items-center justify-end gap-2">

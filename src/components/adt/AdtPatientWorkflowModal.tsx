@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'sonner';
@@ -19,6 +20,8 @@ import {
 } from '../../store/adtEncounterSlice';
 
 export type AdtWorkflowIntent = 'admit' | 'transfer' | 'discharge';
+
+const BED_BOARD_PATH = '/app/bed-board';
 
 const ADMISSION_TYPES: { value: AdmissionType; label: string }[] = [
     { value: 'emergency', label: 'Emergency' },
@@ -50,6 +53,7 @@ export function AdtPatientWorkflowModal({
     facesheetPatientId,
     dischargeInitialStep,
 }: AdtPatientWorkflowModalProps) {
+    const navigate = useNavigate();
     const dispatch = useDispatch<AppDispatch>();
     const queryClient = useQueryClient();
     const session = useSelector((s: IRootState) => selectAdtEncounter(s, patientId));
@@ -115,7 +119,13 @@ export function AdtPatientWorkflowModal({
         void queryClient.invalidateQueries({ queryKey: ['patient-placement'] });
         void queryClient.invalidateQueries({ queryKey: ['settings', 'facility'] });
         void queryClient.invalidateQueries({ queryKey: ['facility'] });
+        void queryClient.invalidateQueries({ queryKey: ['liveBedBoard'] });
+        void queryClient.invalidateQueries({ queryKey: ['activeEncounters'] });
         onCompleted?.();
+    };
+
+    const goToBedBoard = () => {
+        navigate(BED_BOARD_PATH);
     };
 
     const admitMutation = useMutation({
@@ -152,6 +162,7 @@ export function AdtPatientWorkflowModal({
             toast.success(result.message || 'Patient admitted');
             refreshChart();
             onClose();
+            goToBedBoard();
         },
         onError: (e: unknown) => {
             toast.error(e instanceof Error ? e.message : 'Admission failed');
@@ -185,6 +196,7 @@ export function AdtPatientWorkflowModal({
             toast.success(result.message || 'Transfer completed');
             refreshChart();
             onClose();
+            goToBedBoard();
         },
         onError: (e: unknown) => {
             toast.error(e instanceof Error ? e.message : 'Transfer failed');
@@ -235,6 +247,7 @@ export function AdtPatientWorkflowModal({
             toast.success(result.message || 'Discharge confirmed');
             refreshChart();
             onClose();
+            goToBedBoard();
         },
         onError: (e: unknown) => {
             toast.error(e instanceof Error ? e.message : 'Could not confirm discharge');
@@ -252,9 +265,10 @@ export function AdtPatientWorkflowModal({
 
     const bedsError = bedsQuery.error instanceof Error ? bedsQuery.error.message : null;
 
-    const admitBlocked = !!session;
-    const transferBlocked = !session || session.dischargeInitiated;
-    const dischargeBlocked = !session;
+    const encounterReady = Boolean(session?.encounterId?.trim());
+    const admitBlocked = encounterReady;
+    const transferBlocked = !encounterReady || !!session?.dischargeInitiated;
+    const dischargeBlocked = !encounterReady;
 
     return (
         <AppModal

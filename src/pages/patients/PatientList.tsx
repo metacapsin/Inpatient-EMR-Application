@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useDispatch } from 'react-redux';
 import { NavLink, useSearchParams } from 'react-router-dom';
 import { DateRangePicker } from '../../components/patients/DateRangePicker';
 import { FilterSelect } from '../../components/patients/FilterSelect';
@@ -7,6 +8,13 @@ import { SearchInput } from '../../components/patients/SearchInput';
 import PatientTable from '../../components/patients/PatientTable';
 import { AdtPatientWorkflowModal } from '../../components/adt/AdtPatientWorkflowModal';
 import type { AdtWorkflowIntent } from '../../components/adt/AdtPatientWorkflowModal';
+import {
+    activeEncounterRowsToAdtMergePayload,
+    listActiveEncounters,
+    patientIdSetFromActiveEncounters,
+} from '../../services/adt.service';
+import { mergeActiveEncountersFromServer } from '../../store/adtEncounterSlice';
+import type { AppDispatch } from '../../store';
 import { getPatientListRowId } from '../../services/patient.service';
 import {
     getPatientsList,
@@ -82,7 +90,7 @@ function readListQuery(sp: URLSearchParams): ListQueryState {
         status: (() => {
             const s = sp.get('status');
             if (s === 'active' || s === 'inactive' || s === 'all') return s;
-            return 'all';
+            return 'active';
         })(),
         gender: sp.get('gender') || 'all',
         ageRange: normalizeAgeRangeParam(sp.get('ageRange')),
@@ -123,6 +131,7 @@ function patientListQueryStringEqual(a: string, b: string): boolean {
 }
 
 const PatientList = () => {
+    const dispatch = useDispatch<AppDispatch>();
     const [searchParams, setSearchParams] = useSearchParams();
     const searchInputRef = useRef<HTMLInputElement | null>(null);
     const lastSyncedSearchParams = useRef<string | null>(null);
@@ -150,6 +159,8 @@ const PatientList = () => {
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    /** Patient ids with an active inpatient encounter from GET /api/admissions/active (aligned with bed board). */
+    const [serverActivePatientIds, setServerActivePatientIds] = useState<ReadonlySet<string>>(() => new Set());
 
     const [adtModal, setAdtModal] = useState<{ patient: PatientListItem; intent: AdtWorkflowIntent } | null>(null);
 
@@ -236,31 +247,48 @@ const PatientList = () => {
         setLoading(true);
         setError(null);
         try {
-            const res = await getPatientsList({
-                page,
-                limit,
-                status,
-                gender,
-                ageRange,
-                recent,
-                startDate: dateRange.from,
-                endDate: dateRange.to,
-                search: debouncedSearch,
-                sortBy,
-                sortOrder,
-            });
+            const [listOutcome, encOutcome] = await Promise.allSettled([
+                getPatientsList({
+                    page,
+                    limit,
+                    status,
+                    gender,
+                    ageRange,
+                    recent,
+                    startDate: dateRange.from,
+                    endDate: dateRange.to,
+                    search: debouncedSearch,
+                    sortBy,
+                    sortOrder,
+                }),
+                listActiveEncounters(),
+            ]);
+
+            if (listOutcome.status === 'rejected') {
+                throw listOutcome.reason;
+            }
+            const res = listOutcome.value;
             setItems(res.items);
             setTotal(res.total);
+
+            let nextServerActive = new Set<string>();
+            if (encOutcome.status === 'fulfilled' && encOutcome.value.ok) {
+                const encRows = encOutcome.value.data;
+                nextServerActive = patientIdSetFromActiveEncounters(encRows);
+                dispatch(mergeActiveEncountersFromServer(activeEncounterRowsToAdtMergePayload(encRows)));
+            }
+            setServerActivePatientIds(nextServerActive);
         } catch (e: unknown) {
             const msg =
                 e && typeof e === 'object' && 'message' in e ? String((e as Error).message) : 'Failed to load patients';
             setError(msg);
             setItems([]);
             setTotal(0);
+            setServerActivePatientIds(new Set());
         } finally {
             setLoading(false);
         }
-    }, [page, limit, status, gender, ageRange, recent, dateRange, debouncedSearch, sortBy, sortOrder]);
+    }, [page, limit, status, gender, ageRange, recent, dateRange, debouncedSearch, sortBy, sortOrder, dispatch]);
     useEffect(() => {
         load();
     }, [load]);
@@ -370,6 +398,7 @@ const PatientList = () => {
                             sortOrder={sortOrder}
                             onSort={handleSort}
                             sortDisabled={loading}
+                            serverActivePatientIds={serverActivePatientIds}
                             onOpenAdt={(patient, intent) => setAdtModal({ patient, intent })}
                         />
                     </div>
