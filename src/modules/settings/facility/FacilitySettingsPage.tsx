@@ -24,6 +24,37 @@ import { DEFAULT_ROOM_TYPE, ROOM_TYPES } from '../../../constants/facility';
 
 type TabId = 'wards' | 'rooms' | 'beds';
 
+// Validation functions
+const validateWardName = (name: string): { isValid: boolean; error: string } => {
+    const trimmed = name.trim();
+    if (!trimmed) return { isValid: false, error: 'Ward name is required' };
+    if (trimmed.length < 2) return { isValid: false, error: 'Minimum 2 characters required' };
+    if (trimmed.length > 50) return { isValid: false, error: 'Maximum 50 characters allowed' };
+    const nameRegex = /^[A-Za-z\s\-]+$/;
+    if (!nameRegex.test(trimmed)) return { isValid: false, error: 'Only alphabets, spaces and hyphens allowed' };
+    return { isValid: true, error: '' };
+};
+
+const validateRoomNumber = (roomNumber: string): { isValid: boolean; error: string } => {
+    const trimmed = roomNumber.trim();
+    if (!trimmed) return { isValid: false, error: 'Room number is required' };
+    if (trimmed.length < 1) return { isValid: false, error: 'Minimum 1 character required' };
+    if (trimmed.length > 20) return { isValid: false, error: 'Maximum 20 characters allowed' };
+    const roomRegex = /^[A-Za-z0-9\s\-]+$/;
+    if (!roomRegex.test(trimmed)) return { isValid: false, error: 'Only letters, numbers, spaces and hyphens allowed' };
+    return { isValid: true, error: '' };
+};
+
+const validateBedName = (bedName: string): { isValid: boolean; error: string } => {
+    const trimmed = bedName.trim();
+    if (!trimmed) return { isValid: false, error: 'Bed name is required' };
+    if (trimmed.length < 1) return { isValid: false, error: 'Minimum 1 character required' };
+    if (trimmed.length > 30) return { isValid: false, error: 'Maximum 30 characters allowed' };
+    const bedRegex = /^[A-Za-z0-9\s\-]+$/;
+    if (!bedRegex.test(trimmed)) return { isValid: false, error: 'Only letters, numbers, spaces and hyphens allowed' };
+    return { isValid: true, error: '' };
+};
+
 // Confirmation Dialog Component
 const ConfirmationDialog = ({
     open,
@@ -46,7 +77,6 @@ const ConfirmationDialog = ({
         <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black/50 backdrop-blur-sm">
             <div className="relative mx-auto w-full max-w-md animate-fadeIn p-4">
                 <div className="relative rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800">
-                    {/* Header */}
                     <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
                         <div className="flex items-center gap-3">
                             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
@@ -61,13 +91,9 @@ const ConfirmationDialog = ({
                             <X className="h-5 w-5" />
                         </button>
                     </div>
-
-                    {/* Body */}
                     <div className="p-4">
                         <p className="text-sm text-gray-600 dark:text-gray-300">{message}</p>
                     </div>
-
-                    {/* Footer */}
                     <div className="flex justify-end gap-2 border-t border-gray-200 p-4 dark:border-gray-700">
                         <button
                             type="button"
@@ -177,7 +203,6 @@ const FacilitySettingsPage = () => {
     const [roomModal, setRoomModal] = useState<{ mode: 'add' | 'edit'; room?: FacilityRoom } | null>(null);
     const [bedModal, setBedModal] = useState<{ mode: 'add' | 'edit'; bed?: FacilityBed } | null>(null);
 
-    // Confirmation dialogs state
     const [confirmDialog, setConfirmDialog] = useState<{
         open: boolean;
         title: string;
@@ -323,13 +348,9 @@ const FacilitySettingsPage = () => {
     return (
         <div className="panel">
             <div className="mb-5 flex flex-wrap items-center gap-2 text-sm">
-                <a href="/app/dashboard" className="text-primary hover:underline">
-                    Dashboard
-                </a>
+                <a href="/app/dashboard" className="text-primary hover:underline">Dashboard</a>
                 <span className="text-gray-400">/</span>
-                <a href="/app/settings" className="text-primary hover:underline">
-                    Settings
-                </a>
+                <a href="/app/settings" className="text-primary hover:underline">Settings</a>
                 <span className="text-gray-400">/</span>
                 <span className="font-medium text-gray-900 dark:text-white">Facility</span>
             </div>
@@ -343,8 +364,7 @@ const FacilitySettingsPage = () => {
                         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Facility management</h1>
                         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                             Configure wards, rooms, and beds. Data is loaded from Wards, Rooms, and Beds APIs (set{' '}
-                            <code className="rounded bg-gray-100 px-1 dark:bg-white/10">VITE_USE_MOCK_FACILITY=true</code> for offline mock
-                            mode).
+                            <code className="rounded bg-gray-100 px-1 dark:bg-white/10">VITE_USE_MOCK_FACILITY=true</code> for offline mock mode).
                         </p>
                     </div>
                 </div>
@@ -468,7 +488,6 @@ const FacilitySettingsPage = () => {
                 }}
             />
 
-            {/* Confirmation Dialog */}
             <ConfirmationDialog
                 open={confirmDialog.open}
                 title={confirmDialog.title}
@@ -501,14 +520,12 @@ function WardsSection({
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 5;
 
-    // Calculate pagination
     const totalItems = wards.length;
     const totalPages = Math.ceil(totalItems / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     const currentItems = wards.slice(startIndex, endIndex);
 
-    // Reset to first page when data changes
     useEffect(() => {
         setCurrentPage(1);
     }, [wards.length]);
@@ -601,14 +618,12 @@ function RoomsSection({
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 5;
 
-    // Calculate pagination
     const totalItems = rooms.length;
     const totalPages = Math.ceil(totalItems / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     const currentItems = rooms.slice(startIndex, endIndex);
 
-    // Reset to first page when data changes
     useEffect(() => {
         setCurrentPage(1);
     }, [rooms.length]);
@@ -702,14 +717,12 @@ function BedsSection({
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 5;
 
-    // Calculate pagination
     const totalItems = beds.length;
     const totalPages = Math.ceil(totalItems / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     const currentItems = beds.slice(startIndex, endIndex);
 
-    // Reset to first page when data changes
     useEffect(() => {
         setCurrentPage(1);
     }, [beds.length]);
@@ -813,11 +826,46 @@ function WardFormModal({
 }) {
     const [name, setName] = useState('');
     const [code, setCode] = useState('');
+    const [errors, setErrors] = useState<{ name?: string }>({});
+
     useEffect(() => {
         if (!open) return;
         setName(ward?.name ?? '');
         setCode(ward?.code ?? '');
+        setErrors({});
     }, [open, ward]);
+
+    const validateField = (field: 'name', value: string): string => {
+        if (field === 'name') {
+            return validateWardName(value).error;
+        }
+        return '';
+    };
+
+    const handleBlur = (field: 'name') => {
+        const error = validateField(field, name);
+        if (error) {
+            setErrors((prev) => ({ ...prev, [field]: error }));
+        }
+    };
+
+    const handleNameChange = (value: string) => {
+        setName(value);
+        if (errors.name) {
+            setErrors((prev) => ({ ...prev, name: '' }));
+        }
+    };
+
+    const handleSave = () => {
+        const nameValidation = validateWardName(name);
+        if (!nameValidation.isValid) {
+            setErrors({ name: nameValidation.error });
+            return;
+        }
+        onSave(name.trim(), code.trim());
+    };
+
+    const isValid = name.trim().length > 0 && !errors.name;
 
     return (
         <AppModal
@@ -826,15 +874,8 @@ function WardFormModal({
             onClose={onClose}
             footer={
                 <div className="flex justify-end gap-2">
-                    <button type="button" onClick={onClose} className="btn btn-outline-primary">
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        disabled={saving || !name.trim()}
-                        onClick={() => onSave(name.trim(), code.trim())}
-                        className="btn btn-primary"
-                    >
+                    <button type="button" onClick={onClose} className="btn btn-outline-primary">Cancel</button>
+                    <button type="button" disabled={saving || !isValid} onClick={handleSave} className="btn btn-primary">
                         {saving ? 'Saving…' : 'Save'}
                     </button>
                 </div>
@@ -851,13 +892,13 @@ function WardFormModal({
                         Ward name <span className="text-red-600">*</span>
                     </label>
                     <input
-                        className="form-input w-full"
+                        className={`form-input w-full ${errors.name ? 'border-red-500 focus:border-red-500' : ''}`}
                         value={name}
-                        onChange={(e) => setName(e.target.value)}
+                        onChange={(e) => handleNameChange(e.target.value)}
+                        onBlur={() => handleBlur('name')}
                         placeholder="e.g. ICU"
-                        required
-                        aria-required
                     />
+                    {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
                 </div>
                 <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Code (optional)</label>
@@ -890,14 +931,51 @@ function RoomFormModal({
     const [wardId, setWardId] = useState('');
     const [roomNumber, setRoomNumber] = useState('');
     const [roomType, setRoomType] = useState<string>(DEFAULT_ROOM_TYPE);
+    const [errors, setErrors] = useState<{ roomNumber?: string }>({});
+
     useEffect(() => {
         if (!open) return;
         setRoomNumber(room?.name ?? '');
         setRoomType(room?.roomType ?? DEFAULT_ROOM_TYPE);
         setWardId(room ? String(room.wardId) : wards[0] ? String(wards[0].id) : '');
+        setErrors({});
     }, [open, room, wards]);
 
-    const canSave = Boolean(wardId.trim() && roomNumber.trim() && roomType.trim() && wards.length > 0);
+    const validateField = (field: 'roomNumber', value: string): string => {
+        if (field === 'roomNumber') {
+            return validateRoomNumber(value).error;
+        }
+        return '';
+    };
+
+    const handleBlur = (field: 'roomNumber') => {
+        const error = validateField(field, roomNumber);
+        if (error) {
+            setErrors((prev) => ({ ...prev, [field]: error }));
+        }
+    };
+
+    const handleRoomNumberChange = (value: string) => {
+        setRoomNumber(value);
+        if (errors.roomNumber) {
+            setErrors((prev) => ({ ...prev, roomNumber: '' }));
+        }
+    };
+
+    const handleSave = () => {
+        const roomValidation = validateRoomNumber(roomNumber);
+        if (!roomValidation.isValid) {
+            setErrors({ roomNumber: roomValidation.error });
+            return;
+        }
+        if (!wardId) {
+            toast.error('Please select a ward');
+            return;
+        }
+        onSave(wardId.trim(), roomNumber.trim(), roomType);
+    };
+
+    const isValid = Boolean(wardId.trim() && roomNumber.trim() && roomType.trim() && wards.length > 0 && !errors.roomNumber);
 
     return (
         <AppModal
@@ -906,15 +984,8 @@ function RoomFormModal({
             onClose={onClose}
             footer={
                 <div className="flex justify-end gap-2">
-                    <button type="button" onClick={onClose} className="btn btn-outline-primary">
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        disabled={saving || !canSave}
-                        onClick={() => onSave(wardId.trim(), roomNumber.trim(), roomType.trim())}
-                        className="btn btn-primary"
-                    >
+                    <button type="button" onClick={onClose} className="btn btn-outline-primary">Cancel</button>
+                    <button type="button" disabled={saving || !isValid} onClick={handleSave} className="btn btn-primary">
                         {saving ? 'Saving…' : 'Save'}
                     </button>
                 </div>
@@ -938,13 +1009,10 @@ function RoomFormModal({
                         value={wardId}
                         onChange={(e) => setWardId(e.target.value)}
                         disabled={wards.length === 0}
-                        required
                     >
                         <option value="">Select ward…</option>
                         {wards.map((w) => (
-                            <option key={w.id} value={w.id}>
-                                {w.name}
-                            </option>
+                            <option key={w.id} value={w.id}>{w.name}</option>
                         ))}
                     </select>
                 </div>
@@ -953,22 +1021,21 @@ function RoomFormModal({
                         Room number <span className="text-red-600">*</span>
                     </label>
                     <input
-                        className="form-input w-full"
+                        className={`form-input w-full ${errors.roomNumber ? 'border-red-500 focus:border-red-500' : ''}`}
                         value={roomNumber}
-                        onChange={(e) => setRoomNumber(e.target.value)}
+                        onChange={(e) => handleRoomNumberChange(e.target.value)}
+                        onBlur={() => handleBlur('roomNumber')}
                         placeholder="e.g. 301"
-                        required
                     />
+                    {errors.roomNumber && <p className="mt-1 text-xs text-red-500">{errors.roomNumber}</p>}
                 </div>
                 <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Room type <span className="text-red-600">*</span>
                     </label>
-                    <select className="form-input w-full" value={roomType} onChange={(e) => setRoomType(e.target.value)} required>
+                    <select className="form-input w-full" value={roomType} onChange={(e) => setRoomType(e.target.value)}>
                         {ROOM_TYPES.map((t) => (
-                            <option key={t} value={t}>
-                                {t}
-                            </option>
+                            <option key={t} value={t}>{t}</option>
                         ))}
                     </select>
                 </div>
@@ -1000,13 +1067,50 @@ function BedFormModal({
 }) {
     const [roomId, setRoomId] = useState('');
     const [bedName, setBedName] = useState('');
+    const [errors, setErrors] = useState<{ bedName?: string }>({});
+
     useEffect(() => {
         if (!open) return;
         setBedName(bed?.name ?? '');
         setRoomId(bed ? String(bed.roomId) : '');
+        setErrors({});
     }, [open, bed, rooms]);
 
-    const canSave = Boolean(roomId.trim() && bedName.trim() && rooms.length > 0);
+    const validateField = (field: 'bedName', value: string): string => {
+        if (field === 'bedName') {
+            return validateBedName(value).error;
+        }
+        return '';
+    };
+
+    const handleBlur = (field: 'bedName') => {
+        const error = validateField(field, bedName);
+        if (error) {
+            setErrors((prev) => ({ ...prev, [field]: error }));
+        }
+    };
+
+    const handleBedNameChange = (value: string) => {
+        setBedName(value);
+        if (errors.bedName) {
+            setErrors((prev) => ({ ...prev, bedName: '' }));
+        }
+    };
+
+    const handleSave = () => {
+        const bedValidation = validateBedName(bedName);
+        if (!bedValidation.isValid) {
+            setErrors({ bedName: bedValidation.error });
+            return;
+        }
+        if (!roomId) {
+            toast.error('Please select a room');
+            return;
+        }
+        onSave(roomId.trim(), bedName.trim());
+    };
+
+    const isValid = Boolean(roomId.trim() && bedName.trim() && rooms.length > 0 && !errors.bedName);
 
     return (
         <AppModal
@@ -1015,15 +1119,8 @@ function BedFormModal({
             onClose={onClose}
             footer={
                 <div className="flex justify-end gap-2">
-                    <button type="button" onClick={onClose} className="btn btn-outline-primary">
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        disabled={saving || !canSave}
-                        onClick={() => onSave(roomId.trim(), bedName.trim())}
-                        className="btn btn-primary"
-                    >
+                    <button type="button" onClick={onClose} className="btn btn-outline-primary">Cancel</button>
+                    <button type="button" disabled={saving || !isValid} onClick={handleSave} className="btn btn-primary">
                         {saving ? 'Saving…' : 'Save'}
                     </button>
                 </div>
@@ -1047,7 +1144,6 @@ function BedFormModal({
                         value={roomId}
                         onChange={(e) => setRoomId(e.target.value)}
                         disabled={rooms.length === 0}
-                        required
                     >
                         <option value="">Select room…</option>
                         {rooms.map((r) => (
@@ -1063,12 +1159,13 @@ function BedFormModal({
                         Bed name <span className="text-red-600">*</span>
                     </label>
                     <input
-                        className="form-input w-full"
+                        className={`form-input w-full ${errors.bedName ? 'border-red-500 focus:border-red-500' : ''}`}
                         value={bedName}
-                        onChange={(e) => setBedName(e.target.value)}
+                        onChange={(e) => handleBedNameChange(e.target.value)}
+                        onBlur={() => handleBlur('bedName')}
                         placeholder="e.g. Bed-A"
-                        required
                     />
+                    {errors.bedName && <p className="mt-1 text-xs text-red-500">{errors.bedName}</p>}
                 </div>
             </div>
         </AppModal>
