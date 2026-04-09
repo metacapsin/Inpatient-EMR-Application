@@ -18,6 +18,67 @@ import {
     updateVisitorRecord,
 } from '../../services/visitorsFamily.service';
 
+// Validation functions
+const validateName = (name: string): { isValid: boolean; error: string } => {
+    const trimmed = name.trim();
+    if (!trimmed) return { isValid: false, error: 'Name is required' };
+    if (trimmed.length < 2) return { isValid: false, error: 'Minimum 2 characters required' };
+    if (trimmed.length > 50) return { isValid: false, error: 'Maximum 50 characters allowed' };
+    const nameRegex = /^[A-Za-z\s]{2,50}$/;
+    if (!nameRegex.test(trimmed)) return { isValid: false, error: 'Only alphabets and spaces allowed, no numbers/special characters' };
+    return { isValid: true, error: '' };
+};
+
+const validateRelationship = (relationship: string): { isValid: boolean; error: string } => {
+    if (!relationship.trim()) return { isValid: true, error: '' };
+    const trimmed = relationship.trim();
+    if (trimmed.length < 2) return { isValid: false, error: 'Minimum 2 characters required' };
+    if (trimmed.length > 30) return { isValid: false, error: 'Maximum 30 characters allowed' };
+    const relationshipRegex = /^[A-Za-z\s]{2,30}$/;
+    if (!relationshipRegex.test(trimmed)) return { isValid: false, error: 'Only letters allowed' };
+    return { isValid: true, error: '' };
+};
+
+const validatePhone = (phone: string): { isValid: boolean; error: string } => {
+    const trimmed = phone.trim();
+    if (!trimmed) return { isValid: false, error: 'Phone number is required' };
+    const phoneRegex = /^[6-9]\d{9}$/;
+    if (!phoneRegex.test(trimmed)) return { isValid: false, error: 'Enter valid 10-digit mobile number (starts with 6-9)' };
+    return { isValid: true, error: '' };
+};
+
+const validateEmail = (email: string): { isValid: boolean; error: string } => {
+    if (!email.trim()) return { isValid: true, error: '' };
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) return { isValid: false, error: 'Enter valid email address (e.g., name@example.com)' };
+    return { isValid: true, error: '' };
+};
+
+const validateCheckIn = (checkIn: string): { isValid: boolean; error: string } => {
+    if (!checkIn.trim()) return { isValid: false, error: 'Check-in time is required' };
+    const checkInDate = new Date(checkIn);
+    const now = new Date();
+    if (checkInDate > now) return { isValid: false, error: 'Check-in cannot be in the future' };
+    return { isValid: true, error: '' };
+};
+
+const validateCheckOut = (checkIn: string, checkOut: string): { isValid: boolean; error: string } => {
+    if (!checkOut.trim()) return { isValid: true, error: '' };
+    const checkInDate = new Date(checkIn);
+    const checkOutDate = new Date(checkOut);
+    if (checkOutDate <= checkInDate) return { isValid: false, error: 'Check-out must be after check-in time' };
+    return { isValid: true, error: '' };
+};
+
+const validateRestrictions = (restrictions: string): { isValid: boolean; error: string } => {
+    if (!restrictions.trim()) return { isValid: true, error: '' };
+    const trimmed = restrictions.trim();
+    if (trimmed.length > 200) return { isValid: false, error: 'Maximum 200 characters allowed' };
+    const htmlRegex = /<[^>]*>/;
+    if (htmlRegex.test(trimmed)) return { isValid: false, error: 'HTML tags are not allowed' };
+    return { isValid: true, error: '' };
+};
+
 // Confirmation Dialog Component
 const ConfirmationDialog = ({
     open,
@@ -196,7 +257,6 @@ function dashFmt(iso: string | null | undefined) {
     return iso?.trim() ? fmt(iso) : '—';
 }
 
-/** Form state: same keys as API; datetime fields use `datetime-local` string values. */
 type VisitorFormFields = {
     firstName: string;
     checkInAt: string;
@@ -245,9 +305,66 @@ function VisitorModal({
     saving: boolean;
 }) {
     const [form, setForm] = useState<VisitorFormFields>(() => (initial ? visitorToForm(initial) : { ...EMPTY_VISITOR }));
-    const set = <K extends keyof VisitorFormFields>(k: K, v: VisitorFormFields[K]) => setForm((f) => ({ ...f, [k]: v }));
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    
+    const set = <K extends keyof VisitorFormFields>(k: K, v: VisitorFormFields[K]) => {
+        setForm((f) => ({ ...f, [k]: v }));
+        // Clear error for this field when user starts typing
+        if (errors[k]) {
+            setErrors((prev) => ({ ...prev, [k]: '' }));
+        }
+    };
 
-    const valid = Boolean(form.firstName.trim());
+    const validateField = (field: keyof VisitorFormFields, value: string): string => {
+        switch (field) {
+            case 'firstName':
+                return validateName(value).error;
+            case 'checkInAt':
+                return validateCheckIn(value).error;
+            case 'checkOutAt':
+                return validateCheckOut(form.checkInAt, value).error;
+            case 'restrictions':
+                return validateRestrictions(value).error;
+            default:
+                return '';
+        }
+    };
+
+    const validateForm = (): boolean => {
+        const newErrors: Record<string, string> = {};
+        
+        const nameValidation = validateName(form.firstName);
+        if (!nameValidation.isValid) newErrors.firstName = nameValidation.error;
+        
+        const checkInValidation = validateCheckIn(form.checkInAt);
+        if (!checkInValidation.isValid) newErrors.checkInAt = checkInValidation.error;
+        
+        if (form.checkOutAt.trim()) {
+            const checkOutValidation = validateCheckOut(form.checkInAt, form.checkOutAt);
+            if (!checkOutValidation.isValid) newErrors.checkOutAt = checkOutValidation.error;
+        }
+        
+        const restrictionsValidation = validateRestrictions(form.restrictions);
+        if (!restrictionsValidation.isValid) newErrors.restrictions = restrictionsValidation.error;
+        
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    const handleBlur = (field: keyof VisitorFormFields) => {
+        const error = validateField(field, form[field]);
+        if (error) {
+            setErrors((prev) => ({ ...prev, [field]: error }));
+        }
+    };
+
+    const handleSubmit = () => {
+        if (validateForm()) {
+            onSave(formToVisitorPayload(form));
+        }
+    };
+
+    const valid = Boolean(form.firstName.trim() && form.checkInAt.trim() && Object.keys(errors).length === 0);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -260,54 +377,48 @@ function VisitorModal({
                 </div>
                 <div className="space-y-4 p-5">
                     <div>
-                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300" htmlFor="visitor-firstName">
+                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">
                             First name <span className="text-red-500">*</span>
                         </label>
                         <input
-                            id="visitor-firstName"
-                            className="form-input w-full"
-                            name="firstName"
+                            className={`form-input w-full ${errors.firstName ? 'border-red-500 focus:border-red-500' : ''}`}
                             value={form.firstName}
                             onChange={(e) => set('firstName', e.target.value)}
+                            onBlur={() => handleBlur('firstName')}
                             placeholder="First name"
                         />
+                        {errors.firstName && <p className="mt-1 text-xs text-red-500">{errors.firstName}</p>}
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300" htmlFor="visitor-checkInAt">
-                                Check-in <span className="sr-only">(checkInAt)</span>
+                            <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                Check-in <span className="text-red-500">*</span>
                             </label>
                             <input
-                                id="visitor-checkInAt"
                                 type="datetime-local"
-                                className="form-input w-full"
-                                name="checkInAt"
+                                className={`form-input w-full ${errors.checkInAt ? 'border-red-500 focus:border-red-500' : ''}`}
                                 value={form.checkInAt}
                                 onChange={(e) => set('checkInAt', e.target.value)}
+                                onBlur={() => handleBlur('checkInAt')}
                             />
+                            {errors.checkInAt && <p className="mt-1 text-xs text-red-500">{errors.checkInAt}</p>}
                         </div>
                         <div>
-                            <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300" htmlFor="visitor-checkOutAt">
-                                Check-out <span className="sr-only">(checkOutAt)</span>
-                            </label>
+                            <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Check-out</label>
                             <input
-                                id="visitor-checkOutAt"
                                 type="datetime-local"
-                                className="form-input w-full"
-                                name="checkOutAt"
+                                className={`form-input w-full ${errors.checkOutAt ? 'border-red-500 focus:border-red-500' : ''}`}
                                 value={form.checkOutAt}
                                 onChange={(e) => set('checkOutAt', e.target.value)}
+                                onBlur={() => handleBlur('checkOutAt')}
                             />
+                            {errors.checkOutAt && <p className="mt-1 text-xs text-red-500">{errors.checkOutAt}</p>}
                         </div>
                     </div>
                     <div>
-                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300" htmlFor="visitor-status">
-                            Status
-                        </label>
+                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Status</label>
                         <select
-                            id="visitor-status"
                             className="form-select w-full"
-                            name="status"
                             value={form.status}
                             onChange={(e) => set('status', e.target.value)}
                         >
@@ -317,24 +428,22 @@ function VisitorModal({
                         </select>
                     </div>
                     <div>
-                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300" htmlFor="visitor-restrictions">
-                            Restrictions
-                        </label>
+                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Restrictions</label>
                         <input
-                            id="visitor-restrictions"
-                            className="form-input w-full"
-                            name="restrictions"
+                            className={`form-input w-full ${errors.restrictions ? 'border-red-500 focus:border-red-500' : ''}`}
                             value={form.restrictions}
                             onChange={(e) => set('restrictions', e.target.value)}
+                            onBlur={() => handleBlur('restrictions')}
                             placeholder="Optional"
                         />
+                        {errors.restrictions && <p className="mt-1 text-xs text-red-500">{errors.restrictions}</p>}
                     </div>
                 </div>
                 <div className="flex justify-end gap-3 border-t border-white-light p-4 dark:border-[#191e3a]">
                     <button type="button" className="btn btn-outline-primary" onClick={onClose}>
                         Cancel
                     </button>
-                    <button type="button" className="btn btn-primary" disabled={!valid || saving} onClick={() => onSave(formToVisitorPayload(form))}>
+                    <button type="button" className="btn btn-primary" disabled={!valid || saving} onClick={handleSubmit}>
                         {saving ? 'Saving…' : 'Save'}
                     </button>
                 </div>
@@ -363,9 +472,64 @@ function ContactModal({
     saving: boolean;
 }) {
     const [form, setForm] = useState<Omit<FamilyContactRecord, 'id'>>(initial ? { ...initial } : { ...EMPTY_CONTACT });
-    const set = (k: keyof Omit<FamilyContactRecord, 'id'>, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    
+    const set = (k: keyof Omit<FamilyContactRecord, 'id'>, v: string | boolean) => {
+        setForm((f) => ({ ...f, [k]: v }));
+        if (errors[k as string]) {
+            setErrors((prev) => ({ ...prev, [k as string]: '' }));
+        }
+    };
 
-    const valid = form.name.trim() && form.phone.trim();
+    const validateField = (field: keyof Omit<FamilyContactRecord, 'id'>, value: any): string => {
+        switch (field) {
+            case 'name':
+                return validateName(value).error;
+            case 'relationship':
+                return validateRelationship(value).error;
+            case 'phone':
+                return validatePhone(value).error;
+            case 'email':
+                return validateEmail(value).error;
+            default:
+                return '';
+        }
+    };
+
+    const validateForm = (): boolean => {
+        const newErrors: Record<string, string> = {};
+        
+        const nameValidation = validateName(form.name);
+        if (!nameValidation.isValid) newErrors.name = nameValidation.error;
+        
+        const relationshipValidation = validateRelationship(form.relationship);
+        if (!relationshipValidation.isValid) newErrors.relationship = relationshipValidation.error;
+        
+        const phoneValidation = validatePhone(form.phone);
+        if (!phoneValidation.isValid) newErrors.phone = phoneValidation.error;
+        
+        const emailValidation = validateEmail(form.email || '');
+        if (!emailValidation.isValid) newErrors.email = emailValidation.error;
+        
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    const handleBlur = (field: keyof Omit<FamilyContactRecord, 'id'>) => {
+        const value = field === 'isNOK' ? form.isNOK : form[field as keyof typeof form];
+        const error = validateField(field, value);
+        if (error) {
+            setErrors((prev) => ({ ...prev, [field]: error }));
+        }
+    };
+
+    const handleSubmit = () => {
+        if (validateForm()) {
+            onSave(form);
+        }
+    };
+
+    const valid = Boolean(form.name.trim() && form.phone.trim() && Object.keys(errors).length === 0);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -378,25 +542,53 @@ function ContactModal({
                 </div>
                 <div className="space-y-4 p-5">
                     <div>
-                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Full Name *</label>
-                        <input className="form-input w-full" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Full name" />
+                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            Full Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                            className={`form-input w-full ${errors.name ? 'border-red-500 focus:border-red-500' : ''}`}
+                            value={form.name}
+                            onChange={(e) => set('name', e.target.value)}
+                            onBlur={() => handleBlur('name')}
+                            placeholder="Full name"
+                        />
+                        {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
                     </div>
                     <div>
                         <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Relationship</label>
                         <input
-                            className="form-input w-full"
+                            className={`form-input w-full ${errors.relationship ? 'border-red-500 focus:border-red-500' : ''}`}
                             value={form.relationship}
                             onChange={(e) => set('relationship', e.target.value)}
-                            placeholder="e.g. Spouse"
+                            onBlur={() => handleBlur('relationship')}
+                            placeholder="e.g. Spouse, Parent, Sibling"
                         />
+                        {errors.relationship && <p className="mt-1 text-xs text-red-500">{errors.relationship}</p>}
                     </div>
                     <div>
-                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Phone *</label>
-                        <input className="form-input w-full" value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="Phone number" />
+                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            Phone <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                            className={`form-input w-full ${errors.phone ? 'border-red-500 focus:border-red-500' : ''}`}
+                            value={form.phone}
+                            onChange={(e) => set('phone', e.target.value)}
+                            onBlur={() => handleBlur('phone')}
+                            placeholder="10-digit mobile number"
+                        />
+                        {errors.phone && <p className="mt-1 text-xs text-red-500">{errors.phone}</p>}
                     </div>
                     <div>
                         <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Email</label>
-                        <input type="email" className="form-input w-full" value={form.email ?? ''} onChange={(e) => set('email', e.target.value)} placeholder="Optional" />
+                        <input
+                            type="email"
+                            className={`form-input w-full ${errors.email ? 'border-red-500 focus:border-red-500' : ''}`}
+                            value={form.email ?? ''}
+                            onChange={(e) => set('email', e.target.value)}
+                            onBlur={() => handleBlur('email')}
+                            placeholder="email@example.com"
+                        />
+                        {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email}</p>}
                     </div>
                     <label className="flex cursor-pointer items-center gap-2">
                         <input type="checkbox" className="form-checkbox" checked={form.isNOK} onChange={(e) => set('isNOK', e.target.checked)} />
@@ -407,7 +599,7 @@ function ContactModal({
                     <button type="button" className="btn btn-outline-primary" onClick={onClose}>
                         Cancel
                     </button>
-                    <button type="button" className="btn btn-primary" disabled={!valid || saving} onClick={() => onSave(form)}>
+                    <button type="button" className="btn btn-primary" disabled={!valid || saving} onClick={handleSubmit}>
                         {saving ? 'Saving…' : 'Save'}
                     </button>
                 </div>
@@ -435,7 +627,6 @@ const VisitorsContacts: React.FC = () => {
         onConfirm: () => {},
     });
 
-    // Pagination states
     const [visitorPage, setVisitorPage] = useState(1);
     const [contactPage, setContactPage] = useState(1);
     const itemsPerPage = 5;
@@ -517,11 +708,9 @@ const VisitorsContacts: React.FC = () => {
 
     const visitors = visitorsQuery.data ?? [];
     const contacts = contactsQuery.data ?? [];
-    const nok = contacts.find((c) => c.isNOK);
     const listError = visitorsQuery.error ?? contactsQuery.error;
     const listErrorMessage = listError instanceof Error ? listError.message : listError ? 'Failed to load data' : null;
 
-    // Pagination calculations
     const visitorTotalPages = Math.ceil(visitors.length / itemsPerPage);
     const visitorStartIndex = (visitorPage - 1) * itemsPerPage;
     const visitorEndIndex = visitorStartIndex + itemsPerPage;
@@ -575,17 +764,6 @@ const VisitorsContacts: React.FC = () => {
                     {listErrorMessage}
                 </div>
             ) : null}
-
-            {/* {nok ? (
-                <div className="mb-5 flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
-                    <span className="font-semibold text-primary">NOK:</span>
-                    <span className="text-gray-800 dark:text-gray-200">{nok.name}</span>
-                    <span className="text-gray-500">·</span>
-                    <span className="text-gray-600 dark:text-gray-400">{nok.relationship}</span>
-                    <span className="text-gray-500">·</span>
-                    <span className="text-gray-600 dark:text-gray-400">{nok.phone}</span>
-                </div>
-            ) : null} */}
 
             <div className="mb-5">
                 <ul className="flex border-b border-white-light dark:border-[#191e3a]">
@@ -797,7 +975,6 @@ const VisitorsContacts: React.FC = () => {
                 />
             ) : null}
 
-            {/* Confirmation Dialog */}
             <ConfirmationDialog
                 open={confirmDialog.open}
                 title={confirmDialog.title}
