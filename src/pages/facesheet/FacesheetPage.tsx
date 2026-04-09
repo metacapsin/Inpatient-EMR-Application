@@ -22,8 +22,6 @@ const LabOrders = lazy(() => import('../patient/LabOrders'));
 const Documents = lazy(() => import('../patient/Documents'));
 const Notes = lazy(() => import('../patient/Notes'));
 const PreventiveScreening = lazy(() => import('../patient/PreventiveScreening'));
-const Pharmacies = lazy(() => import('../patient/Pharmacies'));
-const PharmacyMessage = lazy(() => import('../patient/PharmacyMessage'));
 const VisitorsContacts = lazy(() => import('../patient/VisitorsContacts'));
 const PatientLocation = lazy(() => import('../patient/PatientLocation'));
 const Adt = lazy(() => import('../patient/Adt'));
@@ -112,8 +110,6 @@ const FacesheetPage = () => {
                         <Route path="documents" element={<Documents />} />
                         <Route path="notes" element={<Notes />} />
                         <Route path="preventive-screening" element={<PreventiveScreening />} />
-                        <Route path="pharmacies" element={<Pharmacies />} />
-                        <Route path="pharmacy-message" element={<PharmacyMessage />} />
                         <Route path="visitors-contacts" element={<VisitorsContacts />} />
                         <Route path="*" element={<Navigate to="demographic" replace />} />
                     </Routes>

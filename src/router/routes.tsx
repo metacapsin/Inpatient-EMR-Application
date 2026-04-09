@@ -30,8 +30,6 @@ const LabOrders = lazy(() => import('../pages/patient/LabOrders'));
 const Notes = lazy(() => import('../pages/patient/Notes'));
 const Immunizations = lazy(() => import('../pages/patient/Immunizations'));
 const PreventiveScreening = lazy(() => import('../pages/patient/PreventiveScreening'));
-const Pharmacies = lazy(() => import('../pages/patient/Pharmacies'));
-const PharmacyMessage = lazy(() => import('../pages/patient/PharmacyMessage'));
 const PatientAssessment = lazy(() => import('../pages/patient/PatientAssessment'));
 const DailyLog = lazy(() => import('../pages/patient/DailyLog'));
 const HealthAlerts = lazy(() => import('../pages/patient/HealthAlerts'));
@@ -203,16 +201,6 @@ const routes = [
     {
         path: '/app/preventive-screening',
         element: guard(<PreventiveScreening />),
-        layout: 'default' as const,
-    },
-    {
-        path: '/app/pharmacies',
-        element: guard(<Pharmacies />),
-        layout: 'default' as const,
-    },
-    {
-        path: '/app/pharmacy-message',
-        element: guard(<PharmacyMessage />),
         layout: 'default' as const,
     },
     {

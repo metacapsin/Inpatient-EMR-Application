@@ -146,6 +146,21 @@ function toDatetimeLocalValue(iso: string): string {
     }
 }
 
+function datetimeLocalToIso(local: string): string {
+    if (!local?.trim()) return '';
+    const d = new Date(local);
+    if (Number.isNaN(d.getTime())) return local.trim();
+    return d.toISOString();
+}
+
+function mapVisitorStatusToUi(status: string): VisitorStatusUi | null {
+    const v = status.toLowerCase().replace(/\s+/g, '-');
+    if (v === 'checked-in' || v === 'checkedin' || v === 'in') return 'checked-in';
+    if (v === 'checked-out' || v === 'checkedout' || v === 'out') return 'checked-out';
+    if (v === 'scheduled' || v === 'pending') return 'scheduled';
+    return null;
+}
+
 const statusBadge: Record<VisitorStatusUi, string> = {
     'checked-in': 'bg-success/10 text-success',
     'checked-out': 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
@@ -158,6 +173,13 @@ const statusLabel: Record<VisitorStatusUi, string> = {
     scheduled: 'Scheduled',
 };
 
+function VisitorStatusPill({ status }: { status: string }) {
+    const ui = mapVisitorStatusToUi(status);
+    const label = ui ? statusLabel[ui] : dashText(status);
+    const badgeClass = ui ? statusBadge[ui] : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400';
+    return <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${badgeClass}`}>{label}</span>;
+}
+
 function fmt(iso: string) {
     try {
         return new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -166,13 +188,50 @@ function fmt(iso: string) {
     }
 }
 
-const EMPTY_VISITOR: Omit<VisitorRecord, 'id'> = {
-    name: '',
-    relationship: '',
-    checkIn: '',
-    status: 'scheduled',
-    restrictions: '',
+function dashText(s: string | null | undefined) {
+    return s != null && String(s).trim() ? String(s).trim() : '—';
+}
+
+function dashFmt(iso: string | null | undefined) {
+    return iso?.trim() ? fmt(iso) : '—';
+}
+
+/** Form state: same keys as API; datetime fields use `datetime-local` string values. */
+type VisitorFormFields = {
+    firstName: string;
+    checkInAt: string;
+    checkOutAt: string;
+    restrictions: string;
+    status: string;
 };
+
+const EMPTY_VISITOR: VisitorFormFields = {
+    firstName: '',
+    checkInAt: '',
+    checkOutAt: '',
+    restrictions: '',
+    status: 'scheduled',
+};
+
+function visitorToForm(v: VisitorRecord): VisitorFormFields {
+    return {
+        firstName: v.firstName,
+        checkInAt: v.checkInAt ? toDatetimeLocalValue(v.checkInAt) : '',
+        checkOutAt: v.checkOutAt ? toDatetimeLocalValue(v.checkOutAt) : '',
+        restrictions: v.restrictions ?? '',
+        status: v.status.trim() ? v.status : 'scheduled',
+    };
+}
+
+function formToVisitorPayload(form: VisitorFormFields): Omit<VisitorRecord, 'id'> {
+    return {
+        firstName: form.firstName.trim(),
+        checkInAt: form.checkInAt.trim() ? datetimeLocalToIso(form.checkInAt) : null,
+        checkOutAt: form.checkOutAt.trim() ? datetimeLocalToIso(form.checkOutAt) : null,
+        restrictions: form.restrictions.trim() || null,
+        status: form.status,
+    };
+}
 
 function VisitorModal({
     initial,
@@ -185,18 +244,10 @@ function VisitorModal({
     onClose: () => void;
     saving: boolean;
 }) {
-    const [form, setForm] = useState<Omit<VisitorRecord, 'id'>>(() =>
-        initial
-            ? {
-                  ...initial,
-                  checkIn: toDatetimeLocalValue(initial.checkIn),
-                  checkOut: initial.checkOut ? toDatetimeLocalValue(initial.checkOut) : undefined,
-              }
-            : { ...EMPTY_VISITOR }
-    );
-    const set = (k: keyof Omit<VisitorRecord, 'id'>, v: string) => setForm((f) => ({ ...f, [k]: v }));
+    const [form, setForm] = useState<VisitorFormFields>(() => (initial ? visitorToForm(initial) : { ...EMPTY_VISITOR }));
+    const set = <K extends keyof VisitorFormFields>(k: K, v: VisitorFormFields[K]) => setForm((f) => ({ ...f, [k]: v }));
 
-    const valid = form.name.trim() && form.relationship.trim() && form.checkIn.trim();
+    const valid = Boolean(form.firstName.trim());
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -209,46 +260,71 @@ function VisitorModal({
                 </div>
                 <div className="space-y-4 p-5">
                     <div>
-                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Visitor Name *</label>
-                        <input className="form-input w-full" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Full name" />
-                    </div>
-                    <div>
-                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Relationship *</label>
+                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300" htmlFor="visitor-firstName">
+                            First name <span className="text-red-500">*</span>
+                        </label>
                         <input
+                            id="visitor-firstName"
                             className="form-input w-full"
-                            value={form.relationship}
-                            onChange={(e) => set('relationship', e.target.value)}
-                            placeholder="e.g. Spouse, Parent"
+                            name="firstName"
+                            value={form.firstName}
+                            onChange={(e) => set('firstName', e.target.value)}
+                            placeholder="First name"
                         />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Check-in *</label>
-                            <input type="datetime-local" className="form-input w-full" value={form.checkIn} onChange={(e) => set('checkIn', e.target.value)} />
-                        </div>
-                        <div>
-                            <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Check-out</label>
+                            <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300" htmlFor="visitor-checkInAt">
+                                Check-in <span className="sr-only">(checkInAt)</span>
+                            </label>
                             <input
+                                id="visitor-checkInAt"
                                 type="datetime-local"
                                 className="form-input w-full"
-                                value={form.checkOut ?? ''}
-                                onChange={(e) => set('checkOut', e.target.value)}
+                                name="checkInAt"
+                                value={form.checkInAt}
+                                onChange={(e) => set('checkInAt', e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300" htmlFor="visitor-checkOutAt">
+                                Check-out <span className="sr-only">(checkOutAt)</span>
+                            </label>
+                            <input
+                                id="visitor-checkOutAt"
+                                type="datetime-local"
+                                className="form-input w-full"
+                                name="checkOutAt"
+                                value={form.checkOutAt}
+                                onChange={(e) => set('checkOutAt', e.target.value)}
                             />
                         </div>
                     </div>
                     <div>
-                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Status</label>
-                        <select className="form-select w-full" value={form.status} onChange={(e) => set('status', e.target.value as VisitorStatusUi)}>
+                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300" htmlFor="visitor-status">
+                            Status
+                        </label>
+                        <select
+                            id="visitor-status"
+                            className="form-select w-full"
+                            name="status"
+                            value={form.status}
+                            onChange={(e) => set('status', e.target.value)}
+                        >
                             <option value="scheduled">Scheduled</option>
                             <option value="checked-in">Checked In</option>
                             <option value="checked-out">Checked Out</option>
                         </select>
                     </div>
                     <div>
-                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Restrictions / Notes</label>
+                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300" htmlFor="visitor-restrictions">
+                            Restrictions
+                        </label>
                         <input
+                            id="visitor-restrictions"
                             className="form-input w-full"
-                            value={form.restrictions ?? ''}
+                            name="restrictions"
+                            value={form.restrictions}
                             onChange={(e) => set('restrictions', e.target.value)}
                             placeholder="Optional"
                         />
@@ -258,7 +334,7 @@ function VisitorModal({
                     <button type="button" className="btn btn-outline-primary" onClick={onClose}>
                         Cancel
                     </button>
-                    <button type="button" className="btn btn-primary" disabled={!valid || saving} onClick={() => onSave(form)}>
+                    <button type="button" className="btn btn-primary" disabled={!valid || saving} onClick={() => onSave(formToVisitorPayload(form))}>
                         {saving ? 'Saving…' : 'Save'}
                     </button>
                 </div>
@@ -473,7 +549,7 @@ const VisitorsContacts: React.FC = () => {
         setConfirmDialog({
             open: true,
             title: 'Delete Visitor',
-            message: `Are you sure you want to delete visitor "${visitor.name}"? This action cannot be undone.`,
+            message: `Are you sure you want to delete visitor "${visitor.firstName.trim() || 'this visitor'}"? This action cannot be undone.`,
             onConfirm: () => deleteVisitorMut.mutate(visitor.id),
         });
     };
@@ -577,8 +653,7 @@ const VisitorsContacts: React.FC = () => {
                                 <table className="w-full text-sm">
                                     <thead>
                                         <tr className="border-b border-white-light dark:border-[#191e3a]">
-                                            <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Name</th>
-                                            <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Relationship</th>
+                                            <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">First name</th>
                                             <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Check-in</th>
                                             <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Check-out</th>
                                             <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Status</th>
@@ -589,16 +664,13 @@ const VisitorsContacts: React.FC = () => {
                                     <tbody>
                                         {paginatedVisitors.map((v) => (
                                             <tr key={v.id} className="border-b border-white-light hover:bg-gray-50 dark:border-[#191e3a] dark:hover:bg-white/5">
-                                                <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{v.name}</td>
-                                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{v.relationship}</td>
-                                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{fmt(v.checkIn)}</td>
-                                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{v.checkOut ? fmt(v.checkOut) : '—'}</td>
+                                                <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{dashText(v.firstName)}</td>
+                                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{dashFmt(v.checkInAt)}</td>
+                                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{dashFmt(v.checkOutAt)}</td>
                                                 <td className="px-3 py-2">
-                                                    <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${statusBadge[v.status]}`}>
-                                                        {statusLabel[v.status]}
-                                                    </span>
+                                                    <VisitorStatusPill status={v.status} />
                                                 </td>
-                                                <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{v.restrictions || '—'}</td>
+                                                <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{dashText(v.restrictions)}</td>
                                                 <td className="px-3 py-2">
                                                     <div className="flex items-center gap-2">
                                                         <button
