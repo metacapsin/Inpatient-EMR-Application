@@ -74,7 +74,19 @@ async function adtPost<TBody extends object, TData>(
     }
 }
 
+function messageLooksLikeBedNotFound(message: string): boolean {
+    const m = message.trim().toLowerCase();
+    if (!m) return false;
+    if (m.includes('bed not found')) return true;
+    if (m.includes('bed_not_found')) return true;
+    if (/\bbed\b/.test(m) && /\bnot found\b/.test(m)) return true;
+    return false;
+}
+
 export function formatAdtUserMessage(result: AdtPostErr): string {
+    if (messageLooksLikeBedNotFound(result.message)) {
+        return BED_NOT_FOUND_USER_MESSAGE;
+    }
     if (result.status === 401) {
         return 'Your session has expired. Please sign in again.';
     }
@@ -178,7 +190,12 @@ export type ActiveEncounterAdtMerge = {
     bedMongoId: string | null;
 };
 
-function pickActiveEncounterBedId(rec: Record<string, unknown>): string | null {
+/**
+ * Normalize bed id from API payloads (active admission rows, encounter objects, transfer responses).
+ * Keeps admit / transfer / active-list / discharge flows aligned on one canonical id string.
+ */
+export function pickAdtBedMongoIdFromRecord(rec: Record<string, unknown> | null | undefined): string | null {
+    if (!rec) return null;
     const raw =
         extractIdString(
             rec.currentBedId ??
@@ -192,6 +209,24 @@ function pickActiveEncounterBedId(rec: Record<string, unknown>): string | null {
     const t = raw.trim();
     return t || null;
 }
+
+/** True when workspace session has an encounter and a non-empty bed assignment (required before discharge initiate). */
+export function hasValidAdtBedForDischarge(
+    session: { encounterId?: string; currentBedMongoId?: string | null } | null | undefined
+): boolean {
+    return Boolean(session?.encounterId?.trim() && session.currentBedMongoId?.trim());
+}
+
+/** Prefer bed id returned on the encounter from the server; fall back to the bed selected in the admit UI. */
+export function resolveBedMongoIdAfterAdmit(
+    encounter: Record<string, unknown> | undefined,
+    selectedBedId: string
+): string {
+    return pickAdtBedMongoIdFromRecord(encounter)?.trim() || selectedBedId.trim();
+}
+
+const BED_NOT_FOUND_USER_MESSAGE =
+    'This encounter is not linked to a bed in the system. Refresh the chart or open the patient from the bed board, then try again.';
 
 /** Map GET /api/admissions/active rows into encounter id + bed id for `mergeActiveEncountersFromServer`. */
 export function activeEncounterRowsToAdtMergePayload(rows: ActiveEncounterRow[]): ActiveEncounterAdtMerge[] {
@@ -207,7 +242,7 @@ export function activeEncounterRowsToAdtMergePayload(rows: ActiveEncounterRow[])
         byPatient.set(pid, {
             patientId: pid,
             encounterId: enc,
-            bedMongoId: pickActiveEncounterBedId(rec),
+            bedMongoId: pickAdtBedMongoIdFromRecord(rec),
         });
     }
     return Array.from(byPatient.values());

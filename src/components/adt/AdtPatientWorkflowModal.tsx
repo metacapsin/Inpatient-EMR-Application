@@ -5,7 +5,12 @@ import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'sonner';
 import { AppModal } from '../shared/AppModal';
 import { LabeledDropdown } from '../shared/LabeledDropdown';
-import { adtApi, formatAdtUserMessage } from '../../services/adt.service';
+import {
+    adtApi,
+    formatAdtUserMessage,
+    hasValidAdtBedForDischarge,
+    resolveBedMongoIdAfterAdmit,
+} from '../../services/adt.service';
 import { fetchEmrBedList } from '../../services/emrBeds.service';
 import { bedOptionsForSelect } from '../../lib/adtBedPicker';
 import type { AdmissionType } from '../../types/adt';
@@ -152,11 +157,13 @@ export function AdtPatientWorkflowModal({
                 toast.error('Admission succeeded but no encounter id was returned.');
                 return;
             }
+            const encObj = result.data.encounter as Record<string, unknown> | undefined;
+            const bedMongoId = resolveBedMongoIdAfterAdmit(encObj, admitTargetBedId.trim());
             dispatch(
                 setAdtAfterAdmit({
                     patientId: pid,
                     encounterId: encId,
-                    bedMongoId: admitTargetBedId.trim(),
+                    bedMongoId,
                 })
             );
             toast.success(result.message || 'Patient admitted');
@@ -207,6 +214,13 @@ export function AdtPatientWorkflowModal({
         mutationFn: async () => {
             const encounterId = session?.encounterId;
             if (!encounterId) throw new Error('No active encounter for this patient');
+            if (!hasValidAdtBedForDischarge(session)) {
+                throw new Error(
+                    'No bed is linked to this encounter in the workspace. Refresh the chart or open the patient from the bed board, then try again.'
+                );
+            }
+            const currentBedMongoId = session.currentBedMongoId?.trim() ?? null;
+            console.info('[adt] discharge initiate request', { encounterId, currentBedMongoId });
             return adtApi.dischargeInitiate(
                 encounterId,
                 disposition.trim() || undefined,
@@ -235,6 +249,10 @@ export function AdtPatientWorkflowModal({
     const dischargeConfirmMutation = useMutation({
         mutationFn: async () => {
             if (!session?.encounterId) throw new Error('No active encounter for this patient');
+            console.info('[adt] discharge confirm request', {
+                encounterId: session.encounterId,
+                currentBedMongoId: session.currentBedMongoId?.trim() ?? null,
+            });
             return adtApi.dischargeConfirm(session.encounterId);
         },
         onSuccess: (result) => {
@@ -266,9 +284,11 @@ export function AdtPatientWorkflowModal({
     const bedsError = bedsQuery.error instanceof Error ? bedsQuery.error.message : null;
 
     const encounterReady = Boolean(session?.encounterId?.trim());
+    const bedReadyForDischarge = hasValidAdtBedForDischarge(session);
     const admitBlocked = encounterReady;
     const transferBlocked = !encounterReady || !!session?.dischargeInitiated;
-    const dischargeBlocked = !encounterReady;
+    const dischargeBlocked =
+        !encounterReady || (!bedReadyForDischarge && !session?.dischargeInitiated);
 
     return (
         <AppModal
@@ -385,9 +405,15 @@ export function AdtPatientWorkflowModal({
                     </p>
                 ) : null}
 
-                {intent === 'discharge' && dischargeBlocked ? (
+                {intent === 'discharge' && !encounterReady ? (
                     <p className="text-sm text-amber-800 dark:text-amber-200">
                         No active encounter for this patient. Admit from the patient list or ADT module first.
+                    </p>
+                ) : null}
+                {intent === 'discharge' && encounterReady && !bedReadyForDischarge && !session?.dischargeInitiated ? (
+                    <p className="text-sm text-amber-800 dark:text-amber-200">
+                        Discharge is blocked until a bed is linked to this encounter. Refresh the chart or use the bed board so the
+                        workspace picks up the current assignment, then try again.
                     </p>
                 ) : null}
 

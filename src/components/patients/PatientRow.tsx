@@ -5,6 +5,7 @@ import { formatAgeLabelFromDobRaw, getPatientListRowId, type PatientListItem } f
 import type { IRootState } from '../../store';
 import { selectAdtEncounter } from '../../store/adtEncounterSlice';
 import type { AdtWorkflowIntent } from '../adt/AdtPatientWorkflowModal';
+import { hasValidAdtBedForDischarge } from '../../services/adt.service';
 
 interface PatientRowProps {
     patient: PatientListItem;
@@ -64,6 +65,7 @@ function InpatientAdtCell({
     const workspaceAdmitted = encounterReady;
     const showAdmittedBadge = serverAdmitted || workspaceAdmitted;
     const dischargePending = !!session?.dischargeInitiated;
+    const bedReadyForDischarge = hasValidAdtBedForDischarge(session);
     const transferred =
         workspaceAdmitted && !dischargePending && session?.lastPlacementAction === 'transfer';
 
@@ -122,7 +124,17 @@ function InpatientAdtCell({
             >
                 <ArrowRightLeft className="h-3.5 w-3.5" aria-hidden />
             </button>
-            <button type="button" title="Discharge" disabled={!encounterReady} onClick={open('discharge')} className={btnClass}>
+            <button
+                type="button"
+                title={
+                    !bedReadyForDischarge && encounterReady && !dischargePending
+                        ? 'No bed linked to this encounter — refresh the chart'
+                        : 'Discharge'
+                }
+                disabled={!encounterReady || (!bedReadyForDischarge && !dischargePending)}
+                onClick={open('discharge')}
+                className={btnClass}
+            >
                 <DoorOpen className="h-3.5 w-3.5" aria-hidden />
             </button>
         </div>

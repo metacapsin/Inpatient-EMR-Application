@@ -10,7 +10,9 @@ import {
     activeEncounterRowsToAdtMergePayload,
     adtApi,
     formatAdtUserMessage,
+    hasValidAdtBedForDischarge,
     listActiveEncounters,
+    resolveBedMongoIdAfterAdmit,
 } from '../../../services/adt.service';
 import { fetchEmrBedList, filterAvailableBeds, type EmrBedListItem } from '../../../services/emrBeds.service';
 import { LabeledDropdown } from '../../../components/shared/LabeledDropdown';
@@ -169,11 +171,13 @@ const AdtModulePage = () => {
                 toast.error('Admission succeeded but no encounter id was returned.');
                 return;
             }
+            const encObj = result.data.encounter as Record<string, unknown> | undefined;
+            const bedMongoId = resolveBedMongoIdAfterAdmit(encObj, admitTargetBedId.trim());
             dispatch(
                 setAdtAfterAdmit({
                     patientId: patientId.trim(),
                     encounterId: encId,
-                    bedMongoId: admitTargetBedId.trim(),
+                    bedMongoId,
                 })
             );
             toast.success(result.message || 'Patient admitted');
@@ -230,6 +234,15 @@ const AdtModulePage = () => {
         mutationFn: async () => {
             const encounterId = adtSession?.encounterId;
             if (!encounterId) throw new Error('No active encounter in this workspace');
+            if (!hasValidAdtBedForDischarge(adtSession)) {
+                throw new Error(
+                    'No bed is linked to this encounter in the workspace. Refresh the chart or open the patient from the bed board, then try again.'
+                );
+            }
+            console.info('[adt] discharge initiate request', {
+                encounterId,
+                currentBedMongoId: adtSession.currentBedMongoId?.trim() ?? null,
+            });
             const result = await adtApi.dischargeInitiate(
                 encounterId,
                 disposition.trim() || undefined,
@@ -255,6 +268,10 @@ const AdtModulePage = () => {
     const dischargeConfirmMutation = useMutation({
         mutationFn: async () => {
             if (!adtSession?.encounterId) throw new Error('No active encounter in this workspace');
+            console.info('[adt] discharge confirm request', {
+                encounterId: adtSession.encounterId,
+                currentBedMongoId: adtSession.currentBedMongoId?.trim() ?? null,
+            });
             return adtApi.dischargeConfirm(adtSession.encounterId);
         },
         onSuccess: (result) => {
@@ -316,6 +333,8 @@ const AdtModulePage = () => {
     const bedsError = bedsQuery.error instanceof Error ? bedsQuery.error.message : null;
     const admitOptions = bedOptionsForSelect(beds, { onlyAvailable: true });
     const transferOptions = bedOptionsForSelect(beds, { onlyAvailable: true, excludeId: currentBedId || undefined });
+
+    const bedReadyForDischarge = hasValidAdtBedForDischarge(adtSession);
 
     const busy =
         admitMutation.isPending ||
@@ -565,6 +584,12 @@ const AdtModulePage = () => {
                         <p className="text-xs text-gray-500 dark:text-gray-400">
                             Initiate discharge, then confirm to complete. Confirm stays disabled until initiate succeeds.
                         </p>
+                        {!adtSession.dischargeInitiated && !bedReadyForDischarge ? (
+                            <p className="text-sm text-amber-800 dark:text-amber-200">
+                                A bed must be linked to this encounter before discharge (sync from the chart header, patient list, or bed
+                                board). Manual encounter links do not include a bed until the server reports one.
+                            </p>
+                        ) : null}
                         <div className="grid gap-3 sm:grid-cols-2">
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-gray-800 dark:text-gray-200" htmlFor="adt-disposition">
@@ -596,7 +621,7 @@ const AdtModulePage = () => {
                         <div className="flex flex-wrap gap-2">
                             <button
                                 type="button"
-                                disabled={busy || adtSession.dischargeInitiated}
+                                disabled={busy || adtSession.dischargeInitiated || !bedReadyForDischarge}
                                 onClick={() => dischargeInitMutation.mutate()}
                                 className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:pointer-events-none disabled:opacity-50"
                             >

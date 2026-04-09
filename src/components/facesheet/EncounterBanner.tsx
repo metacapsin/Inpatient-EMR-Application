@@ -6,6 +6,7 @@ import type { FacesheetPatient } from '../../services/patient.service';
 import { formatLocationLine } from '../../types/patientLocation';
 import type { IRootState } from '../../store';
 import { selectAdtEncounter } from '../../store/adtEncounterSlice';
+import { hasValidAdtBedForDischarge } from '../../services/adt.service';
 import { AdtPatientWorkflowModal } from '../adt/AdtPatientWorkflowModal';
 
 function pickAttendingLabel(raw: Record<string, unknown>): string {
@@ -40,6 +41,7 @@ export function EncounterBanner({ patient, moduleBase }: EncounterBannerProps) {
     const [adtModal, setAdtModal] = useState<AdtBannerModal | null>(null);
     const session = useSelector((s: IRootState) => selectAdtEncounter(s, patient.id));
     const encounterReady = Boolean(session?.encounterId?.trim());
+    const bedReadyForDischarge = hasValidAdtBedForDischarge(session);
 
     const locationLine = formatLocationLine(patient.location);
     const bedDisplay = locationLine.trim() ? locationLine : 'No bed on file';
@@ -127,7 +129,12 @@ export function EncounterBanner({ patient, moduleBase }: EncounterBannerProps) {
                         </button>
                         <button
                             type="button"
-                            disabled={!encounterReady || !!session?.dischargeInitiated}
+                            title={
+                                encounterReady && !bedReadyForDischarge && !session?.dischargeInitiated
+                                    ? 'No bed linked to this encounter — refresh the chart'
+                                    : undefined
+                            }
+                            disabled={!encounterReady || !!session?.dischargeInitiated || !bedReadyForDischarge}
                             onClick={() => setAdtModal({ intent: 'discharge', dischargeInitialStep: 'initiate' })}
                             className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100 disabled:pointer-events-none disabled:opacity-45 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-950/60"
                         >

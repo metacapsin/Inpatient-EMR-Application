@@ -378,7 +378,7 @@ const Header = () => {
                                                                 className="flex flex-col py-2.5 sm:py-3 px-2.5 sm:px-3 md:px-5 hover:bg-white-light/40 dark:hover:bg-dark/40 border-b border-white-light/30 dark:border-white/5 last:border-b-0 transition-all duration-300 ease-in-out cursor-pointer bg-primary/5 dark:bg-primary/10 hover:shadow-lg hover:shadow-primary/10 dark:hover:shadow-primary/20 hover:-translate-y-0.5 hover:scale-[1.01] rounded-md mx-1 my-0.5"
                                                                 onClick={(e) => {
                                                                     // Don't mark as read if clicking on delete button
-                                                                    if (!(e.target as HTMLElement).closest('button')) {
+                                                                  if (!(e.target as HTMLElement).closest('button')) {
                                                                         markNotificationAsRead(notification._id);
                                                                     }
                                                                 }}

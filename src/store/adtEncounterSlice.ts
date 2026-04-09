@@ -124,9 +124,11 @@ const adtEncounterSlice = createSlice({
                 }
 
                 if (cur.encounterId === enc) {
+                    const serverBed = bed?.trim() ? bed.trim() : null;
                     state.byPatientId[id] = {
                         ...cur,
-                        currentBedMongoId: bed ?? cur.currentBedMongoId,
+                        // Prefer non-null server bed so Redux matches GET /api/admissions/active after admit/transfer.
+                        currentBedMongoId: serverBed ?? cur.currentBedMongoId,
                     };
                     continue;
                 }
