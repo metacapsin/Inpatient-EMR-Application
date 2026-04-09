@@ -6,7 +6,7 @@ import { FaUser, FaClipboardList, FaPlus, FaTimes } from '../../lib/fa-icons';
 import { Pencil, Trash2, AlertTriangle, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { usePatientId } from '../../hooks/usePatientId';
-import type { ContactRoleUi, FamilyContactRecord, VisitorRecord, VisitorStatusUi } from '../../services/visitorsFamily.service';
+import type { FamilyContactRecord, VisitorRecord, VisitorStatusUi } from '../../services/visitorsFamily.service';
 import {
     createFamilyContactForPatient,
     createVisitorForPatient,
@@ -346,7 +346,6 @@ function VisitorModal({
 const EMPTY_CONTACT: Omit<FamilyContactRecord, 'id'> = {
     name: '',
     relationship: '',
-    role: 'Family',
     phone: '',
     email: '',
     isNOK: false,
@@ -382,26 +381,14 @@ function ContactModal({
                         <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Full Name *</label>
                         <input className="form-input w-full" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Full name" />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Relationship</label>
-                            <input
-                                className="form-input w-full"
-                                value={form.relationship}
-                                onChange={(e) => set('relationship', e.target.value)}
-                                placeholder="e.g. Spouse"
-                            />
-                        </div>
-                        <div>
-                            <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Role</label>
-                            <select className="form-select w-full" value={form.role} onChange={(e) => set('role', e.target.value as ContactRoleUi)}>
-                                {(['Next of Kin', 'Guardian', 'Emergency Contact', 'Family', 'Other'] as ContactRoleUi[]).map((r) => (
-                                    <option key={r} value={r}>
-                                        {r}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
+                    <div>
+                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Relationship</label>
+                        <input
+                            className="form-input w-full"
+                            value={form.relationship}
+                            onChange={(e) => set('relationship', e.target.value)}
+                            placeholder="e.g. Spouse"
+                        />
                     </div>
                     <div>
                         <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Phone *</label>
@@ -589,7 +576,7 @@ const VisitorsContacts: React.FC = () => {
                 </div>
             ) : null}
 
-            {nok ? (
+            {/* {nok ? (
                 <div className="mb-5 flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
                     <span className="font-semibold text-primary">NOK:</span>
                     <span className="text-gray-800 dark:text-gray-200">{nok.name}</span>
@@ -598,7 +585,7 @@ const VisitorsContacts: React.FC = () => {
                     <span className="text-gray-500">·</span>
                     <span className="text-gray-600 dark:text-gray-400">{nok.phone}</span>
                 </div>
-            ) : null}
+            ) : null} */}
 
             <div className="mb-5">
                 <ul className="flex border-b border-white-light dark:border-[#191e3a]">
@@ -735,7 +722,6 @@ const VisitorsContacts: React.FC = () => {
                                         <tr className="border-b border-white-light dark:border-[#191e3a]">
                                             <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Name</th>
                                             <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Relationship</th>
-                                            <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Role</th>
                                             <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Phone</th>
                                             <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Email</th>
                                             <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">NOK</th>
@@ -747,9 +733,6 @@ const VisitorsContacts: React.FC = () => {
                                             <tr key={c.id} className="border-b border-white-light hover:bg-gray-50 dark:border-[#191e3a] dark:hover:bg-white/5">
                                                 <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{c.name}</td>
                                                 <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{c.relationship}</td>
-                                                <td className="px-3 py-2">
-                                                    <span className="inline-block rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{c.role}</span>
-                                                </td>
                                                 <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{c.phone}</td>
                                                 <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{c.email || '—'}</td>
                                                 <td className="px-3 py-2">

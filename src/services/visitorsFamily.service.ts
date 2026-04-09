@@ -26,13 +26,10 @@ export interface VisitorRecord {
     status: string;
 }
 
-export type ContactRoleUi = 'Next of Kin' | 'Guardian' | 'Emergency Contact' | 'Family' | 'Other';
-
 export interface FamilyContactRecord {
     id: string;
     name: string;
     relationship: string;
-    role: ContactRoleUi;
     phone: string;
     email?: string;
     isNOK: boolean;
@@ -51,14 +48,6 @@ function buildFamilyContactWritePayload(patientId: string, c: Omit<FamilyContact
         isAuthorizedForInfo: true,
         status: true,
     };
-}
-
-function normalizeRole(s: string): ContactRoleUi {
-    const t = s.trim();
-    const opts: ContactRoleUi[] = ['Next of Kin', 'Guardian', 'Emergency Contact', 'Family', 'Other'];
-    const hit = opts.find((o) => o.toLowerCase() === t.toLowerCase());
-    if (hit) return hit;
-    return 'Other';
 }
 
 function pickNullableIsoString(row: Record<string, unknown>, key: string): string | null {
@@ -107,7 +96,6 @@ function parseFamilyRow(row: Record<string, unknown>): FamilyContactRecord | nul
         id,
         name,
         relationship: pickString(row, 'relationship', 'relation') || '',
-        role: normalizeRole(pickString(row, 'role', 'contactRole', 'type', 'contactType')),
         phone: pickString(row, 'mobilePhone', 'phone', 'phoneNumber', 'mobile', 'cellPhone') || '',
         email: pickString(row, 'emailAddress', 'email') || undefined,
         isNOK: Boolean(nok),
