@@ -115,6 +115,16 @@ const LiveBedBoardPage = () => {
               ? String(encountersQuery.error)
               : null;
 
+    const encounterRows = useMemo(() => {
+        const r = encountersQuery.data;
+        if (!r || !r.ok) return [];
+        return Array.isArray(r.data) ? r.data : [];
+    }, [encountersQuery.data]);
+
+    const encounterErrorMessage =
+        encError ||
+        (encountersQuery.data && !encountersQuery.data.ok ? encountersQuery.data.message : null);
+
     const onFilterEncountersByBed = (bedId: string) => {
         setParam({ tab: 'encounters', bedId, patientId: null });
     };
@@ -272,9 +282,9 @@ const LiveBedBoardPage = () => {
                     </div>
                     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                     <ActiveEncountersPanel
-                        rows={encountersQuery.data ?? []}
+                        rows={encounterRows}
                         loading={encountersQuery.isLoading}
-                        errorMessage={encError}
+                        errorMessage={encounterErrorMessage}
                     />
                     </div>
                 </div>

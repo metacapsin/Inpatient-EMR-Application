@@ -4,6 +4,8 @@ import path from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
+    // Avoid writing under node_modules/.vite (fails if node_modules was installed with sudo / root-owned).
+    cacheDir: path.resolve(__dirname, '.vite'),
     plugins: [react()],
     resolve: {
         alias: {

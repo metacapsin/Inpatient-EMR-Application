@@ -96,6 +96,77 @@ if (initialState.token) {
     axios.defaults.headers.common['Authorization'] = `Bearer ${initialState.token}`;
 }
 
+/** EMR-Backend login only returns tokens; staff profile (incl. role) comes from GET /Users/getUserProfile. */
+function roleFromProfilePayload(raw: unknown): string | null {
+    if (raw == null) return null;
+    if (Array.isArray(raw)) {
+        const parts = raw.filter(Boolean).map(String);
+        return parts.length ? parts.join(',') : null;
+    }
+    const s = String(raw).trim();
+    return s || null;
+}
+
+async function fetchStaffProfileAfterAuth(email: string, baseUser: User): Promise<{ user: User; role: string | null }> {
+    try {
+        const response = await api.get<{ data?: Record<string, unknown> }>('/Users/getUserProfile');
+        const p = response.data?.data;
+        if (!p || typeof p !== 'object') {
+            return { user: baseUser, role: null };
+        }
+        const role = roleFromProfilePayload(p.role) ?? null;
+        const userPayload: User = {
+            ...baseUser,
+            ...p,
+            email: String(p.email ?? baseUser.email ?? email),
+            role: role ?? (baseUser.role as string | undefined),
+        };
+        if (p._id != null) {
+            userPayload.id = String(p._id);
+        }
+        localStorage.setItem('user', JSON.stringify(userPayload));
+        if (role) {
+            localStorage.setItem('role', role);
+        }
+        return { user: userPayload, role };
+    } catch {
+        localStorage.setItem('user', JSON.stringify(baseUser));
+        return { user: baseUser, role: null };
+    }
+}
+
+/** Load staff role + user fields when we have an access token but login did not return them. */
+export const hydrateStaffSession = createAsyncThunk(
+    'auth/hydrateStaff',
+    async (_, { rejectWithValue }) => {
+        try {
+            const response = await api.get<{ data?: Record<string, unknown> }>('/Users/getUserProfile');
+            const p = response.data?.data;
+            if (!p || typeof p !== 'object') {
+                return rejectWithValue('No profile');
+            }
+            const role = roleFromProfilePayload(p.role);
+            const email = String(p.email ?? '');
+            const userPayload: User = {
+                ...p,
+                email,
+                role: role ?? undefined,
+            } as User;
+            if (p._id != null) {
+                userPayload.id = String(p._id);
+            }
+            return { user: userPayload, role };
+        } catch (error: unknown) {
+            const message =
+                error &&
+                typeof error === 'object' &&
+                'response' in error &&
+                (error as { response?: { data?: { message?: string } } }).response?.data?.message;
+            return rejectWithValue(typeof message === 'string' ? message : 'Profile fetch failed');
+        }
+    }
+);
+
 // Async thunks
 export const loginUser = createAsyncThunk(
     'auth/login',
@@ -114,20 +185,27 @@ export const loginUser = createAsyncThunk(
                 return rejectWithValue('Invalid login response from server');
             }
 
-            const userPayload: User = parsed.user
+            let userPayload: User = parsed.user
                 ? ({ ...parsed.user, email: String((parsed.user as User).email ?? email) } as User)
                 : ({ email } as User);
+            let role: string | null = parsed.role;
 
             persistAuthPair(parsed.token, parsed.refreshToken);
-            localStorage.setItem('user', JSON.stringify(userPayload));
-            if (parsed.role) localStorage.setItem('role', parsed.role);
-
             axios.defaults.headers.common['Authorization'] = `Bearer ${parsed.token}`;
+
+            if (!role || !userPayload.role) {
+                const hydrated = await fetchStaffProfileAfterAuth(email, userPayload);
+                userPayload = hydrated.user;
+                role = hydrated.role ?? role;
+            } else {
+                localStorage.setItem('user', JSON.stringify(userPayload));
+                if (role) localStorage.setItem('role', role);
+            }
 
             return {
                 token: parsed.token,
                 user: userPayload,
-                role: parsed.role,
+                role,
                 data: response.data,
             };
         } catch (error: any) {
@@ -322,6 +400,14 @@ const authSlice = createSlice({
             })
             .addCase(fetchCloudSubscriptions.fulfilled, (state, action) => {
                 state.cloudSubscriptions = action.payload;
+            })
+            .addCase(hydrateStaffSession.fulfilled, (state, action) => {
+                state.user = action.payload.user;
+                state.role = action.payload.role;
+                localStorage.setItem('user', JSON.stringify(action.payload.user));
+                if (action.payload.role) {
+                    localStorage.setItem('role', action.payload.role);
+                }
             });
     },
 });

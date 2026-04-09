@@ -114,6 +114,11 @@ const Sidebar = () => {
                                                 <li>
                                                     <NavLink to="/app/bed-board">Bed board</NavLink>
                                                 </li>
+                                                <li>
+                                                    <NavLink to="/app/inpatient/clinical" title="Physician & nursing notes, vitals, orders">
+                                                        Inpatient clinical workspace
+                                                    </NavLink>
+                                                </li>
                                                 {/* <li>
                                                     <NavLink to="/app/adt">ADT workspace</NavLink>
                                                 </li> */}

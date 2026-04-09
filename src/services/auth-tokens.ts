@@ -3,8 +3,8 @@ import { notifyAccessTokenRefreshed, triggerAuthClear } from './auth-events';
 
 export const API_BASE_URL =
   (import.meta.env.VITE_EMR_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ||
-  'https://devapi.mdcareproviders.com';
-
+  'http://localhost:1338';
+// 'https://devapi.mdcareproviders.com';
 const TOKEN_KEY = 'token';
 const REFRESH_TOKEN_KEY = 'refreshToken';
 

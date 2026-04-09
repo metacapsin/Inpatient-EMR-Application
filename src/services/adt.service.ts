@@ -91,45 +91,82 @@ export function formatAdtUserMessage(result: AdtPostErr): string {
     return result.message;
 }
 
-export type ListActiveEncountersParams = {
-    patientId?: string;
-    bedId?: string;
+/** Row from GET /api/admissions/active (in-progress ADT encounter). */
+export type ActiveEncounterRow = {
+    id: string;
+    patientId: string;
+    /** Resolved from patient-details when available */
+    patientName?: string;
+    currentBedId?: string;
+    status?: string;
+    admissionTimestamp?: string;
+    admissionType?: string;
+    [key: string]: unknown;
 };
 
-function normalizeActiveEncounterRow(item: unknown): ActiveEncounterRow | null {
-    const row = asRecord(item);
-    if (!row) return null;
-    const id = extractIdString(row.id ?? row._id ?? row.encounterId);
-    if (!id) return null;
-    return { ...row, id };
+export type ListActiveEncountersOk = {
+    ok: true;
+    data: ActiveEncounterRow[];
+    message: string;
+};
+
+export type ListActiveEncountersErr = {
+    ok: false;
+    status: number;
+    message: string;
+};
+
+export type ListActiveEncountersResult = ListActiveEncountersOk | ListActiveEncountersErr;
+
+/** GET /api/admissions/active — optional patientId / bedId filters. */
+export async function listActiveEncounters(params?: {
+    patientId?: string;
+    bedId?: string;
+}): Promise<ListActiveEncountersResult> {
+    try {
+        const { data } = await api.get<{ status: string; message?: string; data?: ActiveEncounterRow[] }>(
+            '/api/admissions/active',
+            { params: params || {} }
+        );
+        if (data.status === 'error' || !Array.isArray(data.data)) {
+            return {
+                ok: false,
+                status: 200,
+                message: typeof data.message === 'string' ? data.message : 'Failed to load encounters',
+            };
+        }
+        const normalized: ActiveEncounterRow[] = data.data.map((row) => {
+            const rec = row as Record<string, unknown>;
+            const id = pickEncounterId(rec);
+            return {
+                ...rec,
+                id,
+                patientId: String(rec.patientId ?? ''),
+            } as ActiveEncounterRow;
+        });
+        return { ok: true, data: normalized, message: data.message || '' };
+    } catch (e) {
+        const ax = e as AxiosError<unknown>;
+        const status = ax.response?.status ?? 0;
+        const payload = ax.response?.data;
+        const message =
+            typeof payload === 'object' &&
+            payload !== null &&
+            'message' in payload &&
+            typeof (payload as { message: unknown }).message === 'string'
+                ? (payload as { message: string }).message
+                : ax.message || 'Request failed';
+        return { ok: false, status, message };
+    }
 }
 
-/**
- * GET /api/admissions/active — in-progress admissions, newest first (server ordering).
- */
-export async function listActiveEncounters(params?: ListActiveEncountersParams): Promise<ActiveEncounterRow[]> {
-    const q: Record<string, string> = {};
-    const p = params?.patientId?.trim();
-    const b = params?.bedId?.trim();
-    if (p) q.patientId = p;
-    if (b) q.bedId = b;
-    try {
-        const { data } = await api.get<unknown>('/api/admissions/active', { params: Object.keys(q).length ? q : undefined });
-        const top = asRecord(data);
-        if (top && top.status === 'error') {
-            const msg = typeof top.message === 'string' ? top.message : 'Failed to load active encounters';
-            throw new Error(msg);
-        }
-        const rows = unwrapList(data);
-        const out: ActiveEncounterRow[] = [];
-        for (const item of rows) {
-            const row = normalizeActiveEncounterRow(item);
-            if (row) out.push(row);
-        }
-        return out;
-    } catch (e) {
-        throw new Error(getApiErrorMessage(e, 'Failed to load active encounters'));
+function pickEncounterId(row: Record<string, unknown>): string {
+    if (typeof row.id === 'string' && row.id) return row.id;
+    const _id = row._id;
+    if (_id && typeof _id === 'object' && _id !== null && 'toString' in _id) {
+        return String((_id as { toString(): string }).toString());
     }
+    return typeof row.id === 'string' ? row.id : '';
 }
 
 export const adtApi = {

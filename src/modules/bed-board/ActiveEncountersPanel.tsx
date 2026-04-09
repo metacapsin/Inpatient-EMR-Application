@@ -68,7 +68,7 @@ export function ActiveEncountersPanel({ rows, loading, errorMessage }: ActiveEnc
     const [pageSize, setPageSize] = useState(25);
 
     const sorted = useMemo(() => {
-        const list = [...rows];
+        const list = Array.isArray(rows) ? [...rows] : [];
         const mult = sortOrder === 'asc' ? 1 : -1;
         list.sort((a, b) => {
             if (sortBy === 'admission') {
@@ -92,7 +92,7 @@ export function ActiveEncountersPanel({ rows, loading, errorMessage }: ActiveEnc
         return list;
     }, [rows, sortBy, sortOrder]);
 
-    const rowSignature = useMemo(() => rows.map((e) => e.id).join('|'), [rows]);
+    const rowSignature = useMemo(() => (Array.isArray(rows) ? rows : []).map((e) => e.id).join('|'), [rows]);
     useEffect(() => {
         setPage(1);
     }, [rowSignature]);
