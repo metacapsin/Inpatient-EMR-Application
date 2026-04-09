@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { format, parseISO, isValid } from 'date-fns';
-import type { ActiveEncounterRow } from '../../types/adt';
+import { format, isToday, isYesterday, parseISO, isValid } from 'date-fns';
+import type { LiveBedBoardRow } from '../../types/liveBedBoard';
 import { cn } from '../../lib/utils';
-import { extractIdString, pickString } from '../../lib/apiPayload';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 0] as const;
 
@@ -12,51 +11,52 @@ function pageSizeLabel(n: number): string {
     return n === 0 ? 'All' : String(n);
 }
 
-type SortKey = 'admission' | 'patient' | 'encounter';
+type SortKey = 'admission' | 'patient' | 'location' | 'status';
 
-function rowPatientId(e: ActiveEncounterRow): string {
-    return extractIdString(e.patientId ?? e.patient_id) || pickString(e, 'patientId');
+function rowLocation(r: LiveBedBoardRow): string {
+    const ward = r.ward?.name ?? '';
+    const room = r.room?.name ?? '';
+    const bedLabel = r.bed.label ?? '';
+    const parts = [ward, room, bedLabel].filter((x) => x.trim() !== '');
+    return parts.length ? parts.join(' / ') : '—';
 }
 
-function rowAdmissionRaw(e: ActiveEncounterRow): string {
-    return pickString(
-        e,
-        'admissionTimestamp',
-        'admissionDate',
-        'admittedAt',
-        'admissionTime',
-        'startDate',
-        'createdAt'
-    );
+function rowPatientName(r: LiveBedBoardRow): string {
+    return r.patient?.displayName?.trim() || '—';
 }
 
-function rowPatientLabel(e: ActiveEncounterRow): string {
-    const name = pickString(e, 'patientName', 'displayName', 'fullName', 'name');
-    const pid = rowPatientId(e);
-    if (name) return name;
-    if (pid) return abbrevId(pid);
-    return '—';
+function patientIdForActions(r: LiveBedBoardRow): string | null {
+    const id = r.patient?.id ?? r.encounter?.patientId;
+    return id?.trim() ? id.trim() : null;
 }
 
-function abbrevId(id: string): string {
-    const t = id.trim();
-    if (t.length <= 12) return t;
-    return `${t.slice(0, 10)}…`;
+function rowAdmissionRaw(r: LiveBedBoardRow): string {
+    return r.encounter?.admissionTimestamp?.trim() ?? '';
 }
 
-function formatAdmission(ts: string): string {
+function formatAdmissionRelative(ts: string): string {
     if (!ts.trim()) return '—';
     try {
         const d = parseISO(ts.trim());
         if (!isValid(d)) return ts.trim();
-        return format(d, 'MMM d, yyyy HH:mm');
+        if (isToday(d)) return `Today · ${format(d, 'h:mm a')}`;
+        if (isYesterday(d)) return `Yesterday · ${format(d, 'h:mm a')}`;
+        return format(d, 'MMM d, yyyy');
     } catch {
         return ts.trim();
     }
 }
 
+function formatEncounterStatus(raw: string | undefined): string {
+    const compact = (raw || '').toLowerCase().replace(/[\s_-]+/g, '');
+    if (compact.includes('inprogress') || compact === 'active') return 'In Progress';
+    if (compact.includes('admitted') || compact.includes('admit')) return 'Admitted';
+    if (!raw?.trim()) return 'In Progress';
+    return raw.replace(/_/g, ' ');
+}
+
 interface ActiveEncountersPanelProps {
-    rows: ActiveEncounterRow[];
+    rows: LiveBedBoardRow[];
     loading: boolean;
     errorMessage: string | null;
 }
@@ -71,6 +71,8 @@ export function ActiveEncountersPanel({ rows, loading, errorMessage }: ActiveEnc
         const list = Array.isArray(rows) ? [...rows] : [];
         const mult = sortOrder === 'asc' ? 1 : -1;
         list.sort((a, b) => {
+            const idA = a.encounter?.id ?? a.bed.id;
+            const idB = b.encounter?.id ?? b.bed.id;
             if (sortBy === 'admission') {
                 const ta = rowAdmissionRaw(a);
                 const tb = rowAdmissionRaw(b);
@@ -79,20 +81,32 @@ export function ActiveEncountersPanel({ rows, loading, errorMessage }: ActiveEnc
                 const va = da && isValid(da) ? da.getTime() : 0;
                 const vb = db && isValid(db) ? db.getTime() : 0;
                 if (va !== vb) return va < vb ? -mult : mult;
-                return a.id.localeCompare(b.id) * mult;
+                return idA.localeCompare(idB) * mult;
             }
             if (sortBy === 'patient') {
-                const pa = rowPatientLabel(a).toLowerCase();
-                const pb = rowPatientLabel(b).toLowerCase();
+                const pa = rowPatientName(a).toLowerCase();
+                const pb = rowPatientName(b).toLowerCase();
                 if (pa !== pb) return pa < pb ? -mult : mult;
-                return a.id.localeCompare(b.id) * mult;
+                return idA.localeCompare(idB) * mult;
             }
-            return a.id.localeCompare(b.id) * mult;
+            if (sortBy === 'location') {
+                const la = rowLocation(a).toLowerCase();
+                const lb = rowLocation(b).toLowerCase();
+                if (la !== lb) return la < lb ? -mult : mult;
+                return idA.localeCompare(idB) * mult;
+            }
+            const sa = formatEncounterStatus(a.encounter?.status).toLowerCase();
+            const sb = formatEncounterStatus(b.encounter?.status).toLowerCase();
+            if (sa !== sb) return sa < sb ? -mult : mult;
+            return idA.localeCompare(idB) * mult;
         });
         return list;
     }, [rows, sortBy, sortOrder]);
 
-    const rowSignature = useMemo(() => (Array.isArray(rows) ? rows : []).map((e) => e.id).join('|'), [rows]);
+    const rowSignature = useMemo(
+        () => (Array.isArray(rows) ? rows : []).map((r) => r.encounter?.id ?? r.bed.id).join('|'),
+        [rows]
+    );
     useEffect(() => {
         setPage(1);
     }, [rowSignature]);
@@ -131,12 +145,12 @@ export function ActiveEncountersPanel({ rows, loading, errorMessage }: ActiveEnc
                 type="button"
                 onClick={() => toggleSort(key)}
                 className={cn(
-                    '-mx-1 inline-flex w-full items-center gap-1.5 rounded-md px-1 py-0.5 text-left hover:bg-gray-100/80 dark:hover:bg-white/5',
+                    '-mx-0.5 inline-flex w-full items-center gap-1 rounded px-0.5 py-0.5 text-left transition-colors duration-150 hover:bg-gray-100/70 dark:hover:bg-white/[0.04]',
                     active ? 'text-primary dark:text-primary-200' : 'text-gray-500 dark:text-gray-400'
                 )}
             >
                 <span>{label}</span>
-                <span className="text-xs font-normal tabular-nums text-gray-400" aria-hidden>
+                <span className="text-[10px] font-normal tabular-nums text-gray-400" aria-hidden>
                     {active ? (sortOrder === 'asc' ? '↑' : '↓') : '↕'}
                 </span>
             </button>
@@ -145,91 +159,100 @@ export function ActiveEncountersPanel({ rows, loading, errorMessage }: ActiveEnc
 
     if (errorMessage) {
         return (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-100">
+            <div className="rounded-lg border border-red-200/80 bg-red-50/90 px-3 py-2 text-xs text-red-900 dark:border-red-900/40 dark:bg-red-950/35 dark:text-red-100">
                 {errorMessage}
             </div>
         );
     }
 
     return (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-[#1a1a1a]">
-            <div className="min-h-0 flex-1 overflow-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
-                <thead className="sticky top-0 z-10 border-b border-gray-200 bg-gray-50/95 text-xs font-semibold uppercase tracking-wide text-gray-500 backdrop-blur-sm dark:border-white/10 dark:bg-[#1a1a1a]/95 dark:text-gray-400">
-                    <tr>
-                        <th className="px-3 py-2.5">{sortBtn('patient', 'Patient')}</th>
-                        <th className="px-3 py-2.5 font-mono text-[10px]">Patient id</th>
-                        <th className="px-3 py-2.5">{sortBtn('admission', 'Admission')}</th>
-                        <th className="px-3 py-2.5">{sortBtn('encounter', 'Encounter')}</th>
-                        <th className="px-3 py-2.5">Status</th>
-                        <th className="px-3 py-2.5 text-right">Actions</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-white/[0.06]">
-                    {loading ? (
-                        Array.from({ length: 6 }).map((_, i) => (
-                            <tr key={i}>
-                                <td colSpan={6} className="px-3 py-2">
-                                    <div className="h-4 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
-                                </td>
-                            </tr>
-                        ))
-                    ) : total === 0 ? (
-                        <tr>
-                            <td colSpan={6} className="px-3 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-                                No in-progress admissions for the current filter.
-                            </td>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-gray-200/45 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)] dark:border-white/[0.06] dark:bg-[#1a1a1a] dark:shadow-none">
+            <div className="h-[calc(100vh-220px)] max-h-full min-h-[12rem] overflow-y-auto overflow-x-auto overscroll-contain">
+                <table className="w-full min-w-[720px] border-collapse text-left text-[13px] leading-snug text-gray-900 dark:text-gray-100">
+                    <thead className="sticky top-0 z-20 border-b border-gray-200/50 text-[10px] font-semibold uppercase tracking-wide text-gray-500 backdrop-blur-sm dark:border-white/[0.05] dark:text-gray-400">
+                        <tr className="h-8">
+                            <th className="bg-gray-50/95 px-2 py-1.5 align-middle dark:bg-[#1c1c1c]/95">
+                                {sortBtn('patient', 'Patient name')}
+                            </th>
+                            <th className="bg-gray-50/95 px-2 py-1.5 align-middle dark:bg-[#1c1c1c]/95">
+                                {sortBtn('location', 'Location')}
+                            </th>
+                            <th className="bg-gray-50/95 px-2 py-1.5 align-middle dark:bg-[#1c1c1c]/95">
+                                {sortBtn('admission', 'Admission time')}
+                            </th>
+                            <th className="bg-gray-50/95 px-2 py-1.5 align-middle dark:bg-[#1c1c1c]/95">
+                                {sortBtn('status', 'Status')}
+                            </th>
+                            <th className="bg-gray-50/95 px-2 py-1.5 text-right align-middle dark:bg-[#1c1c1c]/95">Actions</th>
                         </tr>
-                    ) : (
-                        pageSlice.map((e) => {
-                            const pid = rowPatientId(e);
-                            const adm = rowAdmissionRaw(e);
-                            const st = pickString(e, 'status', 'encounterStatus') || 'in-progress';
-                            return (
-                                <tr key={e.id} className="hover:bg-gray-50/80 dark:hover:bg-white/[0.03]">
-                                    <td className="px-3 py-2.5 font-medium text-gray-900 dark:text-white">
-                                        {rowPatientLabel(e)}
-                                    </td>
-                                    <td className="px-3 py-2.5 font-mono text-xs text-gray-600 dark:text-gray-300">
-                                        {pid ? abbrevId(pid) : '—'}
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-2.5 text-gray-600 dark:text-gray-300">
-                                        {formatAdmission(adm)}
-                                    </td>
-                                    <td className="px-3 py-2.5 font-mono text-xs text-gray-600 dark:text-gray-300">
-                                        {abbrevId(e.id)}
-                                    </td>
-                                    <td className="px-3 py-2.5 text-xs capitalize text-gray-700 dark:text-gray-200">{st}</td>
-                                    <td className="px-3 py-2.5 text-right">
-                                        {pid ? (
-                                            <div className="flex flex-wrap justify-end gap-1.5">
-                                                <Link
-                                                    to={`/app/facesheet/${encodeURIComponent(pid)}`}
-                                                    className="inline-flex h-8 items-center justify-center rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-800 dark:border-white/12 dark:bg-[#1a1816] dark:text-gray-100"
-                                                >
-                                                    Chart
-                                                </Link>
-                                                <Link
-                                                    to={`/app/facesheet/${encodeURIComponent(pid)}/adt`}
-                                                    className="inline-flex h-8 items-center justify-center rounded-lg bg-primary px-2.5 text-xs font-semibold text-white"
-                                                >
-                                                    ADT
-                                                </Link>
-                                            </div>
-                                        ) : (
-                                            <span className="text-xs text-gray-400">—</span>
-                                        )}
+                    </thead>
+                    <tbody className="divide-y divide-gray-100/70 dark:divide-white/[0.04]">
+                        {loading ? (
+                            Array.from({ length: 10 }).map((_, i) => (
+                                <tr key={i} className="h-9">
+                                    <td colSpan={5} className="px-2 py-1.5 align-middle">
+                                        <div className="h-3 animate-pulse rounded-sm bg-gray-200/90 dark:bg-gray-700/80" />
                                     </td>
                                 </tr>
-                            );
-                        })
-                    )}
-                </tbody>
-            </table>
+                            ))
+                        ) : total === 0 ? (
+                            <tr>
+                                <td colSpan={5} className="px-2 py-5 text-center text-[13px] text-gray-500 dark:text-gray-400">
+                                    No admitted patients with an active encounter for the current bed board filters.
+                                </td>
+                            </tr>
+                        ) : (
+                            pageSlice.map((r) => {
+                                const encId = r.encounter?.id ?? r.bed.id;
+                                const pid = patientIdForActions(r);
+                                const adm = rowAdmissionRaw(r);
+                                return (
+                                    <tr
+                                        key={encId}
+                                        className="h-9 transition-colors duration-150 ease-out hover:bg-gray-50/85 dark:hover:bg-white/[0.035]"
+                                    >
+                                        <td className="max-w-[14rem] truncate px-2 py-1 align-middle font-medium text-gray-900 dark:text-white">
+                                            {rowPatientName(r)}
+                                        </td>
+                                        <td className="min-w-[10rem] max-w-[18rem] truncate px-2 py-1 align-middle text-gray-600 dark:text-gray-300">
+                                            {rowLocation(r)}
+                                        </td>
+                                        <td className="whitespace-nowrap px-2 py-1 align-middle text-gray-600 dark:text-gray-300">
+                                            {formatAdmissionRelative(adm)}
+                                        </td>
+                                        <td className="px-2 py-1 align-middle text-[13px] text-gray-700 dark:text-gray-200">
+                                            {formatEncounterStatus(r.encounter?.status)}
+                                        </td>
+                                        <td className="px-2 py-1 text-right align-middle">
+                                            {pid ? (
+                                                <div className="inline-flex flex-nowrap items-center justify-end gap-0.5">
+                                                    <Link
+                                                        to={`/app/facesheet/${encodeURIComponent(pid)}`}
+                                                        className="inline-flex h-6 shrink-0 items-center justify-center rounded border border-gray-200/70 bg-white px-1.5 text-[11px] font-semibold text-gray-800 transition-colors duration-150 hover:bg-gray-50/90 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.06]"
+                                                    >
+                                                        Chart
+                                                    </Link>
+                                                    <Link
+                                                        to={`/app/facesheet/${encodeURIComponent(pid)}/adt`}
+                                                        className="inline-flex h-6 shrink-0 items-center justify-center rounded bg-primary px-1.5 text-[11px] font-semibold text-white transition-colors duration-150 hover:bg-primary/90"
+                                                    >
+                                                        ADT
+                                                    </Link>
+                                                </div>
+                                            ) : (
+                                                <span className="text-[12px] text-gray-400">—</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            })
+                        )}
+                    </tbody>
+                </table>
             </div>
             {!loading && total > 0 ? (
-                <div className="flex shrink-0 flex-col gap-3 border-t border-gray-200 px-3 py-3 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                <div className="flex shrink-0 flex-col gap-1.5 border-t border-gray-200/45 px-2 py-1.5 dark:border-white/[0.05] sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-[11px] text-gray-600 dark:text-gray-400">
                         {showAll ? (
                             <>
                                 Showing all{' '}
@@ -243,8 +266,8 @@ export function ActiveEncountersPanel({ rows, loading, errorMessage }: ActiveEnc
                             </>
                         )}
                     </p>
-                    <div className="flex flex-wrap items-center gap-3">
-                        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        <label className="flex items-center gap-1 text-[11px] text-gray-600 dark:text-gray-400">
                             <span>Rows</span>
                             <select
                                 value={pageSize}
@@ -252,7 +275,7 @@ export function ActiveEncountersPanel({ rows, loading, errorMessage }: ActiveEnc
                                     setPageSize(Number(e.target.value));
                                     setPage(1);
                                 }}
-                                className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm dark:border-white/12 dark:bg-[#1a1816]"
+                                className="h-7 rounded border border-gray-200/70 bg-white px-1.5 text-[11px] dark:border-white/[0.08] dark:bg-[#1a1816]"
                             >
                                 {PAGE_SIZE_OPTIONS.map((n) => (
                                     <option key={n} value={n}>
@@ -262,27 +285,27 @@ export function ActiveEncountersPanel({ rows, loading, errorMessage }: ActiveEnc
                             </select>
                         </label>
                         {totalPages > 1 ? (
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-0.5">
                                 <button
                                     type="button"
                                     title="Previous page"
                                     disabled={safePage <= 1}
                                     onClick={() => setPage((p) => Math.max(1, p - 1))}
-                                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-gray-600 dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/5"
+                                    className="flex h-7 w-7 items-center justify-center rounded border border-gray-200/70 bg-white text-gray-700 transition-colors duration-150 hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
                                 >
-                                    <ChevronLeft className="h-4 w-4" />
+                                    <ChevronLeft className="h-3.5 w-3.5" />
                                 </button>
-                                <span className="min-w-[5.5rem] text-center text-sm text-gray-600 dark:text-gray-400">
-                                    Page {safePage} / {totalPages}
+                                <span className="min-w-[4rem] text-center text-[11px] tabular-nums text-gray-600 dark:text-gray-400">
+                                    {safePage}/{totalPages}
                                 </span>
                                 <button
                                     type="button"
                                     title="Next page"
                                     disabled={safePage >= totalPages}
                                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-gray-600 dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/5"
+                                    className="flex h-7 w-7 items-center justify-center rounded border border-gray-200/70 bg-white text-gray-700 transition-colors duration-150 hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
                                 >
-                                    <ChevronRight className="h-4 w-4" />
+                                    <ChevronRight className="h-3.5 w-3.5" />
                                 </button>
                             </div>
                         ) : null}

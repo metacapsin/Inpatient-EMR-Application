@@ -15,6 +15,8 @@ export interface LabeledDropdownProps {
     options: LabeledDropdownOption[];
     onChange: (value: string) => void;
     disabled?: boolean;
+    /** Smaller label and trigger for dense toolbars. */
+    compact?: boolean;
     className?: string;
     'aria-busy'?: boolean;
 }
@@ -27,16 +29,27 @@ export function LabeledDropdown({
     options,
     onChange,
     disabled,
+    compact,
     className,
     'aria-busy': ariaBusy,
 }: LabeledDropdownProps) {
     return (
-        <div className={cn('space-y-2', className)}>
-            <label className="text-sm font-medium text-gray-800 dark:text-gray-200" htmlFor={id}>
+        <div className={cn(compact ? 'space-y-1' : 'space-y-2', className)}>
+            <label
+                className={cn(
+                    'font-medium text-gray-800 dark:text-gray-200',
+                    compact ? 'text-xs text-gray-600 dark:text-gray-400' : 'text-sm'
+                )}
+                htmlFor={id}
+            >
                 {label}
             </label>
             <Select value={value} onValueChange={onChange} disabled={disabled}>
-                <SelectTrigger id={id} className="h-10 w-full min-w-0 shadow-sm" aria-busy={ariaBusy}>
+                <SelectTrigger
+                    id={id}
+                    className={cn('w-full min-w-0', compact ? 'h-8 text-xs shadow-none' : 'h-10 shadow-sm')}
+                    aria-busy={ariaBusy}
+                >
                     <SelectValue placeholder={placeholder} />
                 </SelectTrigger>
                 <SelectContent>

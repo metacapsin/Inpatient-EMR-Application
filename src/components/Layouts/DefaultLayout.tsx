@@ -133,7 +133,9 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
                                         ? 'py-4 sm:py-6 ltr:pl-4 ltr:pr-6 rtl:pr-4 rtl:pl-6'
                                         : isFacesheet
                                           ? 'p-2 sm:p-3 lg:p-4'
-                                          : 'p-6'
+                                          : isBedBoardPage
+                                            ? 'p-4 sm:p-5'
+                                            : 'p-6'
                                 }`}
                             >
                                 {isFacesheet || isPatientListPage || isBedBoardPage ? (

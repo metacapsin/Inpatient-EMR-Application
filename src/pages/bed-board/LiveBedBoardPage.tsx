@@ -4,7 +4,6 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { BedDouble, RefreshCw } from 'lucide-react';
 import { fetchLiveBedBoard } from '../../services/liveBedBoard.service';
-import { listActiveEncounters } from '../../services/adt.service';
 import { getRooms, getWards } from '../../services/rooms.service';
 import { LiveBedBoardSummaryBar } from '../../modules/bed-board/LiveBedBoardSummaryBar';
 import { LiveBedBoardFilters } from '../../modules/bed-board/LiveBedBoardFilters';
@@ -33,9 +32,6 @@ const LiveBedBoardPage = () => {
     const wardId = searchParams.get('wardId')?.trim() ?? '';
     const roomId = searchParams.get('roomId')?.trim() ?? '';
     const bedStatus = searchParams.get('bedStatus')?.trim() ?? '';
-    const encPatientId = searchParams.get('patientId')?.trim() ?? '';
-    const encBedId = searchParams.get('bedId')?.trim() ?? '';
-
     const setParam = useCallback(
         (updates: Record<string, string | null>) => {
             setSearchParams(
@@ -79,18 +75,8 @@ const LiveBedBoardPage = () => {
         queryKey: ['liveBedBoard', boardFilters],
         queryFn: () => fetchLiveBedBoard(boardFilters),
         staleTime: 15_000,
-        refetchInterval: docVisible && tab === 'board' ? POLL_MS : false,
-    });
-
-    const encountersQuery = useQuery({
-        queryKey: ['activeEncounters', { patientId: encPatientId || undefined, bedId: encBedId || undefined }],
-        queryFn: () =>
-            listActiveEncounters({
-                patientId: encPatientId || undefined,
-                bedId: encBedId || undefined,
-            }),
-        staleTime: 15_000,
-        refetchInterval: docVisible && tab === 'encounters' ? POLL_MS : false,
+        /** Single source for board + active encounters tab; keep both views in sync. */
+        refetchInterval: docVisible ? POLL_MS : false,
     });
 
     useEffect(() => {
@@ -102,106 +88,97 @@ const LiveBedBoardPage = () => {
     const lastBoardRefreshed = boardQuery.dataUpdatedAt
         ? format(boardQuery.dataUpdatedAt, 'MMM d, yyyy HH:mm:ss')
         : null;
-    const lastEncRefreshed = encountersQuery.dataUpdatedAt
-        ? format(encountersQuery.dataUpdatedAt, 'MMM d, yyyy HH:mm:ss')
-        : null;
-
     const boardError =
         boardQuery.error instanceof Error ? boardQuery.error.message : boardQuery.error ? String(boardQuery.error) : null;
-    const encError =
-        encountersQuery.error instanceof Error
-            ? encountersQuery.error.message
-            : encountersQuery.error
-              ? String(encountersQuery.error)
-              : null;
 
-    const encounterRows = useMemo(() => {
-        const r = encountersQuery.data;
-        if (!r || !r.ok) return [];
-        return Array.isArray(r.data) ? r.data : [];
-    }, [encountersQuery.data]);
-
-    const encounterErrorMessage =
-        encError ||
-        (encountersQuery.data && !encountersQuery.data.ok ? encountersQuery.data.message : null);
-
-    const onFilterEncountersByBed = (bedId: string) => {
-        setParam({ tab: 'encounters', bedId, patientId: null });
-    };
+    const activeBedBoardRows = useMemo(
+        () => (boardQuery.data?.rows ?? []).filter((r) => r.encounter !== null),
+        [boardQuery.data?.rows]
+    );
 
     return (
-        <div className="panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <div className="shrink-0 space-y-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex min-w-0 items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary dark:bg-primary/20">
-                        <BedDouble className="h-5 w-5" aria-hidden />
+        <div
+            className={`relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200/70 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-6px_rgba(0,0,0,0.06)] dark:border-white/[0.08] dark:bg-[#141210] dark:shadow-[0_8px_32px_-8px_rgba(0,0,0,0.45)] ${
+                tab === 'encounters' ? 'p-3 sm:p-4' : 'p-4'
+            }`}
+        >
+            <div className={`shrink-0 ${tab === 'encounters' ? 'space-y-2' : 'space-y-3'}`}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary dark:bg-primary/15">
+                            <BedDouble className="h-4 w-4" aria-hidden />
+                        </div>
+                        <div className="min-w-0">
+                            <h1 className="text-base font-semibold tracking-tight text-gray-900 dark:text-white">Live bed board</h1>
+                            <p className="mt-0.5 text-xs leading-snug text-gray-500 dark:text-gray-500">
+                                Beds and encounters. ADT:{' '}
+                                <Link to="/app/adt" className="font-medium text-primary underline-offset-2 hover:underline">
+                                    ADT workspace
+                                </Link>{' '}
+                                or chart ADT.
+                            </p>
+                        </div>
                     </div>
-                    <div className="min-w-0">
-                        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Live bed board</h1>
-                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                            Operational view of beds, occupancy, and in-progress encounters. ADT actions use the{' '}
-                            <Link to="/app/adt" className="font-medium text-primary underline-offset-2 hover:underline">
-                                ADT workspace
-                            </Link>{' '}
-                            or chart ADT tab.
-                        </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {tab === 'board' ? (
+                            <button
+                                type="button"
+                                disabled={boardQuery.isFetching}
+                                onClick={() => void boardQuery.refetch()}
+                                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-gray-200/80 bg-white px-3 text-xs font-semibold text-gray-700 transition hover:bg-gray-50/80 disabled:opacity-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
+                            >
+                                <RefreshCw className={`h-3.5 w-3.5 ${boardQuery.isFetching ? 'animate-spin' : ''}`} aria-hidden />
+                                Refresh board
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                disabled={boardQuery.isFetching}
+                                onClick={() => void boardQuery.refetch()}
+                                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-gray-200/80 bg-white px-3 text-xs font-semibold text-gray-700 transition hover:bg-gray-50/80 disabled:opacity-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
+                            >
+                                <RefreshCw className={`h-3.5 w-3.5 ${boardQuery.isFetching ? 'animate-spin' : ''}`} aria-hidden />
+                                Refresh encounters
+                            </button>
+                        )}
                     </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    {tab === 'board' ? (
-                        <button
-                            type="button"
-                            disabled={boardQuery.isFetching}
-                            onClick={() => void boardQuery.refetch()}
-                            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50 disabled:opacity-50 dark:border-white/12 dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/5"
-                        >
-                            <RefreshCw className={`h-4 w-4 ${boardQuery.isFetching ? 'animate-spin' : ''}`} aria-hidden />
-                            Refresh board
-                        </button>
-                    ) : (
-                        <button
-                            type="button"
-                            disabled={encountersQuery.isFetching}
-                            onClick={() => void encountersQuery.refetch()}
-                            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50 disabled:opacity-50 dark:border-white/12 dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/5"
-                        >
-                            <RefreshCw className={`h-4 w-4 ${encountersQuery.isFetching ? 'animate-spin' : ''}`} aria-hidden />
-                            Refresh encounters
-                        </button>
-                    )}
-                </div>
-            </div>
 
-            <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-1 dark:border-white/10">
-                <button
-                    type="button"
-                    onClick={() => setParam({ tab: null })}
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                        tab === 'board'
-                            ? 'bg-primary text-white shadow-sm'
-                            : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5'
-                    }`}
-                >
-                    Board
-                </button>
-                <button
-                    type="button"
-                    onClick={() => setParam({ tab: 'encounters' })}
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                <div
+                    className={`flex flex-wrap gap-1 border-b pb-0.5 dark:border-white/[0.06] ${
                         tab === 'encounters'
-                            ? 'bg-primary text-white shadow-sm'
-                            : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5'
+                            ? 'border-gray-200/45 dark:border-white/[0.05]'
+                            : 'border-gray-200/60'
                     }`}
                 >
-                    Active encounters
-                </button>
-            </div>
+                    <button
+                        type="button"
+                        onClick={() => setParam({ tab: null })}
+                        className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition ${
+                            tab === 'board'
+                                ? 'bg-primary text-white shadow-sm'
+                                : 'text-gray-600 hover:bg-gray-100/80 dark:text-gray-400 dark:hover:bg-white/[0.04]'
+                        }`}
+                    >
+                        Board
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setParam({ tab: 'encounters' })}
+                        className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition ${
+                            tab === 'encounters'
+                                ? 'bg-primary text-white shadow-sm'
+                                : 'text-gray-600 hover:bg-gray-100/80 dark:text-gray-400 dark:hover:bg-white/[0.04]'
+                        }`}
+                    >
+                        Active encounters
+                    </button>
+                </div>
             </div>
 
             {tab === 'board' ? (
-                <div className="mt-4 flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden border-t border-white-light pt-4 dark:border-[#191e3a]">
-                    <div className="shrink-0 space-y-4">
+                <div className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden border-t border-gray-200/50 pt-3 dark:border-white/[0.06]">
+                    <div className="shrink-0 space-y-2">
                     {boardQuery.data ? <LiveBedBoardSummaryBar summary={boardQuery.data.summary} /> : null}
                     <LiveBedBoardFilters
                         wardId={wardId}
@@ -217,75 +194,41 @@ const LiveBedBoardPage = () => {
                         disabled={boardQuery.isFetching}
                     />
                     {lastBoardRefreshed ? (
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Last updated: {lastBoardRefreshed}</p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-500">Last updated: {lastBoardRefreshed}</p>
                     ) : null}
                     {boardQuery.isError && boardError ? (
-                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/35 dark:text-amber-100">
+                        <div className="rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/35 dark:bg-amber-950/30 dark:text-amber-100">
                             {boardError}
                         </div>
                     ) : null}
                     {!boardQuery.isError && !boardQuery.isLoading && boardQuery.data?.rows.length === 0 ? (
-                        <p className="text-sm text-gray-600 dark:text-gray-300">
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
                             No beds returned. If this is unexpected, confirm wards and beds are configured under facility settings.
                         </p>
                     ) : null}
                     </div>
                     {!boardQuery.isError ? (
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                        <LiveBedBoardGrid
-                            rows={boardQuery.data?.rows ?? []}
-                            loading={boardQuery.isLoading}
-                            onFilterEncountersByBed={onFilterEncountersByBed}
-                        />
+                        <LiveBedBoardGrid rows={boardQuery.data?.rows ?? []} loading={boardQuery.isLoading} />
                         </div>
                     ) : null}
                 </div>
             ) : (
-                <div className="mt-4 flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden border-t border-white-light pt-4 dark:border-[#191e3a]">
-                    <div className="shrink-0 space-y-4">
-                    <div className="rounded-xl border border-gray-200/80 bg-white/80 p-4 dark:border-white/10 dark:bg-white/[0.04]">
-                        <p className="text-sm text-gray-600 dark:text-gray-300">
-                            Optional filters match{' '}
-                            <code className="rounded bg-gray-100 px-1 text-xs dark:bg-white/10">GET /api/admissions/active</code>{' '}
-                            query params. Clear to list all in-progress admissions for your tenant.
+                <div className="mt-2 flex min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-hidden border-t border-gray-200/35 pt-2 dark:border-white/[0.05]">
+                    <div className="shrink-0">
+                        <p className="text-[11px] leading-tight text-gray-500 dark:text-gray-500">
+                            Same dataset as Board — adjust ward, room, and bed status on the Board tab.
+                            {lastBoardRefreshed ? (
+                                <span className="text-gray-400 dark:text-gray-600"> · Last updated: {lastBoardRefreshed}</span>
+                            ) : null}
                         </p>
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-gray-700 dark:text-gray-200" htmlFor="enc-patient">
-                                    Patient id
-                                </label>
-                                <input
-                                    id="enc-patient"
-                                    value={encPatientId}
-                                    onChange={(e) => setParam({ patientId: e.target.value.trim() || null })}
-                                    className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 font-mono text-sm dark:border-white/12 dark:bg-[#1a1816]"
-                                    placeholder="Mongo patient id"
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-gray-700 dark:text-gray-200" htmlFor="enc-bed">
-                                    Bed id
-                                </label>
-                                <input
-                                    id="enc-bed"
-                                    value={encBedId}
-                                    onChange={(e) => setParam({ bedId: e.target.value.trim() || null })}
-                                    className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 font-mono text-sm dark:border-white/12 dark:bg-[#1a1816]"
-                                    placeholder="Mongo bed id"
-                                />
-                            </div>
-                        </div>
-                    </div>
-                    {lastEncRefreshed ? (
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Last updated: {lastEncRefreshed}</p>
-                    ) : null}
                     </div>
                     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                    <ActiveEncountersPanel
-                        rows={encounterRows}
-                        loading={encountersQuery.isLoading}
-                        errorMessage={encounterErrorMessage}
-                    />
+                        <ActiveEncountersPanel
+                            rows={activeBedBoardRows}
+                            loading={boardQuery.isLoading}
+                            errorMessage={boardQuery.isError ? boardError : null}
+                        />
                     </div>
                 </div>
             )}

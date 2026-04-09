@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useDispatch } from 'react-redux';
-import { NavLink, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { DateRangePicker } from '../../components/patients/DateRangePicker';
 import { FilterSelect } from '../../components/patients/FilterSelect';
 import { SearchInput } from '../../components/patients/SearchInput';
@@ -319,18 +319,6 @@ const PatientList = () => {
     return (
         <div className="panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <div className="shrink-0">
-                <ul className="flex flex-wrap items-center gap-2 text-sm">
-                    <li>
-                        <NavLink to="/app/patients/list" className="text-primary hover:underline">
-                            Patients
-                        </NavLink>
-                    </li>
-                    <li className="text-gray-400">/</li>
-                    <li className="font-medium text-gray-900 dark:text-white">Patient List</li>
-                </ul>
-            </div>
-
-            <div className="mt-3 shrink-0">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <h3 className="text-lg font-semibold text-gray-800 dark:text-white sm:text-xl">Patient List</h3>
                     <SearchInput

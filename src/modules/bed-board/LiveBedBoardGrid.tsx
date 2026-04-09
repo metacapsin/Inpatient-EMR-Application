@@ -28,9 +28,9 @@ function StatusBadge({ status }: { status: string }) {
     const label = status.trim() || 'unknown';
     const cls = bedStatusIndicatorClass(label);
     return (
-        <span className="inline-flex items-center gap-1.5">
-            <span className={`h-2 w-2 shrink-0 rounded-full ${cls}`} aria-hidden />
-            <span className="capitalize text-gray-800 dark:text-gray-100">{label || '—'}</span>
+        <span className="inline-flex items-center gap-1">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${cls}`} aria-hidden />
+            <span className="text-xs capitalize text-gray-800 dark:text-gray-100">{label || '—'}</span>
         </span>
     );
 }
@@ -38,7 +38,6 @@ function StatusBadge({ status }: { status: string }) {
 interface LiveBedBoardGridProps {
     rows: LiveBedBoardRow[];
     loading: boolean;
-    onFilterEncountersByBed?: (bedId: string) => void;
 }
 
 function GridSkeleton() {
@@ -46,8 +45,8 @@ function GridSkeleton() {
         <>
             {Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
-                    <td className="px-3 py-3" colSpan={9}>
-                        <div className="h-4 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+                    <td className="px-2.5 py-2" colSpan={9}>
+                        <div className="h-3.5 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
                     </td>
                 </tr>
             ))}
@@ -59,7 +58,7 @@ function pageSizeLabel(n: number): string {
     return n === 0 ? 'All' : String(n);
 }
 
-export function LiveBedBoardGrid({ rows, loading, onFilterEncountersByBed }: LiveBedBoardGridProps) {
+export function LiveBedBoardGrid({ rows, loading }: LiveBedBoardGridProps) {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState<number>(25);
 
@@ -87,8 +86,8 @@ export function LiveBedBoardGrid({ rows, loading, onFilterEncountersByBed }: Liv
     }, [page, safePage]);
 
     return (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden">
-            <div className="md:hidden flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:hidden">
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden pe-1">
                     {loading ? (
                         <div className="space-y-2">
@@ -150,15 +149,6 @@ export function LiveBedBoardGrid({ rows, loading, onFilterEncountersByBed }: Liv
                                             </Link>
                                         </>
                                     ) : null}
-                                    {onFilterEncountersByBed ? (
-                                        <button
-                                            type="button"
-                                            onClick={() => onFilterEncountersByBed(row.bed.id)}
-                                            className="inline-flex h-8 items-center justify-center rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 text-xs font-semibold text-primary"
-                                        >
-                                            Active on bed
-                                        </button>
-                                    ) : null}
                                 </div>
                             </article>
                         );
@@ -166,8 +156,8 @@ export function LiveBedBoardGrid({ rows, loading, onFilterEncountersByBed }: Liv
                     )}
                 </div>
                 {!loading && total > 0 ? (
-                    <div className="mt-3 flex shrink-0 flex-col gap-3 border-t border-gray-200 pt-3 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <div className="mt-2 flex shrink-0 flex-col gap-2 border-t border-gray-200/70 pt-2 dark:border-white/[0.06] sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
                             {showAll ? (
                                 <>
                                     Showing all{' '}
@@ -181,8 +171,8 @@ export function LiveBedBoardGrid({ rows, loading, onFilterEncountersByBed }: Liv
                                 </>
                             )}
                         </p>
-                        <div className="flex flex-wrap items-center gap-3">
-                            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <label className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
                                 <span>Rows</span>
                                 <select
                                     value={pageSize}
@@ -190,7 +180,7 @@ export function LiveBedBoardGrid({ rows, loading, onFilterEncountersByBed }: Liv
                                         setPageSize(Number(e.target.value));
                                         setPage(1);
                                     }}
-                                    className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm dark:border-white/12 dark:bg-[#1a1816]"
+                                    className="h-8 rounded-md border border-gray-200/80 bg-white px-2 text-xs dark:border-white/[0.08] dark:bg-[#1a1816]"
                                 >
                                     {PAGE_SIZE_OPTIONS.map((n) => (
                                         <option key={n} value={n}>
@@ -200,27 +190,27 @@ export function LiveBedBoardGrid({ rows, loading, onFilterEncountersByBed }: Liv
                                 </select>
                             </label>
                             {totalPages > 1 ? (
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-0.5">
                                     <button
                                         type="button"
                                         title="Previous page"
                                         disabled={safePage <= 1}
                                         onClick={() => setPage((p) => Math.max(1, p - 1))}
-                                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-gray-600 dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/5"
+                                        className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
                                     >
-                                        <ChevronLeft className="h-4 w-4" />
+                                        <ChevronLeft className="h-3.5 w-3.5" />
                                     </button>
-                                    <span className="min-w-[5.5rem] text-center text-sm text-gray-600 dark:text-gray-400">
-                                        Page {safePage} / {totalPages}
+                                    <span className="min-w-[4.75rem] text-center text-xs tabular-nums text-gray-600 dark:text-gray-400">
+                                        {safePage}/{totalPages}
                                     </span>
                                     <button
                                         type="button"
                                         title="Next page"
                                         disabled={safePage >= totalPages}
                                         onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-gray-600 dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/5"
+                                        className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
                                     >
-                                        <ChevronRight className="h-4 w-4" />
+                                        <ChevronRight className="h-3.5 w-3.5" />
                                     </button>
                                 </div>
                             ) : null}
@@ -229,28 +219,28 @@ export function LiveBedBoardGrid({ rows, loading, onFilterEncountersByBed }: Liv
                 ) : null}
             </div>
 
-            <div className="hidden min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-[#1a1a1a] md:flex">
-                <div className="min-h-0 flex-1 overflow-auto">
-                    <table className="w-full min-w-[880px] text-left text-sm">
-                    <thead className="sticky top-0 z-10 border-b border-gray-200 bg-gray-50/95 text-xs font-semibold uppercase tracking-wide text-gray-500 backdrop-blur-sm dark:border-white/10 dark:bg-[#1a1a1a]/95 dark:text-gray-400">
+            <div className="hidden min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200/70 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.08] dark:bg-[#1a1a1a] dark:shadow-none md:flex md:h-[calc(100dvh-18rem)] md:max-h-[calc(100dvh-18rem)] md:min-h-[16rem]">
+                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto overscroll-contain">
+                    <table className="w-full min-w-[880px] text-left text-xs">
+                    <thead className="sticky top-0 z-10 border-b border-gray-200/80 bg-gray-50/90 text-[10px] font-semibold uppercase tracking-wide text-gray-500 shadow-[0_1px_0_0_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-[#1c1c1c]/95 dark:text-gray-400">
                         <tr>
-                            <th className="px-3 py-2.5">Ward</th>
-                            <th className="px-3 py-2.5">Room</th>
-                            <th className="px-3 py-2.5">Bed</th>
-                            <th className="px-3 py-2.5">Status</th>
-                            <th className="px-3 py-2.5">Patient</th>
-                            <th className="px-3 py-2.5">MRN</th>
-                            <th className="px-3 py-2.5">Admission</th>
-                            <th className="px-3 py-2.5">Encounter</th>
-                            <th className="px-3 py-2.5 text-right">Actions</th>
+                            <th className="px-2.5 py-2">Ward</th>
+                            <th className="px-2.5 py-2">Room</th>
+                            <th className="px-2.5 py-2">Bed</th>
+                            <th className="px-2.5 py-2">Status</th>
+                            <th className="px-2.5 py-2">Patient</th>
+                            <th className="px-2.5 py-2">MRN</th>
+                            <th className="px-2.5 py-2">Admission</th>
+                            <th className="px-2.5 py-2">Encounter</th>
+                            <th className="px-2.5 py-2 text-right">Actions</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-white/[0.06]">
+                    <tbody className="divide-y divide-gray-100/90 dark:divide-white/[0.05]">
                         {loading ? (
                             <GridSkeleton />
                         ) : total === 0 ? (
                             <tr>
-                                <td colSpan={9} className="px-3 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                                <td colSpan={9} className="px-2.5 py-6 text-center text-xs text-gray-500 dark:text-gray-400">
                                     No beds match the current filters.
                                 </td>
                             </tr>
@@ -259,54 +249,48 @@ export function LiveBedBoardGrid({ rows, loading, onFilterEncountersByBed }: Liv
                                 const pid = row.patient?.id;
                                 const encId = row.encounter?.id;
                                 return (
-                                    <tr key={row.bed.id} className="hover:bg-gray-50/80 dark:hover:bg-white/[0.03]">
-                                        <td className="px-3 py-2.5 text-gray-800 dark:text-gray-200">{row.ward?.name ?? '—'}</td>
-                                        <td className="px-3 py-2.5 text-gray-800 dark:text-gray-200">{row.room?.name ?? '—'}</td>
-                                        <td className="px-3 py-2.5 font-medium text-gray-900 dark:text-white">{row.bed.label}</td>
-                                        <td className="px-3 py-2.5" aria-label={`Bed status ${row.bed.bedStatus}`}>
+                                    <tr
+                                        key={row.bed.id}
+                                        className="transition-colors hover:bg-gray-50/90 dark:hover:bg-white/[0.04]"
+                                    >
+                                        <td className="px-2.5 py-1.5 text-gray-800 dark:text-gray-200">{row.ward?.name ?? '—'}</td>
+                                        <td className="px-2.5 py-1.5 text-gray-800 dark:text-gray-200">{row.room?.name ?? '—'}</td>
+                                        <td className="px-2.5 py-1.5 font-medium text-gray-900 dark:text-white">{row.bed.label}</td>
+                                        <td className="px-2.5 py-1.5" aria-label={`Bed status ${row.bed.bedStatus}`}>
                                             <StatusBadge status={row.bed.bedStatus} />
                                         </td>
-                                        <td className="max-w-[140px] truncate px-3 py-2.5 text-gray-800 dark:text-gray-200">
+                                        <td className="max-w-[140px] truncate px-2.5 py-1.5 text-gray-800 dark:text-gray-200">
                                             {row.patient?.displayName ?? '—'}
                                         </td>
-                                        <td className="px-3 py-2.5 font-mono text-xs text-gray-600 dark:text-gray-300">
+                                        <td className="px-2.5 py-1.5 font-mono text-[11px] text-gray-600 dark:text-gray-300">
                                             {row.patient?.mrn || '—'}
                                         </td>
-                                        <td className="whitespace-nowrap px-3 py-2.5 text-gray-600 dark:text-gray-300">
+                                        <td className="whitespace-nowrap px-2.5 py-1.5 text-gray-600 dark:text-gray-300">
                                             {formatAdmission(row.encounter?.admissionTimestamp)}
                                         </td>
                                         <td
-                                            className="px-3 py-2.5 font-mono text-xs text-gray-600 dark:text-gray-300"
+                                            className="px-2.5 py-1.5 font-mono text-[11px] text-gray-600 dark:text-gray-300"
                                             title={encId ?? undefined}
                                         >
                                             {encId ? abbrevId(encId) : '—'}
                                         </td>
-                                        <td className="px-3 py-2.5 text-right">
-                                            <div className="flex flex-wrap justify-end gap-1.5">
+                                        <td className="px-2.5 py-1.5 text-right">
+                                            <div className="flex flex-wrap justify-end gap-1">
                                                 {pid ? (
                                                     <>
                                                         <Link
                                                             to={`/app/facesheet/${encodeURIComponent(pid)}`}
-                                                            className="inline-flex h-8 items-center justify-center rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-800 dark:border-white/12 dark:bg-[#1a1816] dark:text-gray-100"
+                                                            className="inline-flex h-7 items-center justify-center rounded-md border border-gray-200/80 bg-white px-2 text-[11px] font-semibold text-gray-800 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100"
                                                         >
                                                             Chart
                                                         </Link>
                                                         <Link
                                                             to={`/app/facesheet/${encodeURIComponent(pid)}/adt`}
-                                                            className="inline-flex h-8 items-center justify-center rounded-lg bg-primary px-2.5 text-xs font-semibold text-white"
+                                                            className="inline-flex h-7 items-center justify-center rounded-md bg-primary px-2 text-[11px] font-semibold text-white"
                                                         >
                                                             ADT
                                                         </Link>
                                                     </>
-                                                ) : null}
-                                                {onFilterEncountersByBed ? (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => onFilterEncountersByBed(row.bed.id)}
-                                                        className="inline-flex h-8 items-center justify-center rounded-lg border border-dashed border-primary/40 bg-primary/5 px-2.5 text-xs font-semibold text-primary"
-                                                    >
-                                                        Bed filter
-                                                    </button>
                                                 ) : null}
                                             </div>
                                         </td>
@@ -318,8 +302,8 @@ export function LiveBedBoardGrid({ rows, loading, onFilterEncountersByBed }: Liv
                 </table>
                 </div>
                 {!loading && total > 0 ? (
-                    <div className="flex shrink-0 flex-col gap-3 border-t border-gray-200 px-3 py-3 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <div className="flex shrink-0 flex-col gap-2 border-t border-gray-200/70 px-2.5 py-2 dark:border-white/[0.06] sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
                             {showAll ? (
                                 <>
                                     Showing all{' '}
@@ -333,8 +317,8 @@ export function LiveBedBoardGrid({ rows, loading, onFilterEncountersByBed }: Liv
                                 </>
                             )}
                         </p>
-                        <div className="flex flex-wrap items-center gap-3">
-                            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <label className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
                                 <span>Rows</span>
                                 <select
                                     value={pageSize}
@@ -342,7 +326,7 @@ export function LiveBedBoardGrid({ rows, loading, onFilterEncountersByBed }: Liv
                                         setPageSize(Number(e.target.value));
                                         setPage(1);
                                     }}
-                                    className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm dark:border-white/12 dark:bg-[#1a1816]"
+                                    className="h-8 rounded-md border border-gray-200/80 bg-white px-2 text-xs dark:border-white/[0.08] dark:bg-[#1a1816]"
                                 >
                                     {PAGE_SIZE_OPTIONS.map((n) => (
                                         <option key={n} value={n}>
@@ -352,27 +336,27 @@ export function LiveBedBoardGrid({ rows, loading, onFilterEncountersByBed }: Liv
                                 </select>
                             </label>
                             {totalPages > 1 ? (
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-0.5">
                                     <button
                                         type="button"
                                         title="Previous page"
                                         disabled={safePage <= 1}
                                         onClick={() => setPage((p) => Math.max(1, p - 1))}
-                                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-gray-600 dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/5"
+                                        className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
                                     >
-                                        <ChevronLeft className="h-4 w-4" />
+                                        <ChevronLeft className="h-3.5 w-3.5" />
                                     </button>
-                                    <span className="min-w-[5.5rem] text-center text-sm text-gray-600 dark:text-gray-400">
-                                        Page {safePage} / {totalPages}
+                                    <span className="min-w-[4.75rem] text-center text-xs tabular-nums text-gray-600 dark:text-gray-400">
+                                        {safePage}/{totalPages}
                                     </span>
                                     <button
                                         type="button"
                                         title="Next page"
                                         disabled={safePage >= totalPages}
                                         onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-gray-600 dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/5"
+                                        className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
                                     >
-                                        <ChevronRight className="h-4 w-4" />
+                                        <ChevronRight className="h-3.5 w-3.5" />
                                     </button>
                                 </div>
                             ) : null}
