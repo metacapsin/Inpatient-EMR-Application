@@ -55,6 +55,7 @@ const validateBedName = (bedName: string): { isValid: boolean; error: string } =
     return { isValid: true, error: '' };
 };
 
+
 // Confirmation Dialog Component
 const ConfirmationDialog = ({
     open,
@@ -362,10 +363,10 @@ const FacilitySettingsPage = () => {
                     </div>
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Facility management</h1>
-                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        {/* <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                             Configure wards, rooms, and beds. Data is loaded from Wards, Rooms, and Beds APIs (set{' '}
                             <code className="rounded bg-gray-100 px-1 dark:bg-white/10">VITE_USE_MOCK_FACILITY=true</code> for offline mock mode).
-                        </p>
+                        </p> */}
                     </div>
                 </div>
             </div>
@@ -500,6 +501,8 @@ const FacilitySettingsPage = () => {
     );
 };
 
+
+
 function WardsSection({
     canEdit,
     loading,
@@ -518,7 +521,10 @@ function WardsSection({
     deleting: boolean;
 }) {
     const [currentPage, setCurrentPage] = useState(1);
+    const [search, setSearch] = useState("");
     const itemsPerPage = 5;
+
+    
 
     const totalItems = wards.length;
     const totalPages = Math.ceil(totalItems / itemsPerPage);
@@ -534,6 +540,9 @@ function WardsSection({
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Wards</h2>
+
+
+
                 {canEdit ? (
                     <button type="button" onClick={onAdd} className="btn btn-primary inline-flex items-center gap-2 text-sm">
                         <Plus className="h-4 w-4" />
@@ -616,6 +625,7 @@ function RoomsSection({
     deleting: boolean;
 }) {
     const [currentPage, setCurrentPage] = useState(1);
+    const [search, setSearch] = useState("");
     const itemsPerPage = 5;
 
     const totalItems = rooms.length;
@@ -624,11 +634,18 @@ function RoomsSection({
     const endIndex = startIndex + itemsPerPage;
     const currentItems = rooms.slice(startIndex, endIndex);
 
+    const filteredItems = currentItems.filter((r) =>
+        r.name.toLowerCase().includes(search.toLowerCase()) ||
+        (wardNameById.get(String(r.wardId)) ?? "").toLowerCase().includes(search.toLowerCase()) ||
+        (r.roomType ?? DEFAULT_ROOM_TYPE).toLowerCase().includes(search.toLowerCase())
+    );
+
     useEffect(() => {
         setCurrentPage(1);
     }, [rooms.length]);
 
     return (
+
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Rooms</h2>
