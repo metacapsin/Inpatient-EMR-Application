@@ -47,7 +47,7 @@ export const FACESHEET_MODULES: FacesheetModuleDef[] = [
     { path: 'allergies', label: 'Allergies', icon: ShieldAlert, group: 'clinical' },
     { path: 'immunizations', label: 'Immunizations', icon: Syringe, group: 'clinical' },
     { path: 'labs', label: 'Labs', icon: FlaskConical, group: 'labs' },
-    { path: 'lab-orders', label: 'Lab orders', icon: HeartPulse, group: 'labs' },
+    // { path: 'lab-orders', label: 'Lab orders', icon: HeartPulse, group: 'labs' },
     { path: 'documents', label: 'Documents', icon: FileStack, group: 'labs' },
     { path: 'notes', label: 'Notes', icon: NotebookPen, group: 'care' },
     { path: 'preventive-screening', label: 'Preventive', icon: FileText, group: 'care' },
