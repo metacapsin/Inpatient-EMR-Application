@@ -708,18 +708,48 @@ const VisitorsContacts: React.FC = () => {
 
     const visitors = visitorsQuery.data ?? [];
     const contacts = contactsQuery.data ?? [];
+const [visitorSearch, setVisitorSearch] = useState("");
+const filteredVisitors = visitors.filter((v) =>
+    v.firstName?.toLowerCase().includes(visitorSearch.toLowerCase()) ||
+    v.restrictions?.toLowerCase().includes(visitorSearch.toLowerCase()) ||
+    dashFmt(v.checkInAt)?.toLowerCase().includes(visitorSearch.toLowerCase())
+);
     const listError = visitorsQuery.error ?? contactsQuery.error;
     const listErrorMessage = listError instanceof Error ? listError.message : listError ? 'Failed to load data' : null;
-
-    const visitorTotalPages = Math.ceil(visitors.length / itemsPerPage);
     const visitorStartIndex = (visitorPage - 1) * itemsPerPage;
     const visitorEndIndex = visitorStartIndex + itemsPerPage;
-    const paginatedVisitors = visitors.slice(visitorStartIndex, visitorEndIndex);
+    const visitorTotalPages = Math.ceil(filteredVisitors.length / itemsPerPage);
+const paginatedVisitors = filteredVisitors.slice(
+    (visitorPage - 1) * itemsPerPage,
+    visitorPage * itemsPerPage
+);
 
-    const contactTotalPages = Math.ceil(contacts.length / itemsPerPage);
-    const contactStartIndex = (contactPage - 1) * itemsPerPage;
-    const contactEndIndex = contactStartIndex + itemsPerPage;
-    const paginatedContacts = contacts.slice(contactStartIndex, contactEndIndex);
+// const [contactSearch, setContactSearch] = useState("");
+// const filteredContacts = contacts.filter((c) =>
+//     c.name?.toLowerCase().includes(contactSearch.toLowerCase()) ||
+//     c.relationship?.toLowerCase().includes(contactSearch.toLowerCase()) ||
+//     c.phone?.toLowerCase().includes(contactSearch.toLowerCase()) ||
+//     c.email?.toLowerCase().includes(contactSearch.toLowerCase())
+// );
+
+//     const contactTotalPages = Math.ceil(filteredVisitors.length / itemsPerPage);
+//     const contactStartIndex = (contactPage - 1) * itemsPerPage;
+//     const contactEndIndex = contactStartIndex + itemsPerPage;
+    // const paginatedContacts = contacts.slice(contactStartIndex, contactEndIndex);
+    const [contactSearch, setContactSearch] = useState("");
+
+const filteredContacts = contacts.filter((c) =>
+    c.name?.toLowerCase().includes(contactSearch.toLowerCase()) ||
+    c.relationship?.toLowerCase().includes(contactSearch.toLowerCase()) ||
+    c.phone?.toLowerCase().includes(contactSearch.toLowerCase()) ||
+    c.email?.toLowerCase().includes(contactSearch.toLowerCase())
+);
+
+const contactTotalPages = Math.ceil(filteredContacts.length / itemsPerPage);
+const paginatedContacts = filteredContacts.slice(
+    (contactPage - 1) * itemsPerPage,
+    contactPage * itemsPerPage
+);
 
     const handleDeleteVisitor = (visitor: VisitorRecord) => {
         setConfirmDialog({
@@ -798,6 +828,35 @@ const VisitorsContacts: React.FC = () => {
                 <div>
                     <div className="mb-4 flex items-center justify-between">
                         <h3 className="text-lg font-semibold">Visitor log</h3>
+                        <div className="mb-4 mr-auto">
+                 
+                  <div className="relative w-48 mr-auto">
+            <input
+                type="text"
+                placeholder="Search..."
+                value={visitorSearch}
+                onChange={(e) => {
+                    setVisitorSearch(e.target.value);
+                         setVisitorPage(1);
+                }}
+                className="w-full rounded-lg border px-3 py-2 pl-9 text-sm
+                           focus:outline-none focus:ring-2focus:ring-blue-500
+                           dark:bg-gray-800 dark:text-white"
+            />
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4 absolute left-3 top-2.5 text-gray-500"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+            >
+                <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M21 21l-4.35-4.35m1.6-5.4a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+            </svg>
+        </div>
+        </div>
                         <button
                             type="button"
                             className="btn btn-primary btn-sm flex items-center gap-2"
@@ -814,70 +873,96 @@ const VisitorsContacts: React.FC = () => {
                         <p className="py-8 text-center text-gray-500 dark:text-gray-400">No visitors recorded.</p>
                     ) : (
                         <>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="border-b border-white-light dark:border-[#191e3a]">
-                                            <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">First name</th>
-                                            <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Check-in</th>
-                                            <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Check-out</th>
-                                            <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Status</th>
-                                            <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Restrictions</th>
-                                            <th className="px-3 py-2" />
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {paginatedVisitors.map((v) => (
-                                            <tr key={v.id} className="border-b border-white-light hover:bg-gray-50 dark:border-[#191e3a] dark:hover:bg-white/5">
-                                                <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{dashText(v.firstName)}</td>
-                                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{dashFmt(v.checkInAt)}</td>
-                                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{dashFmt(v.checkOutAt)}</td>
-                                                <td className="px-3 py-2">
-                                                    <VisitorStatusPill status={v.status} />
-                                                </td>
-                                                <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{dashText(v.restrictions)}</td>
-                                                <td className="px-3 py-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            type="button"
-                                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
-                                                            onClick={() => setVisitorModal({ open: true, editing: v })}
-                                                            title="Edit"
-                                                        >
-                                                            <Pencil className="h-4 w-4" />
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                                                            disabled={deleteVisitorMut.isPending}
-                                                            onClick={() => handleDeleteVisitor(v)}
-                                                            title="Delete"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <Pagination
-                                currentPage={visitorPage}
-                                totalPages={visitorTotalPages}
-                                onPageChange={setVisitorPage}
-                                totalItems={visitors.length}
-                                itemsPerPage={itemsPerPage}
-                            />
-                        </>
-                    )}
-                </div>
-            ) : null}
+<div className="overflow-x-auto">
+    <table className="w-full text-sm">
+        <thead>
+            <tr className="border-b border-white-light dark:border-[#191e3a]">
+                <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">First name</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Check-in</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Check-out</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Status</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Restrictions</th>
+                <th className="px-3 py-2" />
+            </tr>
+        </thead>
+        <tbody>
+            {paginatedVisitors.map((v) => (
+                <tr key={v.id} className="border-b border-white-light hover:bg-gray-50 dark:border-[#191e3a] dark:hover:bg-white/5">
+                    <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{dashText(v.firstName)}</td>
+                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{dashFmt(v.checkInAt)}</td>
+                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{dashFmt(v.checkOutAt)}</td>
+                    <td className="px-3 py-2">
+                        <VisitorStatusPill status={v.status} />
+                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{dashText(v.restrictions)}</td>
+                    <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
+                                onClick={() => setVisitorModal({ open: true, editing: v })}
+                                title="Edit"
+                            >
+                                <Pencil className="h-4 w-4" />
+                            </button>
+                            <button
+                                type="button"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                                disabled={deleteVisitorMut.isPending}
+                                onClick={() => handleDeleteVisitor(v)}
+                                title="Delete"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            ))}
+        </tbody>
+    </table>
+</div>
+<Pagination
+    currentPage={visitorPage}
+    totalPages={visitorTotalPages}
+    onPageChange={setVisitorPage}
+    totalItems={filteredVisitors.length}
+    itemsPerPage={itemsPerPage}
+                />
+            </>
+        )}
+    </div>
+) : null}
 
             {activeTab === 'contacts' && patientId?.trim() ? (
                 <div>
                     <div className="mb-4 flex items-center justify-between">
                         <h3 className="text-lg font-semibold">Family & Contacts</h3>
+                        <div className="relative w-48 mr-auto">
+            <input
+                type="text"
+                placeholder="Search..."
+                value={contactSearch}
+                onChange={(e) => {
+                    setContactSearch(e.target.value);
+                    setContactPage(1);
+                }}
+                className="w-full rounded-lg border px-3 py-2 pl-9 text-sm
+                           focus:outline-none focus:ring-2focus:ring-blue-500
+                           dark:bg-gray-800 dark:text-white"
+            />
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4 absolute left-3 top-2.5 text-gray-500"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+            >
+                <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M21 21l-4.35-4.35m1.6-5.4a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+            </svg>
+        </div>
                         <button
                             type="button"
                             className="btn btn-primary btn-sm flex items-center gap-2"
@@ -907,36 +992,36 @@ const VisitorsContacts: React.FC = () => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {paginatedContacts.map((c) => (
-                                            <tr key={c.id} className="border-b border-white-light hover:bg-gray-50 dark:border-[#191e3a] dark:hover:bg-white/5">
-                                                <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{c.name}</td>
-                                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{c.relationship}</td>
-                                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{c.phone}</td>
-                                                <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{c.email || '—'}</td>
-                                                <td className="px-3 py-2">
-                                                    {c.isNOK ? (
-                                                        <span className="inline-block rounded bg-success/10 px-2 py-0.5 text-xs font-medium text-success">NOK</span>
-                                                    ) : null}
-                                                </td>
-                                                <td className="px-3 py-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            type="button"
-                                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
-                                                            onClick={() => setContactModal({ open: true, editing: c })}
-                                                            title="Edit"
-                                                        >
-                                                            <Pencil className="h-4 w-4" />
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                                                            disabled={deleteContactMut.isPending}
-                                                            onClick={() => handleDeleteContact(c)}
-                                                            title="Delete"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </button>
+        {paginatedContacts.map((c) => (
+            <tr key={c.id} className="border-b border-white-light hover:bg-gray-50 dark:border-[#191e3a] dark:hover:bg-white/5">
+                <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{c.name}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{c.relationship}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{c.phone}</td>
+                <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{c.email || '—'}</td>
+                <td className="px-3 py-2">
+                    {c.isNOK ? (
+                        <span className="inline-block rounded bg-success/10 px-2 py-0.5 text-xs font-medium text-success">NOK</span>
+                    ) : null}
+                </td>
+                <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
+                            onClick={() => setContactModal({ open: true, editing: c })}
+                            title="Edit"
+                        >
+                            <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                            type="button"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                            disabled={deleteContactMut.isPending}
+                            onClick={() => handleDeleteContact(c)}
+                            title="Delete"
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </button>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -948,7 +1033,7 @@ const VisitorsContacts: React.FC = () => {
                                 currentPage={contactPage}
                                 totalPages={contactTotalPages}
                                 onPageChange={setContactPage}
-                                totalItems={contacts.length}
+                                totalItems={filteredContacts.length}
                                 itemsPerPage={itemsPerPage}
                             />
                         </>
