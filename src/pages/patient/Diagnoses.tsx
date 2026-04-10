@@ -5,8 +5,6 @@ import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
 import IconSearch from '../../components/Icon/IconSearch';
-import IconPlus from '../../components/Icon/IconPlus';
-import IconPencil from '../../components/Icon/IconPencil';
 import IconTrash from '../../components/Icon/IconTrash';
 import IconX from '../../components/Icon/IconX';
 
@@ -22,19 +20,6 @@ interface DiagnosisRecord {
     diagnosisDate: string;
 }
 
-interface DiagnosisFormData {
-    conditionType: ConditionType;
-    status: StatusType;
-    diagnosisDate: string;
-}
-
-const CONDITION_TYPE_OPTIONS: Array<{ value: ConditionType; label: string }> = [
-    { value: 'diabetes', label: 'Diabetes' },
-    { value: 'hypertension', label: 'Hypertension' },
-    { value: 'obesity', label: 'Obesity' },
-    { value: 'asthma', label: 'Asthma' },
-];
-
 const CONDITION_TYPE_DISPLAY_LABELS: Record<string, string> = {
     diabetes: 'Diabetes',
     hypertension: 'Hypertension',
@@ -49,23 +34,24 @@ const CONDITION_TYPE_DISPLAY_LABELS: Record<string, string> = {
     other: 'Other',
 };
 
-const STATUS_OPTIONS: Array<{ value: StatusType; label: string }> = [
-    { value: 'active', label: 'Active' },
-    { value: 'inactive', label: 'Inactive' },
-    { value: 'resolved', label: 'Resolved' },
-];
-
-const INITIAL_FORM_DATA: DiagnosisFormData = {
-    conditionType: 'diabetes',
-    status: 'active',
-    diagnosisDate: '',
-};
-
-const ROWS_PER_PAGE = 5;
+// 🔴 CHANGED: 4 items per page instead of 5 🔴
+const ROWS_PER_PAGE = 4;
 
 const Diagnoses: React.FC = () => {
-    const patientId = usePatientId();
+    const hookPatientId = usePatientId();
     const { moduleRootClass } = useFacesheetChartLayout();
+    
+    const patientId = React.useMemo(() => {
+        if (hookPatientId && hookPatientId.trim()) {
+            return hookPatientId;
+        }
+        const urlParams = new URLSearchParams(window.location.search);
+        const queryId = urlParams.get('patientId') || urlParams.get('rcopiaID');
+        if (queryId && queryId.trim()) {
+            return queryId;
+        }
+        return null;
+    }, [hookPatientId]);
 
     const [diagnosesList, setDiagnosesList] = useState<DiagnosisRecord[]>([]);
     const [filteredList, setFilteredList] = useState<DiagnosisRecord[]>([]);
@@ -73,12 +59,9 @@ const Diagnoses: React.FC = () => {
     const [searchText, setSearchText] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [loading, setLoading] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
-    const [showModal, setShowModal] = useState(false);
+    const [deleting, setDeleting] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [editingDiagnosis, setEditingDiagnosis] = useState<DiagnosisRecord | null>(null);
     const [deletingDiagnosis, setDeletingDiagnosis] = useState<DiagnosisRecord | null>(null);
-    const [formData, setFormData] = useState<DiagnosisFormData>(INITIAL_FORM_DATA);
 
     const formatDate = useCallback((dateString: string): string => {
         if (!dateString?.trim()) return '';
@@ -91,41 +74,33 @@ const Diagnoses: React.FC = () => {
         }
     }, []);
 
-    const formatDateForInput = useCallback((dateString: string): string => {
-        if (!dateString?.trim()) return '';
-        try {
-            const date = new Date(dateString);
-            if (isNaN(date.getTime())) return '';
-            return format(date, 'yyyy-MM-dd');
-        } catch {
-            return '';
+    const normalizeStatus = useCallback((status?: string | boolean): StatusType => {
+        if (typeof status === 'boolean') {
+            return status === true ? 'active' : 'inactive';
         }
-    }, []);
-
-    const normalizeStatus = (status?: string): StatusType => {
-        const normalized = status?.toLowerCase();
+        const normalized = String(status).toLowerCase();
         if (normalized === 'active' || normalized === 'inactive' || normalized === 'resolved') {
             return normalized;
         }
         return 'active';
-    };
+    }, []);
 
-    const normalizeConditionType = (type?: string): ConditionType => {
+    const normalizeConditionType = useCallback((type?: string): ConditionType => {
         const normalized = type?.toLowerCase();
         const validTypes: ConditionType[] = ['diabetes', 'hypertension', 'obesity', 'asthma', 'copd', 'heart_disease', 'arthritis', 'depression', 'anxiety', 'chronic_kidney_disease', 'other'];
         if (validTypes.includes(normalized as ConditionType)) {
             return normalized as ConditionType;
         }
         return 'other';
-    };
+    }, []);
 
-    const getConditionTypeLabel = (type: ConditionType): string => {
+    const getConditionTypeLabel = useCallback((type: ConditionType): string => {
         return CONDITION_TYPE_DISPLAY_LABELS[type] ?? type;
-    };
+    }, []);
 
-    const capitalizeStatus = (status: StatusType): string => {
+    const capitalizeStatus = useCallback((status: StatusType): string => {
         return status.charAt(0).toUpperCase() + status.slice(1);
-    };
+    }, []);
 
     const updatePagination = useCallback((list: DiagnosisRecord[], page: number) => {
         const start = (page - 1) * ROWS_PER_PAGE;
@@ -147,239 +122,115 @@ const Diagnoses: React.FC = () => {
         );
     }, []);
 
-    // Mock data for testing when API returns empty
-    const getMockData = (): DiagnosisRecord[] => {
-        return [
-            {
-                _id: 'mock_1',
-                conditionType: 'diabetes',
-                diagnosisName: 'Type 2 Diabetes Mellitus',
-                diagnosisCode: 'E11.9',
-                status: 'active',
-                diagnosisDate: formatDate(new Date().toISOString())
-            },
-            {
-                _id: 'mock_2',
-                conditionType: 'hypertension',
-                diagnosisName: 'Essential Hypertension',
-                diagnosisCode: 'I10',
-                status: 'active',
-                diagnosisDate: formatDate(new Date().toISOString())
-            },
-            {
-                _id: 'mock_3',
-                conditionType: 'asthma',
-                diagnosisName: 'Bronchial Asthma',
-                diagnosisCode: 'J45.909',
-                status: 'inactive',
-                diagnosisDate: formatDate(new Date().toISOString())
-            }
-        ];
-    };
+    const mapApiToRecord = useCallback((item: any): DiagnosisRecord => {
+        const rcopiaId = Array.isArray(item.RcopiaID) ? item.RcopiaID[0] : item.RcopiaID;
+        
+        return {
+            _id: item._id ?? item.id ?? Math.random().toString(),
+            conditionType: normalizeConditionType(item.conditionType || item.diagnosisType || 'other'),
+            diagnosisName: item.name ?? item.diagnosisName ?? `RcopiaID: ${rcopiaId || 'N/A'}`,
+            diagnosisCode: item.code ?? item.diagnosisCode ?? (rcopiaId || ''),
+            status: normalizeStatus(item.status === true ? 'active' : item.status === false ? 'inactive' : item.status),
+            diagnosisDate: item.diagnosisDate ? formatDate(item.diagnosisDate) : item.createdOn ? formatDate(item.createdOn) : formatDate(new Date().toISOString()),
+        };
+    }, [formatDate, normalizeConditionType, normalizeStatus]);
 
     const fetchDiagnoses = useCallback(async () => {
         if (!patientId) {
-            console.log('No patient ID, showing mock data');
-            const mockData = getMockData();
-            setDiagnosesList(mockData);
-            setFilteredList(mockData);
-            updatePagination(mockData, 1);
+            setDiagnosesList([]);
+            setFilteredList([]);
+            updatePagination([], 1);
             return;
         }
 
         setLoading(true);
         try {
-            console.log('Fetching diagnoses for patient:', patientId);
             const response = await healthConditionsAPI.getByPatient(patientId);
             
             let records: DiagnosisRecord[] = [];
+            const responseData = response.data;
             
-            // Try to extract data from different response structures
-            if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
-                records = response.data.data.data.map(mapApiToRecord);
-            } 
-            else if (response?.data?.data && Array.isArray(response.data.data)) {
-                records = response.data.data.map(mapApiToRecord);
+            if (responseData?.data && Array.isArray(responseData.data)) {
+                records = responseData.data.map(mapApiToRecord);
             }
-            else if (response?.data && Array.isArray(response.data)) {
-                records = response.data.map(mapApiToRecord);
+            else if (Array.isArray(responseData)) {
+                records = responseData.map(mapApiToRecord);
             }
-            else if (response?.data?.data && typeof response.data.data === 'object') {
-                // Check if there's any array property in the object
-                for (const key in response.data.data) {
-                    if (Array.isArray(response.data.data[key])) {
-                        records = response.data.data[key].map(mapApiToRecord);
+            else if (responseData?.results && Array.isArray(responseData.results)) {
+                records = responseData.results.map(mapApiToRecord);
+            }
+            else if (responseData?.items && Array.isArray(responseData.items)) {
+                records = responseData.items.map(mapApiToRecord);
+            }
+            else if (responseData?.records && Array.isArray(responseData.records)) {
+                records = responseData.records.map(mapApiToRecord);
+            }
+            else if (responseData?.diagnoses && Array.isArray(responseData.diagnoses)) {
+                records = responseData.diagnoses.map(mapApiToRecord);
+            }
+            else if (responseData && typeof responseData === 'object') {
+                for (const key in responseData) {
+                    if (Array.isArray(responseData[key]) && responseData[key].length > 0) {
+                        records = responseData[key].map(mapApiToRecord);
                         break;
                     }
                 }
             }
             
-            // If no records found, use mock data for demo
-            if (records.length === 0) {
-                console.log('No data from API, using mock data');
-                records = getMockData();
-                toast.success('Showing demo data. Add real data to see it here.');
-            }
-            
-            console.log('Records loaded:', records.length);
             setDiagnosesList(records);
             setFilteredList(records);
             updatePagination(records, 1);
             
         } catch (error: any) {
             console.error('Fetch error:', error);
-            // On error, show mock data
-            const mockData = getMockData();
-            setDiagnosesList(mockData);
-            setFilteredList(mockData);
-            updatePagination(mockData, 1);
-            toast.error('Using demo data. API error: ' + (error.response?.data?.message || error.message));
+            setDiagnosesList([]);
+            setFilteredList([]);
+            updatePagination([], 1);
+            
+            if (error.response?.status === 401) {
+                toast.error('Authentication failed. Please login again.');
+            } else if (error.response?.status === 404) {
+                toast.error('No diagnoses found for this patient');
+            } else {
+                toast.error(error.response?.data?.message || 'Failed to fetch diagnoses');
+            }
         } finally {
             setLoading(false);
         }
-    }, [patientId, updatePagination]);
+    }, [patientId, updatePagination, mapApiToRecord]);
 
-    const mapApiToRecord = useCallback((item: any): DiagnosisRecord => {
-        return {
-            _id: item.id ?? item._id ?? Math.random().toString(),
-            conditionType: normalizeConditionType(item.conditionType || item.conditiontype),
-            diagnosisName: item.name ?? item.diagnosisName ?? '',
-            diagnosisCode: item.code ?? item.diagnosisCode ?? '',
-            status: normalizeStatus(item.status),
-            diagnosisDate: item.diagnosisDate ? formatDate(item.diagnosisDate) : item.onsetDate ? formatDate(item.onsetDate) : formatDate(new Date().toISOString()),
-        };
-    }, [formatDate, normalizeConditionType, normalizeStatus]);
-
-    const buildCreatePayload = useCallback((data: DiagnosisFormData) => {
-        return {
-            patientId: patientId,
-            conditionType: data.conditionType,
-            diagnosisDate: data.diagnosisDate || new Date().toISOString().split('T')[0],
-            status: data.status,
-        };
-    }, [patientId]);
-
-    const buildUpdatePayload = useCallback((data: DiagnosisFormData) => {
-        return {
-            conditionType: data.conditionType,
-            diagnosisDate: data.diagnosisDate || new Date().toISOString().split('T')[0],
-            status: data.status,
-        };
-    }, []);
-
-    const handlePageChange = (page: number) => {
+    const handlePageChange = useCallback((page: number) => {
         updatePagination(filteredList, page);
-    };
+    }, [filteredList, updatePagination]);
 
-    const handleOpenAddModal = () => {
-        setEditingDiagnosis(null);
-        setFormData(INITIAL_FORM_DATA);
-        setShowModal(true);
-    };
-
-    const handleOpenEditModal = (diagnosis: DiagnosisRecord) => {
-        setEditingDiagnosis(diagnosis);
-        setFormData({
-            conditionType: diagnosis.conditionType,
-            status: diagnosis.status,
-            diagnosisDate: formatDateForInput(diagnosis.diagnosisDate),
-        });
-        setShowModal(true);
-    };
-
-    const handleOpenDeleteConfirm = (diagnosis: DiagnosisRecord) => {
+    const handleOpenDeleteConfirm = useCallback((diagnosis: DiagnosisRecord) => {
         setDeletingDiagnosis(diagnosis);
         setShowDeleteConfirm(true);
-    };
+    }, []);
 
-    const handleCloseModal = () => {
-        setShowModal(false);
-        setEditingDiagnosis(null);
-        setFormData(INITIAL_FORM_DATA);
-    };
-
-    const handleCloseDeleteConfirm = () => {
+    const handleCloseDeleteConfirm = useCallback(() => {
         setShowDeleteConfirm(false);
         setDeletingDiagnosis(null);
-    };
+    }, []);
 
-    const handleFormChange = <K extends keyof DiagnosisFormData>(field: K, value: DiagnosisFormData[K]) => {
-        setFormData((prev) => ({ ...prev, [field]: value }));
-    };
-
-    const validateForm = (): boolean => {
-        if (!formData.conditionType) {
-            toast.error('Condition type is required');
-            return false;
-        }
-        if (!formData.status) {
-            toast.error('Status is required');
-            return false;
-        }
-        return true;
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!validateForm()) return;
-
-        setSubmitting(true);
-        try {
-            if (editingDiagnosis) {
-                await healthConditionsAPI.update(editingDiagnosis._id, buildUpdatePayload(formData));
-                toast.success('Diagnosis updated successfully');
-            } else {
-                await healthConditionsAPI.create(buildCreatePayload(formData));
-                toast.success('Diagnosis added successfully');
-            }
-            handleCloseModal();
-            await fetchDiagnoses();
-        } catch (error: any) {
-            console.error('Submit error:', error);
-            // Even if API fails, add to local list for demo
-            const newDiagnosis: DiagnosisRecord = {
-                _id: Date.now().toString(),
-                conditionType: formData.conditionType,
-                diagnosisName: getConditionTypeLabel(formData.conditionType),
-                diagnosisCode: '',
-                status: formData.status,
-                diagnosisDate: formData.diagnosisDate ? formatDate(formData.diagnosisDate) : formatDate(new Date().toISOString()),
-            };
-            const updatedList = editingDiagnosis 
-                ? diagnosesList.map(d => d._id === editingDiagnosis._id ? newDiagnosis : d)
-                : [newDiagnosis, ...diagnosesList];
-            setDiagnosesList(updatedList);
-            setFilteredList(updatedList);
-            updatePagination(updatedList, 1);
-            handleCloseModal();
-            toast.success(editingDiagnosis ? 'Diagnosis updated (demo mode)' : 'Diagnosis added (demo mode)');
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    const handleDelete = async () => {
+    const handleDelete = useCallback(async () => {
         if (!deletingDiagnosis) return;
 
-        setSubmitting(true);
+        setDeleting(true);
         try {
             await healthConditionsAPI.delete(deletingDiagnosis._id);
             toast.success('Diagnosis deleted successfully');
+            await fetchDiagnoses();
         } catch (error: any) {
             console.error('Delete error:', error);
-            // Still remove from local list for demo
-            toast.success('Diagnosis removed (demo mode)');
+            toast.error(error.response?.data?.message || 'Failed to delete diagnosis');
         } finally {
-            const updatedList = diagnosesList.filter(d => d._id !== deletingDiagnosis._id);
-            setDiagnosesList(updatedList);
-            setFilteredList(updatedList);
-            updatePagination(updatedList, 1);
+            setDeleting(false);
             handleCloseDeleteConfirm();
-            setSubmitting(false);
         }
-    };
+    }, [deletingDiagnosis, fetchDiagnoses, handleCloseDeleteConfirm]);
 
-    const getStatusBadgeClass = (status: StatusType): string => {
+    const getStatusBadgeClass = useCallback((status: StatusType): string => {
         switch (status) {
             case 'active':
                 return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
@@ -390,7 +241,7 @@ const Diagnoses: React.FC = () => {
             default:
                 return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
         }
-    };
+    }, []);
 
     const totalPages = Math.ceil(filteredList.length / ROWS_PER_PAGE) || 1;
 
@@ -433,16 +284,6 @@ const Diagnoses: React.FC = () => {
                             </span>
                         </div>
                     </div>
-                    <div className="w-full md:w-auto">
-                        <button 
-                            type="button" 
-                            className="btn btn-primary w-full md:w-auto flex items-center justify-center gap-2" 
-                            onClick={handleOpenAddModal}
-                        >
-                            <IconPlus className="w-4 h-4" />
-                            Add Diagnosis
-                        </button>
-                    </div>
                 </div>
             </div>
 
@@ -455,7 +296,7 @@ const Diagnoses: React.FC = () => {
                 ) : paginatedList.length === 0 ? (
                     <div className="col-span-full text-center py-12">
                         <p className="text-gray-500 dark:text-gray-400">
-                            No diagnoses found. Click "Add Diagnosis" to create one.
+                            No diagnoses found for this patient.
                         </p>
                     </div>
                 ) : (
@@ -464,14 +305,6 @@ const Diagnoses: React.FC = () => {
                             <div className="flex items-center justify-between mb-4 pb-3 border-b border-white-light dark:border-[#191e3a]">
                                 <h5 className="text-base font-semibold">{getConditionTypeLabel(diagnosis.conditionType)}</h5>
                                 <div className="flex items-center gap-2">
-                                    <button
-                                        type="button"
-                                        className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                                        onClick={() => handleOpenEditModal(diagnosis)}
-                                        title="Edit"
-                                    >
-                                        <IconPencil className="w-4 h-4 text-primary" />
-                                    </button>
                                     <button
                                         type="button"
                                         className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
@@ -514,6 +347,7 @@ const Diagnoses: React.FC = () => {
                 )}
             </div>
 
+            {/* 🔴 Pagination - Shows Previous/Next buttons when more than 4 items 🔴 */}
             {!loading && filteredList.length > ROWS_PER_PAGE && (
                 <div className="flex justify-center items-center gap-2 mt-4">
                     <button 
@@ -524,7 +358,9 @@ const Diagnoses: React.FC = () => {
                     >
                         Previous
                     </button>
-                    <span className="text-sm px-4">Page {currentPage} of {totalPages}</span>
+                    <span className="text-sm px-4">
+                        Page {currentPage} of {totalPages}
+                    </span>
                     <button 
                         type="button" 
                         className="btn btn-outline-primary" 
@@ -533,50 +369,6 @@ const Diagnoses: React.FC = () => {
                     >
                         Next
                     </button>
-                </div>
-            )}
-
-            {/* Add/Edit Modal */}
-            {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={handleCloseModal}>
-                    <div className="bg-white dark:bg-[#0e1726] rounded-lg shadow-xl max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-between p-4 bg-primary text-white rounded-t-lg">
-                            <h5 className="text-lg font-semibold">{editingDiagnosis ? 'Edit Diagnosis' : 'Add New Diagnosis'}</h5>
-                            <button type="button" onClick={handleCloseModal} className="p-1.5 rounded hover:bg-white/20 transition-colors">
-                                <IconX className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <form onSubmit={handleSubmit} className="p-6">
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Condition Type <span className="text-danger">*</span></label>
-                                    <select className="form-select w-full" value={formData.conditionType} onChange={(e) => handleFormChange('conditionType', e.target.value as ConditionType)}>
-                                        {CONDITION_TYPE_OPTIONS.map((option) => (
-                                            <option key={option.value} value={option.value}>{option.label}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Status <span className="text-danger">*</span></label>
-                                    <select className="form-select w-full" value={formData.status} onChange={(e) => handleFormChange('status', e.target.value as StatusType)}>
-                                        {STATUS_OPTIONS.map((option) => (
-                                            <option key={option.value} value={option.value}>{option.label}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Diagnosis Date</label>
-                                    <input type="date" className="form-input w-full" value={formData.diagnosisDate} onChange={(e) => handleFormChange('diagnosisDate', e.target.value)} />
-                                </div>
-                            </div>
-                            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-white-light dark:border-[#191e3a]">
-                                <button type="button" className="btn btn-outline-danger" onClick={handleCloseModal} disabled={submitting}>Cancel</button>
-                                <button type="submit" className="btn btn-primary" disabled={submitting}>
-                                    {submitting ? (editingDiagnosis ? 'Updating...' : 'Adding...') : (editingDiagnosis ? 'Update Diagnosis' : 'Add Diagnosis')}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
                 </div>
             )}
 
@@ -600,9 +392,9 @@ const Diagnoses: React.FC = () => {
                             <p className="mt-4 text-sm text-gray-500">This action cannot be undone.</p>
                         </div>
                         <div className="flex justify-end gap-3 p-4 border-t border-white-light dark:border-[#191e3a]">
-                            <button type="button" className="btn btn-outline-secondary" onClick={handleCloseDeleteConfirm} disabled={submitting}>Cancel</button>
-                            <button type="button" className="btn btn-danger" onClick={handleDelete} disabled={submitting}>
-                                {submitting ? 'Deleting...' : 'Delete Diagnosis'}
+                            <button type="button" className="btn btn-outline-secondary" onClick={handleCloseDeleteConfirm} disabled={deleting}>Cancel</button>
+                            <button type="button" className="btn btn-danger" onClick={handleDelete} disabled={deleting}>
+                                {deleting ? 'Deleting...' : 'Delete Diagnosis'}
                             </button>
                         </div>
                     </div>
