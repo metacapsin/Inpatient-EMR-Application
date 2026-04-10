@@ -13,28 +13,14 @@ type StatusType = 'active' | 'inactive' | 'resolved';
 
 interface DiagnosisRecord {
     _id: string;
-    conditionType: ConditionType;
-    diagnosisName: string;
+    rcopiaId: string;
     diagnosisCode: string;
+    description: string;
+    onsetDate: string;
+    lastModifiedDate: string;
     status: StatusType;
-    diagnosisDate: string;
 }
 
-const CONDITION_TYPE_DISPLAY_LABELS: Record<string, string> = {
-    diabetes: 'Diabetes',
-    hypertension: 'Hypertension',
-    obesity: 'Obesity',
-    asthma: 'Asthma',
-    copd: 'COPD',
-    heart_disease: 'Heart Disease',
-    arthritis: 'Arthritis',
-    depression: 'Depression',
-    anxiety: 'Anxiety',
-    chronic_kidney_disease: 'Chronic Kidney Disease',
-    other: 'Other',
-};
-
-// 🔴 CHANGED: 4 items per page instead of 5 🔴
 const ROWS_PER_PAGE = 4;
 
 const Diagnoses: React.FC = () => {
@@ -85,19 +71,6 @@ const Diagnoses: React.FC = () => {
         return 'active';
     }, []);
 
-    const normalizeConditionType = useCallback((type?: string): ConditionType => {
-        const normalized = type?.toLowerCase();
-        const validTypes: ConditionType[] = ['diabetes', 'hypertension', 'obesity', 'asthma', 'copd', 'heart_disease', 'arthritis', 'depression', 'anxiety', 'chronic_kidney_disease', 'other'];
-        if (validTypes.includes(normalized as ConditionType)) {
-            return normalized as ConditionType;
-        }
-        return 'other';
-    }, []);
-
-    const getConditionTypeLabel = useCallback((type: ConditionType): string => {
-        return CONDITION_TYPE_DISPLAY_LABELS[type] ?? type;
-    }, []);
-
     const capitalizeStatus = useCallback((status: StatusType): string => {
         return status.charAt(0).toUpperCase() + status.slice(1);
     }, []);
@@ -114,26 +87,50 @@ const Diagnoses: React.FC = () => {
         const searchLower = search.toLowerCase().trim();
         return list.filter(
             (item) =>
-                (item.diagnosisName?.toLowerCase().includes(searchLower)) ||
+                (item.rcopiaId?.toLowerCase().includes(searchLower)) ||
                 (item.diagnosisCode?.toLowerCase().includes(searchLower)) ||
-                (item.conditionType?.toLowerCase().includes(searchLower)) ||
-                (item.status?.toLowerCase().includes(searchLower)) ||
-                (item.diagnosisDate?.toLowerCase().includes(searchLower))
+                (item.description?.toLowerCase().includes(searchLower))
         );
     }, []);
 
+    // 🔴 UPDATED: Map API response to show proper fields 🔴
     const mapApiToRecord = useCallback((item: any): DiagnosisRecord => {
-        const rcopiaId = Array.isArray(item.RcopiaID) ? item.RcopiaID[0] : item.RcopiaID;
+        // Extract RcopiaID
+        const rcopiaId = Array.isArray(item.RcopiaID) ? item.RcopiaID[0] : item.RcopiaID || '';
+        
+        // Extract ICD10 Code and Description
+        let diagnosisCode = '';
+        let description = '';
+        if (item.ICD10 && Array.isArray(item.ICD10) && item.ICD10[0]) {
+            const icdData = item.ICD10[0];
+            diagnosisCode = Array.isArray(icdData.Code) ? icdData.Code[0] : icdData.Code || '';
+            description = Array.isArray(icdData.Description) ? icdData.Description[0] : icdData.Description || '';
+        }
+        
+        // Extract Onset Date
+        let onsetDate = '';
+        if (item.OnsetDate && Array.isArray(item.OnsetDate)) {
+            onsetDate = item.OnsetDate[0] || '';
+        }
+        
+        // Extract Last Modified Date
+        let lastModifiedDate = '';
+        if (item.LastModifiedDate) {
+            lastModifiedDate = item.LastModifiedDate;
+        } else if (item.updatedAt) {
+            lastModifiedDate = formatDate(item.updatedAt);
+        }
         
         return {
             _id: item._id ?? item.id ?? Math.random().toString(),
-            conditionType: normalizeConditionType(item.conditionType || item.diagnosisType || 'other'),
-            diagnosisName: item.name ?? item.diagnosisName ?? `RcopiaID: ${rcopiaId || 'N/A'}`,
-            diagnosisCode: item.code ?? item.diagnosisCode ?? (rcopiaId || ''),
+            rcopiaId: rcopiaId,
+            diagnosisCode: diagnosisCode,
+            description: description,
+            onsetDate: onsetDate,
+            lastModifiedDate: lastModifiedDate,
             status: normalizeStatus(item.status === true ? 'active' : item.status === false ? 'inactive' : item.status),
-            diagnosisDate: item.diagnosisDate ? formatDate(item.diagnosisDate) : item.createdOn ? formatDate(item.createdOn) : formatDate(new Date().toISOString()),
         };
-    }, [formatDate, normalizeConditionType, normalizeStatus]);
+    }, [formatDate, normalizeStatus]);
 
     const fetchDiagnoses = useCallback(async () => {
         if (!patientId) {
@@ -155,18 +152,6 @@ const Diagnoses: React.FC = () => {
             }
             else if (Array.isArray(responseData)) {
                 records = responseData.map(mapApiToRecord);
-            }
-            else if (responseData?.results && Array.isArray(responseData.results)) {
-                records = responseData.results.map(mapApiToRecord);
-            }
-            else if (responseData?.items && Array.isArray(responseData.items)) {
-                records = responseData.items.map(mapApiToRecord);
-            }
-            else if (responseData?.records && Array.isArray(responseData.records)) {
-                records = responseData.records.map(mapApiToRecord);
-            }
-            else if (responseData?.diagnoses && Array.isArray(responseData.diagnoses)) {
-                records = responseData.diagnoses.map(mapApiToRecord);
             }
             else if (responseData && typeof responseData === 'object') {
                 for (const key in responseData) {
@@ -275,7 +260,7 @@ const Diagnoses: React.FC = () => {
                             <input 
                                 type="text" 
                                 className="form-input pl-10 w-full" 
-                                placeholder="Search diagnoses..." 
+                                placeholder="Search by Rcopia ID, Code or Description..." 
                                 value={searchText} 
                                 onChange={(e) => setSearchText(e.target.value)} 
                             />
@@ -303,42 +288,55 @@ const Diagnoses: React.FC = () => {
                     paginatedList.map((diagnosis) => (
                         <div key={diagnosis._id} className="panel shadow-equal hover:shadow-equal-lg transition-shadow duration-200">
                             <div className="flex items-center justify-between mb-4 pb-3 border-b border-white-light dark:border-[#191e3a]">
-                                <h5 className="text-base font-semibold">{getConditionTypeLabel(diagnosis.conditionType)}</h5>
                                 <div className="flex items-center gap-2">
-                                    <button
-                                        type="button"
-                                        className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                                        onClick={() => handleOpenDeleteConfirm(diagnosis)}
-                                        title="Delete"
-                                    >
-                                        <IconTrash className="w-4 h-4 text-danger" />
-                                    </button>
+                                    <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${getStatusBadgeClass(diagnosis.status)}`}>
+                                        {capitalizeStatus(diagnosis.status)}
+                                    </span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                                        Rcopia ID: {diagnosis.rcopiaId}
+                                    </span>
                                 </div>
+                                <button
+                                    type="button"
+                                    className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                    onClick={() => handleOpenDeleteConfirm(diagnosis)}
+                                    title="Delete"
+                                >
+                                    <IconTrash className="w-4 h-4 text-danger" />
+                                </button>
                             </div>
                             <div>
-                                <h6 className="text-primary text-sm uppercase font-semibold mb-2">Condition Details</h6>
-                                <div className="space-y-2">
-                                    {diagnosis.diagnosisCode && (
-                                        <div>
-                                            <span className="text-gray-600 dark:text-gray-400 text-sm">Code:</span>
-                                            <span className="font-bold ml-2 text-sm text-gray-900 dark:text-white">{diagnosis.diagnosisCode}</span>
-                                        </div>
-                                    )}
-                                    {diagnosis.diagnosisName && (
-                                        <div>
-                                            <span className="text-gray-600 dark:text-gray-400 text-sm">Description:</span>
-                                            <span className="font-bold ml-2 text-sm text-gray-900 dark:text-white">{diagnosis.diagnosisName}</span>
-                                        </div>
-                                    )}
-                                    <div className="flex items-center">
-                                        <span className="text-gray-600 dark:text-gray-400 text-sm">Status:</span>
-                                        <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${getStatusBadgeClass(diagnosis.status)}`}>
-                                            {capitalizeStatus(diagnosis.status)}
+                                <div className="space-y-3">
+                                    {/* Diagnosis Code */}
+                                    <div className="flex items-start">
+                                        <span className="text-gray-600 dark:text-gray-400 text-sm w-24">Code:</span>
+                                        <span className="font-medium text-sm text-gray-900 dark:text-white">
+                                            {diagnosis.diagnosisCode || '---'}
                                         </span>
                                     </div>
-                                    <div>
-                                        <span className="text-gray-600 dark:text-gray-400 text-sm">Diagnosis Date:</span>
-                                        <span className="font-bold ml-2 text-sm text-gray-900 dark:text-white">{diagnosis.diagnosisDate || '---'}</span>
+                                    
+                                    {/* Description */}
+                                    <div className="flex items-start">
+                                        <span className="text-gray-600 dark:text-gray-400 text-sm w-24">Description:</span>
+                                        <span className="font-medium text-sm text-gray-900 dark:text-white">
+                                            {diagnosis.description || '---'}
+                                        </span>
+                                    </div>
+                                    
+                                    {/* Onset Date */}
+                                    <div className="flex items-start">
+                                        <span className="text-gray-600 dark:text-gray-400 text-sm w-24">Onset Date:</span>
+                                        <span className="font-medium text-sm text-gray-900 dark:text-white">
+                                            {diagnosis.onsetDate || '---'}
+                                        </span>
+                                    </div>
+                                    
+                                    {/* Last Modified */}
+                                    <div className="flex items-start">
+                                        <span className="text-gray-600 dark:text-gray-400 text-sm w-24">Last Modified:</span>
+                                        <span className="font-medium text-sm text-gray-900 dark:text-white">
+                                            {diagnosis.lastModifiedDate || '---'}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -347,7 +345,7 @@ const Diagnoses: React.FC = () => {
                 )}
             </div>
 
-            {/* 🔴 Pagination - Shows Previous/Next buttons when more than 4 items 🔴 */}
+            {/* Pagination */}
             {!loading && filteredList.length > ROWS_PER_PAGE && (
                 <div className="flex justify-center items-center gap-2 mt-4">
                     <button 
@@ -385,8 +383,8 @@ const Diagnoses: React.FC = () => {
                         <div className="p-6">
                             <p className="text-gray-700 dark:text-gray-300">Are you sure you want to delete this diagnosis?</p>
                             <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                                <p className="font-medium">{getConditionTypeLabel(deletingDiagnosis.conditionType)}</p>
-                                {deletingDiagnosis.diagnosisName && <p className="text-sm text-gray-500">{deletingDiagnosis.diagnosisName}</p>}
+                                <p className="font-medium">Rcopia ID: {deletingDiagnosis.rcopiaId}</p>
+                                {deletingDiagnosis.description && <p className="text-sm text-gray-500">{deletingDiagnosis.description}</p>}
                                 <p className="text-sm text-gray-500">Status: {capitalizeStatus(deletingDiagnosis.status)}</p>
                             </div>
                             <p className="mt-4 text-sm text-gray-500">This action cannot be undone.</p>
