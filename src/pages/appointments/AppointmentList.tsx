@@ -227,7 +227,12 @@ const AppointmentList: React.FC = () => {
 </div>
   
       <button
-        className="btn btn-primary"
+             className="
+    inline-flex items-center gap-2 text-sm font-medium
+    px-4 py-2 rounded-md transition-all duration-200
+    bg-[#F6F6FA] text-[#8B5E3C]   /* Normal state like Quick Add */
+    hover:bg-[#8B5E3C] hover:text-white /* Hover like Add New */
+    border border-transparent"
         onClick={() => navigate('/app/appointments/add')}
       >
         Create Appointment

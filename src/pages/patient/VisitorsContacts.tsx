@@ -17,6 +17,7 @@ import {
     updateFamilyContactRecord,
     updateVisitorRecord,
 } from '../../services/visitorsFamily.service';
+import IconSearch from '@/components/Icon/IconSearch';
 
 // Validation functions
 const validateName = (name: string): { isValid: boolean; error: string } => {
@@ -724,18 +725,6 @@ const paginatedVisitors = filteredVisitors.slice(
     visitorPage * itemsPerPage
 );
 
-// const [contactSearch, setContactSearch] = useState("");
-// const filteredContacts = contacts.filter((c) =>
-//     c.name?.toLowerCase().includes(contactSearch.toLowerCase()) ||
-//     c.relationship?.toLowerCase().includes(contactSearch.toLowerCase()) ||
-//     c.phone?.toLowerCase().includes(contactSearch.toLowerCase()) ||
-//     c.email?.toLowerCase().includes(contactSearch.toLowerCase())
-// );
-
-//     const contactTotalPages = Math.ceil(filteredVisitors.length / itemsPerPage);
-//     const contactStartIndex = (contactPage - 1) * itemsPerPage;
-//     const contactEndIndex = contactStartIndex + itemsPerPage;
-    // const paginatedContacts = contacts.slice(contactStartIndex, contactEndIndex);
     const [contactSearch, setContactSearch] = useState("");
 
 const filteredContacts = contacts.filter((c) =>
@@ -826,47 +815,36 @@ const paginatedContacts = filteredContacts.slice(
 
             {activeTab === 'visitors' && patientId?.trim() ? (
                 <div>
-                    <div className="mb-4 flex items-center justify-between">
-                        <h3 className="text-lg font-semibold">Visitor log</h3>
-                        <div className="mb-4 mr-auto">
-                 
-                  <div className="relative w-48 mr-auto">
-            <input
-                type="text"
-                placeholder="Search..."
-                value={visitorSearch}
-                onChange={(e) => {
-                    setVisitorSearch(e.target.value);
-                         setVisitorPage(1);
-                }}
-                className="w-full rounded-lg border px-3 py-2 pl-9 text-sm
-                           focus:outline-none focus:ring-2focus:ring-blue-500
-                           dark:bg-gray-800 dark:text-white"
-            />
-            <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4 absolute left-3 top-2.5 text-gray-500"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-            >
-                <path strokeLinecap="round" strokeLinejoin="round"
-                    d="M21 21l-4.35-4.35m1.6-5.4a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-            </svg>
-        </div>
-        </div>
+                       <div className="mb-4 flex items-center justify-between gap-3">
+                        <h3 className="text-lg font-semibold">Visitor Log</h3>
+          
+        <div className="relative w-full md:max-w-md mr-auto">
+        <input
+          type="text"
+          className="form-input pl-10 w-full"
+          placeholder="Search here"
+          value={visitorSearch}
+          onChange={(e) => setVisitorSearch(e.target.value)}
+        />
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+          <IconSearch className="w-4 h-4" />
+        </span>
+      </div>
                         <button
                             type="button"
-                            className="btn btn-primary btn-sm flex items-center gap-2"
-                            disabled={visitorsQuery.isLoading}
-                            onClick={() => setVisitorModal({ open: true })}
+                                  className="
+    inline-flex items-center gap-2 text-sm font-medium
+    px-4 py-2 rounded-md transition-all duration-200
+    bg-[#F6F6FA] text-[#8B5E3C]   /* Normal state like Quick Add */
+    hover:bg-[#8B5E3C] hover:text-white /* Hover like Add New */
+    border border-transparent"
+                            disabled={contactsQuery.isLoading}
+                            onClick={() => setContactModal({ open: true })}
                         >
-                            <FaPlus className="h-3 w-3" /> Add Visitor
+                            <FaPlus className="h-3 w-3" /> Add Contact
                         </button>
+                 
                     </div>
-
                     {visitorsQuery.isLoading ? (
                         <div className="h-40 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
                     ) : visitors.length === 0 ? (
@@ -935,37 +913,29 @@ const paginatedContacts = filteredContacts.slice(
 
             {activeTab === 'contacts' && patientId?.trim() ? (
                 <div>
-                    <div className="mb-4 flex items-center justify-between">
+                    <div className="mb-4 flex items-center justify-between gap-3">
                         <h3 className="text-lg font-semibold">Family & Contacts</h3>
-                        <div className="relative w-48 mr-auto">
-            <input
-                type="text"
-                placeholder="Search..."
-                value={contactSearch}
-                onChange={(e) => {
-                    setContactSearch(e.target.value);
-                    setContactPage(1);
-                }}
-                className="w-full rounded-lg border px-3 py-2 pl-9 text-sm
-                           focus:outline-none focus:ring-2focus:ring-blue-500
-                           dark:bg-gray-800 dark:text-white"
-            />
-            <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4 absolute left-3 top-2.5 text-gray-500"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-            >
-                <path strokeLinecap="round" strokeLinejoin="round"
-                    d="M21 21l-4.35-4.35m1.6-5.4a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-            </svg>
-        </div>
+       
+<div className="relative w-full md:max-w-md mr-auto">
+        <input
+          type="text"
+          className="form-input pl-10 w-full"
+          placeholder="Search here"
+          value={contactSearch}
+          onChange={(e) => setContactSearch(e.target.value)}
+        />
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+          <IconSearch className="w-4 h-4" />
+        </span>
+      </div>
                         <button
                             type="button"
-                            className="btn btn-primary btn-sm flex items-center gap-2"
+                                  className="
+    inline-flex items-center gap-2 text-sm font-medium
+    px-4 py-2 rounded-md transition-all duration-200
+    bg-[#F6F6FA] text-[#8B5E3C]   /* Normal state like Quick Add */
+    hover:bg-[#8B5E3C] hover:text-white /* Hover like Add New */
+    border border-transparent"
                             disabled={contactsQuery.isLoading}
                             onClick={() => setContactModal({ open: true })}
                         >

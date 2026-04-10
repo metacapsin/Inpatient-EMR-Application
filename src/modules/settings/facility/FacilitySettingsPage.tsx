@@ -21,6 +21,7 @@ import { AppModal } from '../../../components/shared/AppModal';
 import { SimpleDataTable } from '../../../components/shared/SimpleDataTable';
 import { useCanEditPatientLocation } from '../../../hooks/useCanEditPatientLocation';
 import { DEFAULT_ROOM_TYPE, ROOM_TYPES } from '../../../constants/facility';
+import IconSearch from '@/components/Icon/IconSearch';
 
 type TabId = 'wards' | 'rooms' | 'beds';
 
@@ -549,32 +550,30 @@ const currentItems = filteredItems.slice(startIndex, endIndex);
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Wards</h2>
-  <div className="relative w-48 mr-auto">
-            <input
-                type="text"
-                placeholder="Search..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-lg border px-3 py-2 pl-9 text-sm
-                           focus:outline-none focus:ring-2focus:ring-blue-500
-                           dark:bg-gray-800 dark:text-white"
-            />
-            <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4 absolute left-3 top-2.5 text-gray-500"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-            >
-                <path strokeLinecap="round" strokeLinejoin="round"
-                    d="M21 21l-4.35-4.35m1.6-5.4a7 7 0 11-14 0 7 7 0 0114 0z"
+
+         <div className="relative w-full md:max-w-md mr-auto">
+                <input
+                  type="text"
+                  className="form-input pl-10 w-full"
+                  placeholder="Search here"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
                 />
-            </svg>
-        </div>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  <IconSearch className="w-4 h-4" />
+                </span>
+              </div>
 
                 {canEdit ? (
-                    <button type="button" onClick={onAdd} className="btn btn-primary inline-flex items-center gap-2 text-sm">
+                    <button type="button" onClick={onAdd}   
+                     className="
+    inline-flex items-center gap-2 text-sm font-medium
+    px-4 py-2 rounded-md transition-all duration-200
+    bg-[#F6F6FA] text-[#8B5E3C]   /* Normal state like Quick Add */
+    hover:bg-[#8B5E3C] hover:text-white /* Hover like Add New */
+    border border-transparent"
+
+>
                         <Plus className="h-4 w-4" />
                         Add ward
                     </button>
@@ -682,31 +681,26 @@ const currentItems = filteredRooms.slice(startIndex, endIndex);
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Rooms</h2>
-                 <div className="relative w-48 mr-auto">
-            <input
-                type="text"
-                placeholder="Search..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-lg border px-3 py-2 pl-9 text-sm
-                           focus:outline-none focus:ring-2focus:ring-blue-500
-                           dark:bg-gray-800 dark:text-white"
-            />
-            <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4 absolute left-3 top-2.5 text-gray-500"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-            >
-                <path strokeLinecap="round" strokeLinejoin="round"
-                    d="M21 21l-4.35-4.35m1.6-5.4a7 7 0 11-14 0 7 7 0 0114 0z"
+         
+          <div className="relative w-full md:max-w-md mr-auto">
+                <input
+                  type="text"
+                  className="form-input pl-10 w-full"
+                  placeholder="Search here"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
                 />
-            </svg>
-        </div>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  <IconSearch className="w-4 h-4" />
+                </span>
+              </div>
                 {canEdit ? (
-                    <button type="button" onClick={onAdd} className="btn btn-primary inline-flex items-center gap-2 text-sm">
+                    <button type="button" onClick={onAdd}       className="
+    inline-flex items-center gap-2 text-sm font-medium
+    px-4 py-2 rounded-md transition-all duration-200
+    bg-[#F6F6FA] text-[#8B5E3C]   /* Normal state like Quick Add */
+    hover:bg-[#8B5E3C] hover:text-white /* Hover like Add New */
+    border border-transparent">
                         <Plus className="h-4 w-4" />
                         Add room
                     </button>
@@ -813,32 +807,26 @@ const currentItems = filteredBeds.slice(startIndex, endIndex);
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Beds</h2>
-                   <div className="relative w-48 mr-auto">
-            <input
-                type="text"
-                placeholder="Search..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-lg border px-3 py-2 pl-9 text-sm
-                           focus:outline-none focus:ring-2focus:ring-blue-500
-                           dark:bg-gray-800 dark:text-white"
-            />
-            <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4 absolute left-3 top-2.5 text-gray-500"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-            >
-                <path strokeLinecap="round" strokeLinejoin="round"
-                    d="M21 21l-4.35-4.35m1.6-5.4a7 7 0 11-14 0 7 7 0 0114 0z"
+        
+                  <div className="relative w-full md:max-w-md mr-auto">
+                <input
+                  type="text"
+                  className="form-input pl-10 w-full"
+                  placeholder="Search here"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
                 />
-            </svg>
-        </div>
-                
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  <IconSearch className="w-4 h-4" />
+                </span>
+              </div>
                 {canEdit ? (
-                    <button type="button" onClick={onAdd} className="btn btn-primary inline-flex items-center gap-2 text-sm">
+                    <button type="button" onClick={onAdd}       className="
+    inline-flex items-center gap-2 text-sm font-medium
+    px-4 py-2 rounded-md transition-all duration-200
+    bg-[#F6F6FA] text-[#8B5E3C]   /* Normal state like Quick Add */
+    hover:bg-[#8B5E3C] hover:text-white /* Hover like Add New */
+    border border-transparent">
                         <Plus className="h-4 w-4" />
                         Add bed
                     </button>

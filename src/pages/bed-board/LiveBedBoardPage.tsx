@@ -154,11 +154,12 @@ const LiveBedBoardPage = () => {
                     <button
                         type="button"
                         onClick={() => setParam({ tab: null })}
-                        className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition ${
-                            tab === 'board'
-                                ? 'bg-primary text-white shadow-sm'
-                                : 'text-gray-600 hover:bg-gray-100/80 dark:text-gray-400 dark:hover:bg-white/[0.04]'
-                        }`}
+                             className="
+    inline-flex items-center gap-2 text-sm font-medium
+    px-4 py-2 rounded-md transition-all duration-200
+    bg-[#F6F6FA] text-[#8B5E3C]   /* Normal state like Quick Add */
+    hover:bg-[#8B5E3C] hover:text-white /* Hover like Add New */
+    border border-transparent"
                     >
                         Board
                     </button>
