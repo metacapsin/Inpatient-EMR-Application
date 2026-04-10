@@ -56,3 +56,10 @@ export function canCreateOrders(rolesNorm: string[]): boolean {
 export function canNursingActions(rolesNorm: string[]): boolean {
     return rolesNorm.some((r) => ['clinical-staff', 'provider', 'admin', 'super-admin'].includes(r));
 }
+
+/** Registration / financial counseling / billing desk — eligibility, claim prep, charge corrections. */
+export function canBillingFinancialActions(rolesNorm: string[]): boolean {
+    return rolesNorm.some((r) =>
+        ['non-clinical-staff', 'admin', 'super-admin', 'support-staff'].includes(r)
+    );
+}

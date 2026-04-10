@@ -119,6 +119,14 @@ const Sidebar = () => {
                                                         Inpatient clinical workspace
                                                     </NavLink>
                                                 </li>
+                                                <li>
+                                                    <NavLink
+                                                        to="/app/inpatient/discharge-readiness"
+                                                        title="Discharge summary, checklist, charges, eligibility, claim prep"
+                                                    >
+                                                        Discharge &amp; billing readiness
+                                                    </NavLink>
+                                                </li>
                                                 {/* <li>
                                                     <NavLink to="/app/adt">ADT workspace</NavLink>
                                                 </li> */}
