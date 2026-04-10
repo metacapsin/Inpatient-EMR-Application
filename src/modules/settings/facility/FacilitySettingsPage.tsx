@@ -592,7 +592,7 @@ const currentItems = filteredItems.slice(startIndex, endIndex);
                                 key: 'actions',
                                 header: '',
                                 className: 'w-28 text-right',
-                                render: (w) =>
+                                render: (w): import("react/jsx-runtime").JSX.Element | "—" =>
                                     canEdit ? (
                                         <div className="flex justify-end gap-1">
                                             <button
