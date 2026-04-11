@@ -12,6 +12,14 @@ import {
 
 export const BASE_URL = API_BASE_URL;
 // http://101.53.133.39:4000
+
+/** Backend audit (`applicationArea`) reads `x-client-route` — same as EMR-ng / patient portals. */
+function clientRouteHeader(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const cr = `${window.location.pathname || ''}${window.location.search || ''}`.trim().slice(0, 512);
+  return cr || undefined;
+}
+
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   headers: {
@@ -56,6 +64,11 @@ api.interceptors.request.use(
       } catch (error) {
         console.warn('Failed to parse user data for tenant ID:', error);
       }
+    }
+
+    const clientRoute = clientRouteHeader();
+    if (clientRoute) {
+      config.headers.set('X-Client-Route', clientRoute);
     }
 
     return config;
