@@ -29,3 +29,14 @@ export function formatLocationLine(loc: PatientLocationSnapshot | null | undefin
         .filter((s) => s.length > 0 && s !== '—');
     return parts.join(' · ');
 }
+
+/** Facesheet header: prefer "Bed {name} - {ward}" when ward + bed are known. */
+export function formatPatientHeaderBedLine(loc: PatientLocationSnapshot | null | undefined): string {
+    if (!loc) return '';
+    const ward = loc.wardName.trim();
+    const room = loc.roomName.trim();
+    const bed = loc.bedName.trim();
+    if (bed && ward) return `Bed ${bed} - ${ward}`;
+    if (bed && room) return `Bed ${bed} - ${room}`;
+    return formatLocationLine(loc);
+}

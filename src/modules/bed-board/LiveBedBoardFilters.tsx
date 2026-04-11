@@ -46,7 +46,7 @@ export function LiveBedBoardFilters({
     ];
 
     return (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
             <LabeledDropdown
                 id="bed-board-ward"
                 label="Ward"
@@ -56,6 +56,8 @@ export function LiveBedBoardFilters({
                 onChange={(v) => onWardChange(v === '__all__' ? '' : v)}
                 disabled={disabled || wardsLoading}
                 aria-busy={wardsLoading}
+                compact
+                className="min-w-0"
             />
             <LabeledDropdown
                 id="bed-board-room"
@@ -68,6 +70,8 @@ export function LiveBedBoardFilters({
                 onChange={(v) => onRoomChange(v === '__all__' ? '' : v)}
                 disabled={disabled || roomsLoading || !wardId}
                 aria-busy={roomsLoading}
+                compact
+                className="min-w-0"
             />
             <LabeledDropdown
                 id="bed-board-status"
@@ -77,6 +81,8 @@ export function LiveBedBoardFilters({
                 options={BED_STATUS_FILTERS.map((x) => ({ value: x.value || '__all__', label: x.label }))}
                 onChange={(v) => onBedStatusChange(v === '__all__' ? '' : v)}
                 disabled={disabled}
+                compact
+                className="min-w-0"
             />
         </div>
     );

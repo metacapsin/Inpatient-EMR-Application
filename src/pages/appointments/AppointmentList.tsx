@@ -101,6 +101,7 @@ function normalizeAppointmentListResponse(raw: any): AppointmentListApiShape {
 const AppointmentList: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [search, setSearch] = useState<string>('');
   const [rows, setRows] = useState<AppointmentRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -141,6 +142,7 @@ const AppointmentList: React.FC = () => {
         page,
         limit: PAGE_SIZE,
         providerIds: filters.providerId ? [filters.providerId] : undefined,
+        status: filters.status || undefined,
         sortField: 'startDate',
         sortOrder: 'asc',
       };
@@ -173,15 +175,72 @@ const AppointmentList: React.FC = () => {
     navigate(location.pathname, { replace: true });
   }, [loadRows, location.pathname, location.state, navigate]);
 
-  return (
-    <div className="panel">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <h2 className="text-xl font-semibold">Appointment List</h2>
-        <button className="btn btn-primary" onClick={() => navigate('/app/appointments/add')}>
-          Create Appointment
-        </button>
-      </div>
+  const filteredRows = useMemo(() => {
+    if (!search.trim()) return rows;
+    const s = search.toLowerCase();
+    return rows.filter(row =>
+      [row.patientName, row.providerName, row.visitReasonName, row.visitReasonmsg, row.appointmentStatus]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(s)
+    );
+  }, [rows, search]);
 
+  return (
+<>
+    <div className="panel">
+  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+    <h2 className="text-xl font-semibold">Appointment List</h2>
+    {/* Search + Button container */}
+    <div className="flex items-center gap-3">
+      <div className="relative w-60 sm:w-72">
+  
+  {/* Search Icon */}
+  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-4 w-4"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M21 21l-4.35-4.35m1.35-5.65a7 7 0 11-14 0 7 7 0 0114 0z"
+      />
+    </svg>
+  </span>
+
+  <input
+    type="text"
+    placeholder="Search by name, MRN, or phone"
+      // className="w-full sm:max-w-md lg:max-w-lg"
+    className="pl-10 pr-3 py-2 text-sm border border-gray-100 rounded-lg shadow-sm 
+               focus:outline-none focus:ring-2focus:ring-blue-200 w-full sm:max-w-md lg:max-w-lg"
+    value={search}
+    onChange={(e) => setSearch(e.target.value)}
+  />
+
+</div>
+  
+      <button
+             className="
+    inline-flex items-center gap-2 text-sm font-medium
+    px-4 py-2 rounded-md transition-all duration-200
+    bg-[#F6F6FA] text-[#8B5E3C]   /* Normal state like Quick Add */
+    hover:bg-[#8B5E3C] hover:text-white /* Hover like Add New */
+    border border-transparent"
+        onClick={() => navigate('/app/appointments/add')}
+      >
+        Create Appointment
+      </button>
+    </div>
+  </div>
+
+ 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
         <select
           className="form-select"
@@ -228,11 +287,13 @@ const AppointmentList: React.FC = () => {
             setFilters((prev) => ({ ...prev, dateTo: e.target.value }));
           }}
         />
+    
         <button
           className="btn btn-outline-secondary"
           onClick={() => {
             setPage(1);
             setFilters({ status: '', providerId: '', dateFrom: '', dateTo: '' });
+            setSearch('');
           }}
         >
           Clear Filters
@@ -256,12 +317,12 @@ const AppointmentList: React.FC = () => {
               <tr>
                 <td colSpan={6} className="text-center py-8">Loading appointments...</td>
               </tr>
-            ) : rows.length === 0 ? (
+            ) : filteredRows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="text-center py-8">No appointments found.</td>
               </tr>
             ) : (
-              rows.map((row) => (
+              filteredRows.map((row) => (
                 <tr key={rowId(row) || `${row.patientName}-${row.startDate}`}>
                   <td>{row.patientName || '—'}</td>
                   <td>{renderDateTime(row)}</td>
@@ -302,7 +363,10 @@ const AppointmentList: React.FC = () => {
         </div>
       </div>
     </div>
+    </>
   );
+  
 };
+
 
 export default AppointmentList;

@@ -4,14 +4,29 @@ import { useQuery } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
 import { ChevronRight } from 'lucide-react';
 import type { FacesheetPatient } from '../../services/patient.service';
-import { formatLocationLine } from '../../types/patientLocation';
+import { formatPatientHeaderBedLine } from '../../types/patientLocation';
 import type { IRootState } from '../../store';
 import { selectAdtEncounter } from '../../store/adtEncounterSlice';
-import { fetchEmrBedList, filterAvailableBeds } from '../../services/emrBeds.service';
+import { fetchEmrBedList, filterAvailableBeds, formatBedHeaderLine } from '../../services/emrBeds.service';
+import { hasValidAdtBedForDischarge } from '../../services/adt.service';
 import { AdtPatientWorkflowModal } from '../adt/AdtPatientWorkflowModal';
 import { EncounterStatusBadge } from './EncounterStatusBadge';
 import { EncounterActionButtons } from './EncounterActionButtons';
 import type { EncounterHeaderAdtModalState, EncounterStatusVariant } from './encounterHeaderTypes';
+
+const HEADER_VALUE_BADGE_CLASS =
+    'inline-flex max-w-full shrink-0 items-center truncate rounded-full px-2 py-0.5 text-[11px] font-semibold normal-case tracking-normal ring-1 bg-gray-100 text-gray-800 ring-gray-400/20 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-500/25';
+
+/** Strip leading "Bed " when formatters already include it; header shows "Bed" as its own label. */
+function headerBedBadgeValue(raw: string): string {
+    const t = raw.trim();
+    if (t === '—') return t;
+    if (/^Bed\s+/i.test(t)) {
+        const rest = t.replace(/^Bed\s+/i, '').trim();
+        return rest || '—';
+    }
+    return t;
+}
 
 export interface EncounterHeaderProps {
     patient: FacesheetPatient;
@@ -22,7 +37,7 @@ function resolveStatus(session: ReturnType<typeof selectAdtEncounter>): {
     variant: EncounterStatusVariant;
     label: string;
 } {
-    if (!session) {
+    if (!session?.encounterId?.trim()) {
         return { variant: 'not_admitted', label: 'Not admitted' };
     }
     if (session.dischargeInitiated) {
@@ -51,11 +66,21 @@ export function EncounterHeader({ patient, patientListHref = '/app/patients/list
         [bedsQuery.data]
     );
 
-    const locationLine = formatLocationLine(patient.location);
-    const bedDisplay = locationLine.trim() ? locationLine : '—';
+    const encounterBedLabel = useMemo(() => {
+        const bid = session?.currentBedMongoId?.trim();
+        if (!bid || !session?.encounterId?.trim()) return '';
+        const item = (bedsQuery.data ?? []).find((b) => b.id === bid);
+        return item ? formatBedHeaderLine(item) : '';
+    }, [session?.currentBedMongoId, session?.encounterId, bedsQuery.data]);
+
+    const patientLocBedLine = formatPatientHeaderBedLine(patient.location);
+    const bedDisplay = headerBedBadgeValue(
+        encounterBedLabel.trim() || patientLocBedLine.trim() || '—'
+    );
 
     const status = resolveStatus(session);
-    const admitted = !!session;
+    const admitted = Boolean(session?.encounterId?.trim());
+    const bedReadyForDischarge = hasValidAdtBedForDischarge(session);
 
     const transferBlockedNoBeds = admitted && bedsQuery.isSuccess && availableBeds.length === 0;
 
@@ -84,20 +109,24 @@ export function EncounterHeader({ patient, patientListHref = '/app/patients/list
                             </h1>
                             <EncounterStatusBadge variant={status.variant} label={status.label} />
                         </div>
-                        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-600 dark:text-gray-300">
-                            <span className="shrink-0">
-                                <span className="font-medium text-gray-400 dark:text-gray-500">MRN </span>
-                                <span className="font-mono font-semibold text-gray-800 dark:text-gray-100">{patient.mrn}</span>
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
+                            <span className="flex shrink-0 items-center gap-1.5">
+                                <span className="font-medium text-gray-400 dark:text-gray-500">MRN</span>
+                                <span className={`${HEADER_VALUE_BADGE_CLASS} font-mono tabular-nums`}>
+                                    {patient.mrn}
+                                </span>
                             </span>
                             <span className="hidden h-3 w-px bg-gray-200 dark:bg-white/10 sm:inline" aria-hidden />
-                            <span className="shrink-0">
-                                <span className="font-medium text-gray-400 dark:text-gray-500">Gender </span>
-                                {patient.sex}
+                            <span className="flex shrink-0 items-center gap-1.5">
+                                <span className="font-medium text-gray-400 dark:text-gray-500">Gender</span>
+                                <span className={HEADER_VALUE_BADGE_CLASS}>{patient.sex}</span>
                             </span>
                             <span className="hidden h-3 w-px bg-gray-200 dark:bg-white/10 sm:inline" aria-hidden />
-                            <span className="min-w-0 truncate" title={bedDisplay}>
-                                <span className="font-medium text-gray-400 dark:text-gray-500">Bed </span>
-                                {bedDisplay}
+                            <span className="flex min-w-0 max-w-full items-center gap-1.5 truncate" title={bedDisplay}>
+                                <span className="shrink-0 font-medium text-gray-400 dark:text-gray-500">Bed</span>
+                                <span className={`${HEADER_VALUE_BADGE_CLASS} min-w-0 max-w-[min(100%,14rem)]`}>
+                                    {bedDisplay}
+                                </span>
                             </span>
                         </div>
                     </div>
@@ -105,6 +134,7 @@ export function EncounterHeader({ patient, patientListHref = '/app/patients/list
                     <EncounterActionButtons
                         admitted={admitted}
                         dischargeInitiated={!!session?.dischargeInitiated}
+                        bedReadyForDischarge={bedReadyForDischarge}
                         transferBlockedNoBeds={transferBlockedNoBeds}
                         bedsFetchError={bedsQuery.isError}
                         onOpenAdt={setAdtModal}

@@ -5,710 +5,401 @@ import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
 import IconSearch from '../../components/Icon/IconSearch';
-import IconPlus from '../../components/Icon/IconPlus';
-import IconPencil from '../../components/Icon/IconPencil';
 import IconTrash from '../../components/Icon/IconTrash';
 import IconX from '../../components/Icon/IconX';
 
-// Valid condition types from backend CONDITION_TYPES
-type ConditionType = 
-  | 'diabetes'
-  | 'hypertension'
-  | 'obesity'
-  | 'asthma'
-  | 'copd'
-  | 'heart_disease'
-  | 'arthritis'
-  | 'depression'
-  | 'anxiety'
-  | 'chronic_kidney_disease'
-  | 'other';
-
+type ConditionType = 'diabetes' | 'hypertension' | 'obesity' | 'asthma' | 'copd' | 'heart_disease' | 'arthritis' | 'depression' | 'anxiety' | 'chronic_kidney_disease' | 'other';
 type StatusType = 'active' | 'inactive' | 'resolved';
 
-// Types
 interface DiagnosisRecord {
-  _id: string;
-  conditionType: ConditionType;
-  diagnosisName: string;
-  diagnosisCode: string;
-  status: StatusType;
-  diagnosisDate: string;
+    _id: string;
+    rcopiaId: string;
+    diagnosisCode: string;
+    description: string;
+    onsetDate: string;
+    lastModifiedDate: string;
+    status: StatusType;
 }
 
-interface DiagnosisFormData {
-  conditionType: ConditionType;
-  status: StatusType;
-  diagnosisDate: string;
-}
-
-interface ApiConditionRecord {
-  id?: string;
-  _id?: string;
-  conditionType?: string;
-  name?: string;
-  code?: string;
-  status?: string;
-  diagnosisDate?: string;
-  onsetDate?: string;
-}
-
-// Only condition types currently supported by backend API (unsupported hidden until backend validation is updated)
-const CONDITION_TYPE_OPTIONS: Array<{ value: ConditionType; label: string }> = [
-  { value: 'diabetes', label: 'Diabetes' },
-  { value: 'hypertension', label: 'Hypertension' },
-  { value: 'obesity', label: 'Obesity' },
-  { value: 'asthma', label: 'Asthma' },
-  // Hidden until backend supports: COPD, Heart Disease, Arthritis, Depression, Anxiety, Chronic Kidney Disease, Other
-];
-
-// Display labels for all types (including hidden) so existing records still show correct labels
-const CONDITION_TYPE_DISPLAY_LABELS: Record<string, string> = {
-  diabetes: 'Diabetes',
-  hypertension: 'Hypertension',
-  obesity: 'Obesity',
-  asthma: 'Asthma',
-  copd: 'COPD',
-  heart_disease: 'Heart Disease',
-  arthritis: 'Arthritis',
-  depression: 'Depression',
-  anxiety: 'Anxiety',
-  chronic_kidney_disease: 'Chronic Kidney Disease',
-  other: 'Other',
-};
-
-const STATUS_OPTIONS: Array<{ value: StatusType; label: string }> = [
-  { value: 'active', label: 'Active' },
-  { value: 'inactive', label: 'Inactive' },
-  { value: 'resolved', label: 'Resolved' },
-];
-
-const INITIAL_FORM_DATA: DiagnosisFormData = {
-  conditionType: 'diabetes',
-  status: 'active',
-  diagnosisDate: '',
-};
-
-const ROWS_PER_PAGE = 5;
+const ROWS_PER_PAGE = 4;
 
 const Diagnoses: React.FC = () => {
-  const patientId = usePatientId();
-  const { moduleRootClass } = useFacesheetChartLayout();
-
-  // Data state
-  const [diagnosesList, setDiagnosesList] = useState<DiagnosisRecord[]>([]);
-  const [filteredList, setFilteredList] = useState<DiagnosisRecord[]>([]);
-  const [paginatedList, setPaginatedList] = useState<DiagnosisRecord[]>([]);
-
-  // UI state
-  const [searchText, setSearchText] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
-  // Modal state
-  const [showModal, setShowModal] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [editingDiagnosis, setEditingDiagnosis] = useState<DiagnosisRecord | null>(null);
-  const [deletingDiagnosis, setDeletingDiagnosis] = useState<DiagnosisRecord | null>(null);
-  const [formData, setFormData] = useState<DiagnosisFormData>(INITIAL_FORM_DATA);
-
-  // Utility functions
-  const formatDate = useCallback((dateString: string): string => {
-    if (!dateString?.trim()) return '';
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) return dateString;
-      return format(date, 'MM/dd/yyyy');
-    } catch {
-      return dateString;
-    }
-  }, []);
-
-  const formatDateForInput = useCallback((dateString: string): string => {
-    if (!dateString?.trim()) return '';
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) return '';
-      return format(date, 'yyyy-MM-dd');
-    } catch {
-      return '';
-    }
-  }, []);
-
-  const normalizeStatus = (status?: string): StatusType => {
-    const normalized = status?.toLowerCase();
-    if (normalized === 'active' || normalized === 'inactive' || normalized === 'resolved') {
-      return normalized;
-    }
-    return 'active';
-  };
-
-  const normalizeConditionType = (type?: string): ConditionType => {
-    const normalized = type?.toLowerCase();
-    const validTypes: ConditionType[] = [
-      'diabetes', 'hypertension', 'obesity', 'asthma', 'copd',
-      'heart_disease', 'arthritis', 'depression', 'anxiety',
-      'chronic_kidney_disease', 'other'
-    ];
-    if (validTypes.includes(normalized as ConditionType)) {
-      return normalized as ConditionType;
-    }
-    return 'other';
-  };
-
-  const getConditionTypeLabel = (type: ConditionType): string => {
-    return CONDITION_TYPE_DISPLAY_LABELS[type] ?? type;
-  };
-
-  const capitalizeStatus = (status: StatusType): string => {
-    return status.charAt(0).toUpperCase() + status.slice(1);
-  };
-
-  const mapApiToRecord = useCallback((item: ApiConditionRecord): DiagnosisRecord => ({
-    _id: item.id ?? item._id ?? '',
-    conditionType: normalizeConditionType(item.conditionType),
-    diagnosisName: item.name ?? '',
-    diagnosisCode: item.code ?? '',
-    status: normalizeStatus(item.status),
-    diagnosisDate: item.diagnosisDate 
-      ? formatDate(item.diagnosisDate) 
-      : item.onsetDate 
-        ? formatDate(item.onsetDate) 
-        : '',
-  }), [formatDate]);
-
-  const buildCreatePayload = useCallback((data: DiagnosisFormData) => {
-    return {
-      patientId,
-      conditionType: data.conditionType,
-      diagnosisDate: data.diagnosisDate || null,
-      status: data.status,
-    };
-  }, [patientId]);
-
-  const buildUpdatePayload = useCallback((data: DiagnosisFormData) => {
-    return {
-      conditionType: data.conditionType,
-      diagnosisDate: data.diagnosisDate || null,
-      status: data.status,
-    };
-  }, []);
-
-  // Fetch diagnoses
-  const fetchDiagnoses = useCallback(async () => {
-    if (!patientId) {
-      toast.error('Patient ID is required');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await healthConditionsAPI.getByPatient(patientId);
-      const rawData = (response.data as { data?: ApiConditionRecord[] })?.data ?? response.data;
-      const records = Array.isArray(rawData) ? rawData.map(mapApiToRecord) : [];
-      
-      setDiagnosesList(records);
-      setFilteredList(records);
-      updatePagination(records, 1);
-    } catch (error: any) {
-      const message = error.response?.data?.message || 'Failed to fetch diagnoses';
-      toast.error(message);
-      setDiagnosesList([]);
-      setFilteredList([]);
-      setPaginatedList([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [patientId, mapApiToRecord]);
-
-  // Filter and pagination
-  const filterDiagnoses = useCallback((list: DiagnosisRecord[], search: string): DiagnosisRecord[] => {
-    if (!search.trim()) return list;
+    const hookPatientId = usePatientId();
+    const { moduleRootClass } = useFacesheetChartLayout();
     
-    const searchLower = search.toLowerCase().trim();
-    return list.filter((item) => 
-      item.diagnosisName?.toLowerCase().includes(searchLower) ||
-      item.diagnosisCode?.toLowerCase().includes(searchLower) ||
-      item.conditionType?.toLowerCase().includes(searchLower) ||
-      item.status?.toLowerCase().includes(searchLower) ||
-      item.diagnosisDate?.toLowerCase().includes(searchLower)
-    );
-  }, []);
+    const patientId = React.useMemo(() => {
+        if (hookPatientId && hookPatientId.trim()) {
+            return hookPatientId;
+        }
+        const urlParams = new URLSearchParams(window.location.search);
+        const queryId = urlParams.get('patientId') || urlParams.get('rcopiaID');
+        if (queryId && queryId.trim()) {
+            return queryId;
+        }
+        return null;
+    }, [hookPatientId]);
 
-  const updatePagination = useCallback((list: DiagnosisRecord[], page: number) => {
-    const start = (page - 1) * ROWS_PER_PAGE;
-    const end = start + ROWS_PER_PAGE;
-    setPaginatedList(list.slice(start, end));
-    setCurrentPage(page);
-  }, []);
+    const [diagnosesList, setDiagnosesList] = useState<DiagnosisRecord[]>([]);
+    const [filteredList, setFilteredList] = useState<DiagnosisRecord[]>([]);
+    const [paginatedList, setPaginatedList] = useState<DiagnosisRecord[]>([]);
+    const [searchText, setSearchText] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [loading, setLoading] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [deletingDiagnosis, setDeletingDiagnosis] = useState<DiagnosisRecord | null>(null);
 
-  const totalPages = Math.ceil(filteredList.length / ROWS_PER_PAGE) || 1;
+    const formatDate = useCallback((dateString: string): string => {
+        if (!dateString?.trim()) return '';
+        try {
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) return dateString;
+            return format(date, 'MM/dd/yyyy');
+        } catch {
+            return dateString;
+        }
+    }, []);
 
-  // Effects
-  useEffect(() => {
-    fetchDiagnoses();
-  }, [fetchDiagnoses]);
+    const normalizeStatus = useCallback((status?: string | boolean): StatusType => {
+        if (typeof status === 'boolean') {
+            return status === true ? 'active' : 'inactive';
+        }
+        const normalized = String(status).toLowerCase();
+        if (normalized === 'active' || normalized === 'inactive' || normalized === 'resolved') {
+            return normalized;
+        }
+        return 'active';
+    }, []);
 
-  useEffect(() => {
-    const filtered = filterDiagnoses(diagnosesList, searchText);
-    setFilteredList(filtered);
-    updatePagination(filtered, 1);
-  }, [searchText, diagnosesList, filterDiagnoses, updatePagination]);
+    const capitalizeStatus = useCallback((status: StatusType): string => {
+        return status.charAt(0).toUpperCase() + status.slice(1);
+    }, []);
 
-  // Handlers
-  const handlePageChange = (page: number) => {
-    updatePagination(filteredList, page);
-  };
+    const updatePagination = useCallback((list: DiagnosisRecord[], page: number) => {
+        const start = (page - 1) * ROWS_PER_PAGE;
+        const end = start + ROWS_PER_PAGE;
+        setPaginatedList(list.slice(start, end));
+        setCurrentPage(page);
+    }, []);
 
-  const handleOpenAddModal = () => {
-    setEditingDiagnosis(null);
-    setFormData(INITIAL_FORM_DATA);
-    setShowModal(true);
-  };
+    const filterDiagnoses = useCallback((list: DiagnosisRecord[], search: string): DiagnosisRecord[] => {
+        if (!search.trim()) return list;
+        const searchLower = search.toLowerCase().trim();
+        return list.filter(
+            (item) =>
+                (item.rcopiaId?.toLowerCase().includes(searchLower)) ||
+                (item.diagnosisCode?.toLowerCase().includes(searchLower)) ||
+                (item.description?.toLowerCase().includes(searchLower))
+        );
+    }, []);
 
-  const handleOpenEditModal = (diagnosis: DiagnosisRecord) => {
-    setEditingDiagnosis(diagnosis);
-    setFormData({
-      conditionType: diagnosis.conditionType,
-      status: diagnosis.status,
-      diagnosisDate: formatDateForInput(diagnosis.diagnosisDate),
-    });
-    setShowModal(true);
-  };
+    // 🔴 UPDATED: Map API response to show proper fields 🔴
+    const mapApiToRecord = useCallback((item: any): DiagnosisRecord => {
+        // Extract RcopiaID
+        const rcopiaId = Array.isArray(item.RcopiaID) ? item.RcopiaID[0] : item.RcopiaID || '';
+        
+        // Extract ICD10 Code and Description
+        let diagnosisCode = '';
+        let description = '';
+        if (item.ICD10 && Array.isArray(item.ICD10) && item.ICD10[0]) {
+            const icdData = item.ICD10[0];
+            diagnosisCode = Array.isArray(icdData.Code) ? icdData.Code[0] : icdData.Code || '';
+            description = Array.isArray(icdData.Description) ? icdData.Description[0] : icdData.Description || '';
+        }
+        
+        // Extract Onset Date
+        let onsetDate = '';
+        if (item.OnsetDate && Array.isArray(item.OnsetDate)) {
+            onsetDate = item.OnsetDate[0] || '';
+        }
+        
+        // Extract Last Modified Date
+        let lastModifiedDate = '';
+        if (item.LastModifiedDate) {
+            lastModifiedDate = item.LastModifiedDate;
+        } else if (item.updatedAt) {
+            lastModifiedDate = formatDate(item.updatedAt);
+        }
+        
+        return {
+            _id: item._id ?? item.id ?? Math.random().toString(),
+            rcopiaId: rcopiaId,
+            diagnosisCode: diagnosisCode,
+            description: description,
+            onsetDate: onsetDate,
+            lastModifiedDate: lastModifiedDate,
+            status: normalizeStatus(item.status === true ? 'active' : item.status === false ? 'inactive' : item.status),
+        };
+    }, [formatDate, normalizeStatus]);
 
-  const handleOpenDeleteConfirm = (diagnosis: DiagnosisRecord) => {
-    setDeletingDiagnosis(diagnosis);
-    setShowDeleteConfirm(true);
-  };
+    const fetchDiagnoses = useCallback(async () => {
+        if (!patientId) {
+            setDiagnosesList([]);
+            setFilteredList([]);
+            updatePagination([], 1);
+            return;
+        }
 
-  const handleCloseModal = () => {
-    setShowModal(false);
-    setEditingDiagnosis(null);
-    setFormData(INITIAL_FORM_DATA);
-  };
+        setLoading(true);
+        try {
+            const response = await healthConditionsAPI.getByPatient(patientId);
+            
+            let records: DiagnosisRecord[] = [];
+            const responseData = response.data;
+            
+            if (responseData?.data && Array.isArray(responseData.data)) {
+                records = responseData.data.map(mapApiToRecord);
+            }
+            else if (Array.isArray(responseData)) {
+                records = responseData.map(mapApiToRecord);
+            }
+            else if (responseData && typeof responseData === 'object') {
+                for (const key in responseData) {
+                    if (Array.isArray(responseData[key]) && responseData[key].length > 0) {
+                        records = responseData[key].map(mapApiToRecord);
+                        break;
+                    }
+                }
+            }
+            
+            setDiagnosesList(records);
+            setFilteredList(records);
+            updatePagination(records, 1);
+            
+        } catch (error: any) {
+            console.error('Fetch error:', error);
+            setDiagnosesList([]);
+            setFilteredList([]);
+            updatePagination([], 1);
+            
+            if (error.response?.status === 401) {
+                toast.error('Authentication failed. Please login again.');
+            } else if (error.response?.status === 404) {
+                toast.error('No diagnoses found for this patient');
+            } else {
+                toast.error(error.response?.data?.message || 'Failed to fetch diagnoses');
+            }
+        } finally {
+            setLoading(false);
+        }
+    }, [patientId, updatePagination, mapApiToRecord]);
 
-  const handleCloseDeleteConfirm = () => {
-    setShowDeleteConfirm(false);
-    setDeletingDiagnosis(null);
-  };
+    const handlePageChange = useCallback((page: number) => {
+        updatePagination(filteredList, page);
+    }, [filteredList, updatePagination]);
 
-  const handleFormChange = <K extends keyof DiagnosisFormData>(
-    field: K,
-    value: DiagnosisFormData[K]
-  ) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-  };
+    const handleOpenDeleteConfirm = useCallback((diagnosis: DiagnosisRecord) => {
+        setDeletingDiagnosis(diagnosis);
+        setShowDeleteConfirm(true);
+    }, []);
 
-  const validateForm = (): boolean => {
-    if (!formData.conditionType) {
-      toast.error('Condition type is required');
-      return false;
-    }
-    if (!formData.status) {
-      toast.error('Status is required');
-      return false;
-    }
-    return true;
-  };
+    const handleCloseDeleteConfirm = useCallback(() => {
+        setShowDeleteConfirm(false);
+        setDeletingDiagnosis(null);
+    }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateForm()) return;
+    const handleDelete = useCallback(async () => {
+        if (!deletingDiagnosis) return;
 
-    setSubmitting(true);
-    try {
-      if (editingDiagnosis) {
-        await healthConditionsAPI.update(editingDiagnosis._id, buildUpdatePayload(formData));
-        toast.success('Diagnosis updated successfully');
-      } else {
-        await healthConditionsAPI.create(buildCreatePayload(formData));
-        toast.success('Diagnosis added successfully');
-      }
-      handleCloseModal();
-      await fetchDiagnoses();
-    } catch (error: any) {
-      const message = error.response?.data?.message || 
-        (editingDiagnosis ? 'Failed to update diagnosis' : 'Failed to add diagnosis');
-      toast.error(message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
+        setDeleting(true);
+        try {
+            await healthConditionsAPI.delete(deletingDiagnosis._id);
+            toast.success('Diagnosis deleted successfully');
+            await fetchDiagnoses();
+        } catch (error: any) {
+            console.error('Delete error:', error);
+            toast.error(error.response?.data?.message || 'Failed to delete diagnosis');
+        } finally {
+            setDeleting(false);
+            handleCloseDeleteConfirm();
+        }
+    }, [deletingDiagnosis, fetchDiagnoses, handleCloseDeleteConfirm]);
 
-  const handleDelete = async () => {
-    if (!deletingDiagnosis) return;
+    const getStatusBadgeClass = useCallback((status: StatusType): string => {
+        switch (status) {
+            case 'active':
+                return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+            case 'inactive':
+                return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400';
+            case 'resolved':
+                return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
+            default:
+                return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
+        }
+    }, []);
 
-    setSubmitting(true);
-    try {
-      await healthConditionsAPI.delete(deletingDiagnosis._id);
-      toast.success('Diagnosis deleted successfully');
-      handleCloseDeleteConfirm();
-      await fetchDiagnoses();
-    } catch (error: any) {
-      const message = error.response?.data?.message || 'Failed to delete diagnosis';
-      toast.error(message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    const totalPages = Math.ceil(filteredList.length / ROWS_PER_PAGE) || 1;
 
-  const getStatusBadgeClass = (status: StatusType): string => {
-    switch (status) {
-      case 'active':
-        return 'bg-success/20 text-success';
-      case 'inactive':
-        return 'bg-warning/20 text-warning';
-      case 'resolved':
-        return 'bg-info/20 text-info';
-      default:
-        return 'bg-gray-100 text-gray-600';
-    }
-  };
+    useEffect(() => {
+        fetchDiagnoses();
+    }, [fetchDiagnoses]);
 
-  return (
-    <div className={moduleRootClass}>
-        {/* Breadcrumb */}
-        <div className="mb-5">
-          <ul className="flex items-center gap-2 text-sm">
-            <li>
-              <a href="#" className="text-primary hover:underline">Patient List</a>
-            </li>
-            <li>/</li>
-            <li className="text-gray-900 dark:text-white font-medium">Diagnoses</li>
-          </ul>
-        </div>
+    useEffect(() => {
+        const filtered = filterDiagnoses(diagnosesList, searchText);
+        setFilteredList(filtered);
+        updatePagination(filtered, 1);
+    }, [searchText, diagnosesList, filterDiagnoses, updatePagination]);
 
-        {/* Page Header */}
-        <div className="mb-5">
-  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-    
-    {/* Left Section */}
-    <div className="flex flex-col md:flex-row md:items-center gap-3 flex-1">
-      
-      <h3 className="text-xl font-semibold">
-        Diagnoses
-      </h3>
-
-      <div className="relative w-full md:max-w-md">
-        <input
-          type="text"
-          className="form-input pl-10 w-full"
-          placeholder="Search diagnoses..."
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-        />
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-          <IconSearch className="w-4 h-4" />
-        </span>
-      </div>
-
-    </div>
-
-    {/* Right Section */}
-    <div className="w-full md:w-auto">
-      <button
-        type="button"
-        className="btn btn-primary w-full md:w-auto flex items-center justify-center gap-2"
-        onClick={handleOpenAddModal}
-      >
-        <IconPlus className="w-4 h-4" />
-        Add Diagnosis
-      </button>
-    </div>
-
-  </div>
-</div>
-
-        {/* Diagnoses Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {loading ? (
-            <div className="col-span-full flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              <span className="ml-3 text-gray-600 dark:text-gray-400">Loading diagnoses...</span>
+    return (
+        <div className={moduleRootClass}>
+            <div className="mb-5">
+                <ul className="flex items-center gap-2 text-sm">
+                    <li>
+                        <a href="#" className="text-primary hover:underline">Patient List</a>
+                    </li>
+                    <li>/</li>
+                    <li className="text-gray-900 dark:text-white font-medium">Diagnoses</li>
+                </ul>
             </div>
-          ) : paginatedList.length === 0 ? (
-            <div className="col-span-full text-center py-12">
-              <p className="text-gray-500 dark:text-gray-400">
-                {diagnosesList.length === 0 
-                  ? 'No diagnoses recorded for this patient.' 
-                  : 'No diagnoses match your search criteria.'}
-              </p>
-            </div>
-          ) : (
-            paginatedList.map((diagnosis) => (
-              <div 
-                key={diagnosis._id} 
-                className="panel shadow-equal hover:shadow-equal-lg transition-shadow duration-200"
-              >
-                <div className="flex items-center justify-between mb-4 pb-3 border-b border-white-light dark:border-[#191e3a]">
-                  <h5 className="text-base font-semibold">
-                    {getConditionTypeLabel(diagnosis.conditionType)}
-                  </h5>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                      onClick={() => handleOpenEditModal(diagnosis)}
-                      title="Edit"
-                    >
-                      <IconPencil className="w-4 h-4 text-primary" />
-                    </button>
-                    <button
-                      type="button"
-                      className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                      onClick={() => handleOpenDeleteConfirm(diagnosis)}
-                      title="Delete"
-                    >
-                      <IconTrash className="w-4 h-4 text-danger" />
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <h6 className="text-primary text-sm uppercase font-semibold mb-2">
-                    Condition Details
-                  </h6>
-                  <div className="space-y-2">
-                    {diagnosis.diagnosisCode && (
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-400 text-sm">Code:</span>
-                        <span className="font-bold ml-2 text-sm text-gray-900 dark:text-white">
-                          {diagnosis.diagnosisCode}
-                        </span>
-                      </div>
-                    )}
-                    {diagnosis.diagnosisName && (
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-400 text-sm">Description:</span>
-                        <span className="font-bold ml-2 text-sm text-gray-900 dark:text-white">
-                          {diagnosis.diagnosisName}
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex items-center">
-                      <span className="text-gray-600 dark:text-gray-400 text-sm">Status:</span>
-                      <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${getStatusBadgeClass(diagnosis.status)}`}>
-                        {capitalizeStatus(diagnosis.status)}
-                      </span>
+
+            <div className="mb-5">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div className="flex flex-col md:flex-row md:items-center gap-3 flex-1">
+                        <h3 className="text-xl font-semibold">Diagnoses</h3>
+                        <div className="relative w-full md:max-w-md">
+                            <input 
+                                type="text" 
+                                className="form-input pl-10 w-full" 
+                                placeholder="Search by Rcopia ID, Code or Description..." 
+                                value={searchText} 
+                                onChange={(e) => setSearchText(e.target.value)} 
+                            />
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                                <IconSearch className="w-4 h-4" />
+                            </span>
+                        </div>
                     </div>
-                    <div>
-                      <span className="text-gray-600 dark:text-gray-400 text-sm">Diagnosis Date:</span>
-                      <span className="font-bold ml-2 text-sm text-gray-900 dark:text-white">
-                        {diagnosis.diagnosisDate || '---'}
-                      </span>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {loading ? (
+                    <div className="col-span-full flex items-center justify-center py-12">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                        <span className="ml-3 text-gray-600 dark:text-gray-400">Loading diagnoses...</span>
                     </div>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Pagination - same style as Vitals */}
-        {!loading && filteredList.length > ROWS_PER_PAGE && (
-          <div className="flex justify-center items-center gap-2 mt-4">
-            <button
-              type="button"
-              className="btn btn-outline-primary"
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage === 1}
-            >
-              Previous
-            </button>
-            <span className="text-sm px-4">Page {currentPage} of {totalPages}</span>
-            <button
-              type="button"
-              className="btn btn-outline-primary"
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage >= totalPages}
-            >
-              Next
-            </button>
-          </div>
-        )}
-
-      {/* Add/Edit Modal */}
-      {showModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
-          onClick={handleCloseModal}
-        >
-          <div
-            className="bg-white dark:bg-[#0e1726] rounded-lg shadow-xl max-w-lg w-full"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 bg-primary text-white rounded-t-lg">
-              <h5 className="text-lg font-semibold">
-                {editingDiagnosis ? 'Edit Diagnosis' : 'Add New Diagnosis'}
-              </h5>
-              <button
-                type="button"
-                onClick={handleCloseModal}
-                className="p-1.5 rounded hover:bg-white/20 transition-colors"
-                aria-label="Close"
-              >
-                <IconX className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Content */}
-            <form onSubmit={handleSubmit} className="p-6">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Condition Type <span className="text-danger">*</span>
-                  </label>
-                  <select
-  className="form-select w-full"
-  value={formData.conditionType}
-  onChange={(e) =>
-    handleFormChange('conditionType', e.target.value as ConditionType)
-  }
->
-                    {CONDITION_TYPE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Status <span className="text-danger">*</span>
-                  </label>
-                  <select
-  className="form-select w-full"
-  value={formData.status}
-  onChange={(e) =>
-    handleFormChange('status', e.target.value as StatusType)
-  }
->
-                    {STATUS_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Diagnosis Date
-                  </label>
-                  <input
-                    type="date"
-                    className="form-input w-full"
-                    value={formData.diagnosisDate}
-                    onChange={(e) => handleFormChange('diagnosisDate', e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Modal Footer */}
-              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-white-light dark:border-[#191e3a]">
-                <button
-                  type="button"
-                  className="btn btn-outline-danger"
-                  onClick={handleCloseModal}
-                  disabled={submitting}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={submitting}
-                >
-                  {submitting ? (
-                    <span className="flex items-center gap-2">
-                      <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
-                      {editingDiagnosis ? 'Updating...' : 'Adding...'}
-                    </span>
-                  ) : (
-                    editingDiagnosis ? 'Update Diagnosis' : 'Add Diagnosis'
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && deletingDiagnosis && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
-          onClick={handleCloseDeleteConfirm}
-        >
-          <div
-            className="bg-white dark:bg-[#0e1726] rounded-lg shadow-xl max-w-md w-full"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 bg-danger text-white rounded-t-lg">
-              <h5 className="text-lg font-semibold">Confirm Delete</h5>
-              <button
-                type="button"
-                onClick={handleCloseDeleteConfirm}
-                className="p-1.5 rounded hover:bg-white/20 transition-colors"
-                aria-label="Close"
-              >
-                <IconX className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Content */}
-            <div className="p-6">
-              <p className="text-gray-700 dark:text-gray-300">
-                Are you sure you want to delete this diagnosis?
-              </p>
-              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                <p className="font-medium">{getConditionTypeLabel(deletingDiagnosis.conditionType)}</p>
-                {deletingDiagnosis.diagnosisName && (
-                  <p className="text-sm text-gray-500">{deletingDiagnosis.diagnosisName}</p>
-                )}
-                <p className="text-sm text-gray-500">
-                  Status: {capitalizeStatus(deletingDiagnosis.status)}
-                </p>
-              </div>
-              <p className="mt-4 text-sm text-gray-500">
-                This action cannot be undone.
-              </p>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex justify-end gap-3 p-4 border-t border-white-light dark:border-[#191e3a]">
-              <button
-                type="button"
-                className="btn btn-outline-secondary"
-                onClick={handleCloseDeleteConfirm}
-                disabled={submitting}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={handleDelete}
-                disabled={submitting}
-              >
-                {submitting ? (
-                  <span className="flex items-center gap-2">
-                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
-                    Deleting...
-                  </span>
+                ) : paginatedList.length === 0 ? (
+                    <div className="col-span-full text-center py-12">
+                        <p className="text-gray-500 dark:text-gray-400">
+                            No diagnoses found for this patient.
+                        </p>
+                    </div>
                 ) : (
-                  'Delete Diagnosis'
+                    paginatedList.map((diagnosis) => (
+                        <div key={diagnosis._id} className="panel shadow-equal hover:shadow-equal-lg transition-shadow duration-200">
+                            <div className="flex items-center justify-between mb-4 pb-3 border-b border-white-light dark:border-[#191e3a]">
+                                <div className="flex items-center gap-2">
+                                    <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${getStatusBadgeClass(diagnosis.status)}`}>
+                                        {capitalizeStatus(diagnosis.status)}
+                                    </span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                                        Rcopia ID: {diagnosis.rcopiaId}
+                                    </span>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                    onClick={() => handleOpenDeleteConfirm(diagnosis)}
+                                    title="Delete"
+                                >
+                                    <IconTrash className="w-4 h-4 text-danger" />
+                                </button>
+                            </div>
+                            <div>
+                                <div className="space-y-3">
+                                    {/* Diagnosis Code */}
+                                    <div className="flex items-start">
+                                        <span className="text-gray-600 dark:text-gray-400 text-sm w-24">Code:</span>
+                                        <span className="font-medium text-sm text-gray-900 dark:text-white">
+                                            {diagnosis.diagnosisCode || '---'}
+                                        </span>
+                                    </div>
+                                    
+                                    {/* Description */}
+                                    <div className="flex items-start">
+                                        <span className="text-gray-600 dark:text-gray-400 text-sm w-24">Description:</span>
+                                        <span className="font-medium text-sm text-gray-900 dark:text-white">
+                                            {diagnosis.description || '---'}
+                                        </span>
+                                    </div>
+                                    
+                                    {/* Onset Date */}
+                                    <div className="flex items-start">
+                                        <span className="text-gray-600 dark:text-gray-400 text-sm w-24">Onset Date:</span>
+                                        <span className="font-medium text-sm text-gray-900 dark:text-white">
+                                            {diagnosis.onsetDate || '---'}
+                                        </span>
+                                    </div>
+                                    
+                                    {/* Last Modified */}
+                                    <div className="flex items-start">
+                                        <span className="text-gray-600 dark:text-gray-400 text-sm w-24">Last Modified:</span>
+                                        <span className="font-medium text-sm text-gray-900 dark:text-white">
+                                            {diagnosis.lastModifiedDate || '---'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ))
                 )}
-              </button>
             </div>
-          </div>
+
+            {/* Pagination */}
+            {!loading && filteredList.length > ROWS_PER_PAGE && (
+                <div className="flex justify-center items-center gap-2 mt-4">
+                    <button 
+                        type="button" 
+                        className="btn btn-outline-primary" 
+                        onClick={() => handlePageChange(currentPage - 1)} 
+                        disabled={currentPage === 1}
+                    >
+                        Previous
+                    </button>
+                    <span className="text-sm px-4">
+                        Page {currentPage} of {totalPages}
+                    </span>
+                    <button 
+                        type="button" 
+                        className="btn btn-outline-primary" 
+                        onClick={() => handlePageChange(currentPage + 1)} 
+                        disabled={currentPage >= totalPages}
+                    >
+                        Next
+                    </button>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {showDeleteConfirm && deletingDiagnosis && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={handleCloseDeleteConfirm}>
+                    <div className="bg-white dark:bg-[#0e1726] rounded-lg shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between p-4 bg-danger text-white rounded-t-lg">
+                            <h5 className="text-lg font-semibold">Confirm Delete</h5>
+                            <button type="button" onClick={handleCloseDeleteConfirm} className="p-1.5 rounded hover:bg-white/20 transition-colors">
+                                <IconX className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-6">
+                            <p className="text-gray-700 dark:text-gray-300">Are you sure you want to delete this diagnosis?</p>
+                            <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                                <p className="font-medium">Rcopia ID: {deletingDiagnosis.rcopiaId}</p>
+                                {deletingDiagnosis.description && <p className="text-sm text-gray-500">{deletingDiagnosis.description}</p>}
+                                <p className="text-sm text-gray-500">Status: {capitalizeStatus(deletingDiagnosis.status)}</p>
+                            </div>
+                            <p className="mt-4 text-sm text-gray-500">This action cannot be undone.</p>
+                        </div>
+                        <div className="flex justify-end gap-3 p-4 border-t border-white-light dark:border-[#191e3a]">
+                            <button type="button" className="btn btn-outline-secondary" onClick={handleCloseDeleteConfirm} disabled={deleting}>Cancel</button>
+                            <button type="button" className="btn btn-danger" onClick={handleDelete} disabled={deleting}>
+                                {deleting ? 'Deleting...' : 'Delete Diagnosis'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
-      )}
-    </div>
-  );
+    );
 };
 
 export default Diagnoses;

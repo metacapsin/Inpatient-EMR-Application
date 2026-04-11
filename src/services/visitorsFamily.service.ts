@@ -1,7 +1,7 @@
 import api from './api';
 import { asRecord, extractIdString, pickString, unwrapList } from '../lib/apiPayload';
 
-/** Body for CreateVisitor / CreateFamilyContact (and matching updates) — matches backend schema. */
+/** Body for CreateFamilyContact (and matching updates) — matches backend schema. */
 export type PatientContactWritePayload = {
     patientId: string;
     firstName: string;
@@ -16,40 +16,23 @@ export type PatientContactWritePayload = {
 
 export type VisitorStatusUi = 'checked-in' | 'checked-out' | 'scheduled';
 
+/** Visitor row — field names match list API (`getVisitorList`). */
 export interface VisitorRecord {
     id: string;
-    name: string;
-    relationship: string;
-    checkIn: string;
-    checkOut?: string;
-    status: VisitorStatusUi;
-    restrictions?: string;
+    firstName: string;
+    checkInAt: string | null;
+    checkOutAt: string | null;
+    restrictions: string | null;
+    status: string;
 }
-
-export type ContactRoleUi = 'Next of Kin' | 'Guardian' | 'Emergency Contact' | 'Family' | 'Other';
 
 export interface FamilyContactRecord {
     id: string;
     name: string;
     relationship: string;
-    role: ContactRoleUi;
     phone: string;
     email?: string;
     isNOK: boolean;
-}
-
-function mapApiVisitorStatus(s: string): VisitorStatusUi {
-    const v = s.toLowerCase().replace(/\s+/g, '-');
-    if (v === 'checked-in' || v === 'checkedin' || v === 'in') return 'checked-in';
-    if (v === 'checked-out' || v === 'checkedout' || v === 'out') return 'checked-out';
-    if (v === 'scheduled' || v === 'pending') return 'scheduled';
-    return 'scheduled';
-}
-
-function visitorStatusToApi(s: VisitorStatusUi): string {
-    if (s === 'checked-in') return 'checked-in';
-    if (s === 'checked-out') return 'checked-out';
-    return 'scheduled';
 }
 
 function buildFamilyContactWritePayload(patientId: string, c: Omit<FamilyContactRecord, 'id'>): PatientContactWritePayload {
@@ -67,49 +50,32 @@ function buildFamilyContactWritePayload(patientId: string, c: Omit<FamilyContact
     };
 }
 
-function buildVisitorWritePayload(patientId: string, v: Omit<VisitorRecord, 'id'>): PatientContactWritePayload {
-    const pid = patientId.trim();
-    return {
-        patientId: pid,
-        firstName: v.name.trim(),
-        lastName: '',
-        mobilePhone: '',
-        emailAddress: '',
-        relationship: v.relationship.trim(),
-        isEmergencyContact: false,
-        isAuthorizedForInfo: true,
-        status: true,
-    };
+function pickNullableIsoString(row: Record<string, unknown>, key: string): string | null {
+    const v = row[key];
+    if (v == null) return null;
+    const s = typeof v === 'string' ? v.trim() : String(v).trim();
+    return s || null;
 }
 
-function normalizeRole(s: string): ContactRoleUi {
-    const t = s.trim();
-    const opts: ContactRoleUi[] = ['Next of Kin', 'Guardian', 'Emergency Contact', 'Family', 'Other'];
-    const hit = opts.find((o) => o.toLowerCase() === t.toLowerCase());
-    if (hit) return hit;
-    return 'Other';
+/** First non-empty value among keys (list rows may use `checkOutAt` or legacy `checkOutTime`). */
+function pickNullableIsoStringFirst(row: Record<string, unknown>, ...keys: string[]): string | null {
+    for (const k of keys) {
+        const v = pickNullableIsoString(row, k);
+        if (v) return v;
+    }
+    return null;
 }
 
 function parseVisitorRow(row: Record<string, unknown>): VisitorRecord | null {
     const id = extractIdString(row._id ?? row.id ?? row.visitorId);
     if (!id) return null;
-    const checkIn =
-        pickString(row, 'checkIn', 'checkInTime', 'checkin', 'visitStart', 'startTime', 'arrivalTime') ||
-        new Date().toISOString().slice(0, 16);
-    const checkOut = pickString(row, 'checkOut', 'checkOutTime', 'checkout', 'visitEnd', 'endTime', 'departureTime') || undefined;
-    const statusRaw = pickString(row, 'status', 'visitorStatus', 'visitStatus');
-    const first = pickString(row, 'firstName', 'visitorName', 'name', 'fullName', 'visitor');
-    const last = pickString(row, 'lastName');
-    const nameFromParts = [first, last].filter(Boolean).join(' ').trim();
-    const name = nameFromParts || pickString(row, 'visitorName', 'name', 'fullName', 'visitor') || id;
     return {
         id,
-        name,
-        relationship: pickString(row, 'relationship', 'relation', 'relationShip') || '—',
-        checkIn,
-        checkOut,
-        status: statusRaw ? mapApiVisitorStatus(statusRaw) : 'scheduled',
-        restrictions: pickString(row, 'restrictions', 'notes', 'comments') || undefined,
+        firstName: pickString(row, 'firstName'),
+        checkInAt: pickNullableIsoStringFirst(row, 'checkInAt', 'checkInTime'),
+        checkOutAt: pickNullableIsoStringFirst(row, 'checkOutAt', 'checkOutTime'),
+        restrictions: pickNullableIsoString(row, 'restrictions'),
+        status: pickString(row, 'status'),
     };
 }
 
@@ -130,7 +96,6 @@ function parseFamilyRow(row: Record<string, unknown>): FamilyContactRecord | nul
         id,
         name,
         relationship: pickString(row, 'relationship', 'relation') || '',
-        role: normalizeRole(pickString(row, 'role', 'contactRole', 'type', 'contactType')),
         phone: pickString(row, 'mobilePhone', 'phone', 'phoneNumber', 'mobile', 'cellPhone') || '',
         email: pickString(row, 'emailAddress', 'email') || undefined,
         isNOK: Boolean(nok),
@@ -156,15 +121,27 @@ export async function fetchVisitorsForPatient(patientId: string): Promise<Visito
     return out;
 }
 
+function visitorWriteBody(patientId: string, v: Omit<VisitorRecord, 'id'>) {
+    const pid = patientId.trim();
+    return {
+        patientId: pid,
+        firstName: v.firstName.trim(),
+        checkInAt: v.checkInAt ?? '',
+        checkOutAt: v.checkOutAt ?? '',
+        restrictions: v.restrictions ?? '',
+        status: v.status,
+    };
+}
+
 export async function createVisitorForPatient(patientId: string, v: Omit<VisitorRecord, 'id'>): Promise<void> {
     const pid = patientId.trim();
     if (!pid) throw new Error('Patient is required.');
+    const body = visitorWriteBody(pid, v);
+    // CreateVisitor often binds legacy `checkInTime` / `checkOutTime` while update uses `*At`; mirror so checkout persists on create.
     await api.post('/Visitors/CreateVisitor', {
-        ...buildVisitorWritePayload(pid, v),
-        checkInTime: v.checkIn,
-        checkOutTime: v.checkOut ?? '',
-        visitorStatus: visitorStatusToApi(v.status),
-        restrictions: v.restrictions ?? '',
+        ...body,
+        checkInTime: body.checkInAt,
+        checkOutTime: body.checkOutAt,
     });
 }
 
@@ -172,11 +149,7 @@ export async function updateVisitorRecord(id: string, patientId: string, v: Omit
     await api.put('/Visitors/updateVisitorById', {
         id,
         _id: id,
-        ...buildVisitorWritePayload(patientId, v),
-        checkInTime: v.checkIn,
-        checkOutTime: v.checkOut ?? '',
-        visitorStatus: visitorStatusToApi(v.status),
-        restrictions: v.restrictions ?? '',
+        ...visitorWriteBody(patientId, v),
     });
 }
 

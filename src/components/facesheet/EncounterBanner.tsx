@@ -6,6 +6,7 @@ import type { FacesheetPatient } from '../../services/patient.service';
 import { formatLocationLine } from '../../types/patientLocation';
 import type { IRootState } from '../../store';
 import { selectAdtEncounter } from '../../store/adtEncounterSlice';
+import { hasValidAdtBedForDischarge } from '../../services/adt.service';
 import { AdtPatientWorkflowModal } from '../adt/AdtPatientWorkflowModal';
 
 function pickAttendingLabel(raw: Record<string, unknown>): string {
@@ -39,21 +40,23 @@ type AdtBannerModal =
 export function EncounterBanner({ patient, moduleBase }: EncounterBannerProps) {
     const [adtModal, setAdtModal] = useState<AdtBannerModal | null>(null);
     const session = useSelector((s: IRootState) => selectAdtEncounter(s, patient.id));
+    const encounterReady = Boolean(session?.encounterId?.trim());
+    const bedReadyForDischarge = hasValidAdtBedForDischarge(session);
 
     const locationLine = formatLocationLine(patient.location);
     const bedDisplay = locationLine.trim() ? locationLine : 'No bed on file';
     const doctor = pickAttendingLabel(patient.raw);
     const adtHref = `${moduleBase.replace(/\/$/, '')}/adt`;
 
-    const statusLabel = !session
+    const statusLabel = !encounterReady
         ? 'No active encounter'
-        : session.dischargeInitiated
+        : session?.dischargeInitiated
           ? 'Discharge initiated'
           : 'In progress';
 
-    const statusClass = !session
+    const statusClass = !encounterReady
         ? 'bg-gray-100 text-gray-700 ring-gray-500/15 dark:bg-gray-800 dark:text-gray-300'
-        : session.dischargeInitiated
+        : session?.dischargeInitiated
           ? 'bg-amber-100 text-amber-900 ring-amber-500/25 dark:bg-amber-950/50 dark:text-amber-100'
           : 'bg-sky-100 text-sky-900 ring-sky-500/20 dark:bg-sky-950/40 dark:text-sky-100';
 
@@ -108,7 +111,7 @@ export function EncounterBanner({ patient, moduleBase }: EncounterBannerProps) {
                     <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:flex-col lg:items-stretch xl:flex-row xl:items-center">
                         <button
                             type="button"
-                            disabled={!!session}
+                            disabled={encounterReady}
                             onClick={() => setAdtModal({ intent: 'admit' })}
                             className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary shadow-sm transition hover:bg-primary/15 disabled:pointer-events-none disabled:opacity-45"
                         >
@@ -117,7 +120,7 @@ export function EncounterBanner({ patient, moduleBase }: EncounterBannerProps) {
                         </button>
                         <button
                             type="button"
-                            disabled={!session || session.dischargeInitiated}
+                            disabled={!encounterReady || !!session?.dischargeInitiated}
                             onClick={() => setAdtModal({ intent: 'transfer' })}
                             className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-45 dark:border-white/15 dark:bg-[#1a2332] dark:text-gray-100 dark:hover:bg-white/5"
                         >
@@ -126,7 +129,12 @@ export function EncounterBanner({ patient, moduleBase }: EncounterBannerProps) {
                         </button>
                         <button
                             type="button"
-                            disabled={!session || session.dischargeInitiated}
+                            title={
+                                encounterReady && !bedReadyForDischarge && !session?.dischargeInitiated
+                                    ? 'No bed linked to this encounter — refresh the chart'
+                                    : undefined
+                            }
+                            disabled={!encounterReady || !!session?.dischargeInitiated || !bedReadyForDischarge}
                             onClick={() => setAdtModal({ intent: 'discharge', dischargeInitialStep: 'initiate' })}
                             className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100 disabled:pointer-events-none disabled:opacity-45 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-950/60"
                         >

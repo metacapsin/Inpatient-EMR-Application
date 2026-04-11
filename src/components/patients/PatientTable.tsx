@@ -10,6 +10,8 @@ interface PatientTableProps {
     sortOrder: 'asc' | 'desc';
     onSort: (field: PatientListSortField) => void;
     sortDisabled?: boolean;
+    /** From GET /api/admissions/active; same source as the bed board active encounters list. */
+    serverActivePatientIds?: ReadonlySet<string>;
     onOpenAdt?: (patient: PatientListItem, intent: AdtWorkflowIntent) => void;
 }
 
@@ -61,6 +63,7 @@ const PatientTable = ({
     sortOrder,
     onSort,
     sortDisabled,
+    serverActivePatientIds,
     onOpenAdt,
 }: PatientTableProps) => {
     const handleSort = (field: PatientListSortField) => sortHandler(sortDisabled, onSort, field);
@@ -146,7 +149,12 @@ const PatientTable = ({
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                             {patients.map((p) => (
-                                <PatientTableRow key={p.id} patient={p} onOpenAdt={onOpenAdt} />
+                                <PatientTableRow
+                                    key={p.id}
+                                    patient={p}
+                                    serverActivePatientIds={serverActivePatientIds}
+                                    onOpenAdt={onOpenAdt}
+                                />
                             ))}
                         </tbody>
                     </table>
@@ -155,7 +163,12 @@ const PatientTable = ({
 
             <div className="space-y-3 md:hidden">
                 {patients.map((p) => (
-                    <PatientMobileCard key={p.id} patient={p} onOpenAdt={onOpenAdt} />
+                    <PatientMobileCard
+                        key={p.id}
+                        patient={p}
+                        serverActivePatientIds={serverActivePatientIds}
+                        onOpenAdt={onOpenAdt}
+                    />
                 ))}
             </div>
         </>

@@ -10,6 +10,7 @@ const PatientList = lazy(() => import('../pages/patients/PatientList'));
 const AdtStandalonePage = lazy(() => import('../pages/adt/AdtStandalonePage'));
 const LiveBedBoardPage = lazy(() => import('../pages/bed-board/LiveBedBoardPage'));
 const ClinicalWorkflowsPage = lazy(() => import('../pages/inpatient/ClinicalWorkflowsPage'));
+const DischargeReadinessPage = lazy(() => import('../pages/inpatient/DischargeReadinessPage'));
 const FacesheetPage = lazy(() => import('../pages/facesheet/FacesheetPage'));
 const HealthMonitoring = lazy(() => import('../pages/patient/HealthSummary'));
 const AppointmentList = lazy(() => import('../pages/appointments/AppointmentList'));
@@ -30,8 +31,6 @@ const LabOrders = lazy(() => import('../pages/patient/LabOrders'));
 const Notes = lazy(() => import('../pages/patient/Notes'));
 const Immunizations = lazy(() => import('../pages/patient/Immunizations'));
 const PreventiveScreening = lazy(() => import('../pages/patient/PreventiveScreening'));
-const Pharmacies = lazy(() => import('../pages/patient/Pharmacies'));
-const PharmacyMessage = lazy(() => import('../pages/patient/PharmacyMessage'));
 const PatientAssessment = lazy(() => import('../pages/patient/PatientAssessment'));
 const DailyLog = lazy(() => import('../pages/patient/DailyLog'));
 const HealthAlerts = lazy(() => import('../pages/patient/HealthAlerts'));
@@ -88,6 +87,11 @@ const routes = [
     {
         path: '/app/inpatient/clinical',
         element: guard(<ClinicalWorkflowsPage />),
+        layout: 'default' as const,
+    },
+    {
+        path: '/app/inpatient/discharge-readiness',
+        element: guard(<DischargeReadinessPage />),
         layout: 'default' as const,
     },
     {
@@ -203,16 +207,6 @@ const routes = [
     {
         path: '/app/preventive-screening',
         element: guard(<PreventiveScreening />),
-        layout: 'default' as const,
-    },
-    {
-        path: '/app/pharmacies',
-        element: guard(<Pharmacies />),
-        layout: 'default' as const,
-    },
-    {
-        path: '/app/pharmacy-message',
-        element: guard(<PharmacyMessage />),
         layout: 'default' as const,
     },
     {

@@ -6,7 +6,7 @@ import { FaUser, FaClipboardList, FaPlus, FaTimes } from '../../lib/fa-icons';
 import { Pencil, Trash2, AlertTriangle, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { usePatientId } from '../../hooks/usePatientId';
-import type { ContactRoleUi, FamilyContactRecord, VisitorRecord, VisitorStatusUi } from '../../services/visitorsFamily.service';
+import type { FamilyContactRecord, VisitorRecord, VisitorStatusUi } from '../../services/visitorsFamily.service';
 import {
     createFamilyContactForPatient,
     createVisitorForPatient,
@@ -17,6 +17,68 @@ import {
     updateFamilyContactRecord,
     updateVisitorRecord,
 } from '../../services/visitorsFamily.service';
+import IconSearch from '@/components/Icon/IconSearch';
+
+// Validation functions
+const validateName = (name: string): { isValid: boolean; error: string } => {
+    const trimmed = name.trim();
+    if (!trimmed) return { isValid: false, error: 'Name is required' };
+    if (trimmed.length < 2) return { isValid: false, error: 'Minimum 2 characters required' };
+    if (trimmed.length > 50) return { isValid: false, error: 'Maximum 50 characters allowed' };
+    const nameRegex = /^[A-Za-z\s]{2,50}$/;
+    if (!nameRegex.test(trimmed)) return { isValid: false, error: 'Only alphabets and spaces allowed, no numbers/special characters' };
+    return { isValid: true, error: '' };
+};
+
+const validateRelationship = (relationship: string): { isValid: boolean; error: string } => {
+    if (!relationship.trim()) return { isValid: true, error: '' };
+    const trimmed = relationship.trim();
+    if (trimmed.length < 2) return { isValid: false, error: 'Minimum 2 characters required' };
+    if (trimmed.length > 30) return { isValid: false, error: 'Maximum 30 characters allowed' };
+    const relationshipRegex = /^[A-Za-z\s]{2,30}$/;
+    if (!relationshipRegex.test(trimmed)) return { isValid: false, error: 'Only letters allowed' };
+    return { isValid: true, error: '' };
+};
+
+const validatePhone = (phone: string): { isValid: boolean; error: string } => {
+    const trimmed = phone.trim();
+    if (!trimmed) return { isValid: false, error: 'Phone number is required' };
+    const phoneRegex = /^[6-9]\d{9}$/;
+    if (!phoneRegex.test(trimmed)) return { isValid: false, error: 'Enter valid 10-digit mobile number (starts with 6-9)' };
+    return { isValid: true, error: '' };
+};
+
+const validateEmail = (email: string): { isValid: boolean; error: string } => {
+    if (!email.trim()) return { isValid: true, error: '' };
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) return { isValid: false, error: 'Enter valid email address (e.g., name@example.com)' };
+    return { isValid: true, error: '' };
+};
+
+const validateCheckIn = (checkIn: string): { isValid: boolean; error: string } => {
+    if (!checkIn.trim()) return { isValid: false, error: 'Check-in time is required' };
+    const checkInDate = new Date(checkIn);
+    const now = new Date();
+    if (checkInDate > now) return { isValid: false, error: 'Check-in cannot be in the future' };
+    return { isValid: true, error: '' };
+};
+
+const validateCheckOut = (checkIn: string, checkOut: string): { isValid: boolean; error: string } => {
+    if (!checkOut.trim()) return { isValid: true, error: '' };
+    const checkInDate = new Date(checkIn);
+    const checkOutDate = new Date(checkOut);
+    if (checkOutDate <= checkInDate) return { isValid: false, error: 'Check-out must be after check-in time' };
+    return { isValid: true, error: '' };
+};
+
+const validateRestrictions = (restrictions: string): { isValid: boolean; error: string } => {
+    if (!restrictions.trim()) return { isValid: true, error: '' };
+    const trimmed = restrictions.trim();
+    if (trimmed.length > 200) return { isValid: false, error: 'Maximum 200 characters allowed' };
+    const htmlRegex = /<[^>]*>/;
+    if (htmlRegex.test(trimmed)) return { isValid: false, error: 'HTML tags are not allowed' };
+    return { isValid: true, error: '' };
+};
 
 // Confirmation Dialog Component
 const ConfirmationDialog = ({
@@ -146,6 +208,21 @@ function toDatetimeLocalValue(iso: string): string {
     }
 }
 
+function datetimeLocalToIso(local: string): string {
+    if (!local?.trim()) return '';
+    const d = new Date(local);
+    if (Number.isNaN(d.getTime())) return local.trim();
+    return d.toISOString();
+}
+
+function mapVisitorStatusToUi(status: string): VisitorStatusUi | null {
+    const v = status.toLowerCase().replace(/\s+/g, '-');
+    if (v === 'checked-in' || v === 'checkedin' || v === 'in') return 'checked-in';
+    if (v === 'checked-out' || v === 'checkedout' || v === 'out') return 'checked-out';
+    if (v === 'scheduled' || v === 'pending') return 'scheduled';
+    return null;
+}
+
 const statusBadge: Record<VisitorStatusUi, string> = {
     'checked-in': 'bg-success/10 text-success',
     'checked-out': 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400',
@@ -158,6 +235,13 @@ const statusLabel: Record<VisitorStatusUi, string> = {
     scheduled: 'Scheduled',
 };
 
+function VisitorStatusPill({ status }: { status: string }) {
+    const ui = mapVisitorStatusToUi(status);
+    const label = ui ? statusLabel[ui] : dashText(status);
+    const badgeClass = ui ? statusBadge[ui] : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-400';
+    return <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${badgeClass}`}>{label}</span>;
+}
+
 function fmt(iso: string) {
     try {
         return new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -166,13 +250,49 @@ function fmt(iso: string) {
     }
 }
 
-const EMPTY_VISITOR: Omit<VisitorRecord, 'id'> = {
-    name: '',
-    relationship: '',
-    checkIn: '',
-    status: 'scheduled',
-    restrictions: '',
+function dashText(s: string | null | undefined) {
+    return s != null && String(s).trim() ? String(s).trim() : '—';
+}
+
+function dashFmt(iso: string | null | undefined) {
+    return iso?.trim() ? fmt(iso) : '—';
+}
+
+type VisitorFormFields = {
+    firstName: string;
+    checkInAt: string;
+    checkOutAt: string;
+    restrictions: string;
+    status: string;
 };
+
+const EMPTY_VISITOR: VisitorFormFields = {
+    firstName: '',
+    checkInAt: '',
+    checkOutAt: '',
+    restrictions: '',
+    status: 'scheduled',
+};
+
+function visitorToForm(v: VisitorRecord): VisitorFormFields {
+    return {
+        firstName: v.firstName,
+        checkInAt: v.checkInAt ? toDatetimeLocalValue(v.checkInAt) : '',
+        checkOutAt: v.checkOutAt ? toDatetimeLocalValue(v.checkOutAt) : '',
+        restrictions: v.restrictions ?? '',
+        status: v.status.trim() ? v.status : 'scheduled',
+    };
+}
+
+function formToVisitorPayload(form: VisitorFormFields): Omit<VisitorRecord, 'id'> {
+    return {
+        firstName: form.firstName.trim(),
+        checkInAt: form.checkInAt.trim() ? datetimeLocalToIso(form.checkInAt) : null,
+        checkOutAt: form.checkOutAt.trim() ? datetimeLocalToIso(form.checkOutAt) : null,
+        restrictions: form.restrictions.trim() || null,
+        status: form.status,
+    };
+}
 
 function VisitorModal({
     initial,
@@ -185,18 +305,67 @@ function VisitorModal({
     onClose: () => void;
     saving: boolean;
 }) {
-    const [form, setForm] = useState<Omit<VisitorRecord, 'id'>>(() =>
-        initial
-            ? {
-                  ...initial,
-                  checkIn: toDatetimeLocalValue(initial.checkIn),
-                  checkOut: initial.checkOut ? toDatetimeLocalValue(initial.checkOut) : undefined,
-              }
-            : { ...EMPTY_VISITOR }
-    );
-    const set = (k: keyof Omit<VisitorRecord, 'id'>, v: string) => setForm((f) => ({ ...f, [k]: v }));
+    const [form, setForm] = useState<VisitorFormFields>(() => (initial ? visitorToForm(initial) : { ...EMPTY_VISITOR }));
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    
+    const set = <K extends keyof VisitorFormFields>(k: K, v: VisitorFormFields[K]) => {
+        setForm((f) => ({ ...f, [k]: v }));
+        // Clear error for this field when user starts typing
+        if (errors[k]) {
+            setErrors((prev) => ({ ...prev, [k]: '' }));
+        }
+    };
 
-    const valid = form.name.trim() && form.relationship.trim() && form.checkIn.trim();
+    const validateField = (field: keyof VisitorFormFields, value: string): string => {
+        switch (field) {
+            case 'firstName':
+                return validateName(value).error;
+            case 'checkInAt':
+                return validateCheckIn(value).error;
+            case 'checkOutAt':
+                return validateCheckOut(form.checkInAt, value).error;
+            case 'restrictions':
+                return validateRestrictions(value).error;
+            default:
+                return '';
+        }
+    };
+
+    const validateForm = (): boolean => {
+        const newErrors: Record<string, string> = {};
+        
+        const nameValidation = validateName(form.firstName);
+        if (!nameValidation.isValid) newErrors.firstName = nameValidation.error;
+        
+        const checkInValidation = validateCheckIn(form.checkInAt);
+        if (!checkInValidation.isValid) newErrors.checkInAt = checkInValidation.error;
+        
+        if (form.checkOutAt.trim()) {
+            const checkOutValidation = validateCheckOut(form.checkInAt, form.checkOutAt);
+            if (!checkOutValidation.isValid) newErrors.checkOutAt = checkOutValidation.error;
+        }
+        
+        const restrictionsValidation = validateRestrictions(form.restrictions);
+        if (!restrictionsValidation.isValid) newErrors.restrictions = restrictionsValidation.error;
+        
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    const handleBlur = (field: keyof VisitorFormFields) => {
+        const error = validateField(field, form[field]);
+        if (error) {
+            setErrors((prev) => ({ ...prev, [field]: error }));
+        }
+    };
+
+    const handleSubmit = () => {
+        if (validateForm()) {
+            onSave(formToVisitorPayload(form));
+        }
+    };
+
+    const valid = Boolean(form.firstName.trim() && form.checkInAt.trim() && Object.keys(errors).length === 0);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -209,56 +378,73 @@ function VisitorModal({
                 </div>
                 <div className="space-y-4 p-5">
                     <div>
-                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Visitor Name *</label>
-                        <input className="form-input w-full" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Full name" />
-                    </div>
-                    <div>
-                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Relationship *</label>
+                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            First name <span className="text-red-500">*</span>
+                        </label>
                         <input
-                            className="form-input w-full"
-                            value={form.relationship}
-                            onChange={(e) => set('relationship', e.target.value)}
-                            placeholder="e.g. Spouse, Parent"
+                            className={`form-input w-full ${errors.firstName ? 'border-red-500 focus:border-red-500' : ''}`}
+                            value={form.firstName}
+                            onChange={(e) => set('firstName', e.target.value)}
+                            onBlur={() => handleBlur('firstName')}
+                            placeholder="First name"
                         />
+                        {errors.firstName && <p className="mt-1 text-xs text-red-500">{errors.firstName}</p>}
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Check-in *</label>
-                            <input type="datetime-local" className="form-input w-full" value={form.checkIn} onChange={(e) => set('checkIn', e.target.value)} />
+                            <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                Check-in <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="datetime-local"
+                                className={`form-input w-full ${errors.checkInAt ? 'border-red-500 focus:border-red-500' : ''}`}
+                                value={form.checkInAt}
+                                onChange={(e) => set('checkInAt', e.target.value)}
+                                onBlur={() => handleBlur('checkInAt')}
+                            />
+                            {errors.checkInAt && <p className="mt-1 text-xs text-red-500">{errors.checkInAt}</p>}
                         </div>
                         <div>
                             <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Check-out</label>
                             <input
                                 type="datetime-local"
-                                className="form-input w-full"
-                                value={form.checkOut ?? ''}
-                                onChange={(e) => set('checkOut', e.target.value)}
+                                className={`form-input w-full ${errors.checkOutAt ? 'border-red-500 focus:border-red-500' : ''}`}
+                                value={form.checkOutAt}
+                                onChange={(e) => set('checkOutAt', e.target.value)}
+                                onBlur={() => handleBlur('checkOutAt')}
                             />
+                            {errors.checkOutAt && <p className="mt-1 text-xs text-red-500">{errors.checkOutAt}</p>}
                         </div>
                     </div>
                     <div>
                         <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Status</label>
-                        <select className="form-select w-full" value={form.status} onChange={(e) => set('status', e.target.value as VisitorStatusUi)}>
+                        <select
+                            className="form-select w-full"
+                            value={form.status}
+                            onChange={(e) => set('status', e.target.value)}
+                        >
                             <option value="scheduled">Scheduled</option>
                             <option value="checked-in">Checked In</option>
                             <option value="checked-out">Checked Out</option>
                         </select>
                     </div>
                     <div>
-                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Restrictions / Notes</label>
+                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Restrictions</label>
                         <input
-                            className="form-input w-full"
-                            value={form.restrictions ?? ''}
+                            className={`form-input w-full ${errors.restrictions ? 'border-red-500 focus:border-red-500' : ''}`}
+                            value={form.restrictions}
                             onChange={(e) => set('restrictions', e.target.value)}
+                            onBlur={() => handleBlur('restrictions')}
                             placeholder="Optional"
                         />
+                        {errors.restrictions && <p className="mt-1 text-xs text-red-500">{errors.restrictions}</p>}
                     </div>
                 </div>
                 <div className="flex justify-end gap-3 border-t border-white-light p-4 dark:border-[#191e3a]">
                     <button type="button" className="btn btn-outline-primary" onClick={onClose}>
                         Cancel
                     </button>
-                    <button type="button" className="btn btn-primary" disabled={!valid || saving} onClick={() => onSave(form)}>
+                    <button type="button" className="btn btn-primary" disabled={!valid || saving} onClick={handleSubmit}>
                         {saving ? 'Saving…' : 'Save'}
                     </button>
                 </div>
@@ -270,7 +456,6 @@ function VisitorModal({
 const EMPTY_CONTACT: Omit<FamilyContactRecord, 'id'> = {
     name: '',
     relationship: '',
-    role: 'Family',
     phone: '',
     email: '',
     isNOK: false,
@@ -288,9 +473,64 @@ function ContactModal({
     saving: boolean;
 }) {
     const [form, setForm] = useState<Omit<FamilyContactRecord, 'id'>>(initial ? { ...initial } : { ...EMPTY_CONTACT });
-    const set = (k: keyof Omit<FamilyContactRecord, 'id'>, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    
+    const set = (k: keyof Omit<FamilyContactRecord, 'id'>, v: string | boolean) => {
+        setForm((f) => ({ ...f, [k]: v }));
+        if (errors[k as string]) {
+            setErrors((prev) => ({ ...prev, [k as string]: '' }));
+        }
+    };
 
-    const valid = form.name.trim() && form.phone.trim();
+    const validateField = (field: keyof Omit<FamilyContactRecord, 'id'>, value: any): string => {
+        switch (field) {
+            case 'name':
+                return validateName(value).error;
+            case 'relationship':
+                return validateRelationship(value).error;
+            case 'phone':
+                return validatePhone(value).error;
+            case 'email':
+                return validateEmail(value).error;
+            default:
+                return '';
+        }
+    };
+
+    const validateForm = (): boolean => {
+        const newErrors: Record<string, string> = {};
+        
+        const nameValidation = validateName(form.name);
+        if (!nameValidation.isValid) newErrors.name = nameValidation.error;
+        
+        const relationshipValidation = validateRelationship(form.relationship);
+        if (!relationshipValidation.isValid) newErrors.relationship = relationshipValidation.error;
+        
+        const phoneValidation = validatePhone(form.phone);
+        if (!phoneValidation.isValid) newErrors.phone = phoneValidation.error;
+        
+        const emailValidation = validateEmail(form.email || '');
+        if (!emailValidation.isValid) newErrors.email = emailValidation.error;
+        
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    const handleBlur = (field: keyof Omit<FamilyContactRecord, 'id'>) => {
+        const value = field === 'isNOK' ? form.isNOK : form[field as keyof typeof form];
+        const error = validateField(field, value);
+        if (error) {
+            setErrors((prev) => ({ ...prev, [field]: error }));
+        }
+    };
+
+    const handleSubmit = () => {
+        if (validateForm()) {
+            onSave(form);
+        }
+    };
+
+    const valid = Boolean(form.name.trim() && form.phone.trim() && Object.keys(errors).length === 0);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -303,37 +543,53 @@ function ContactModal({
                 </div>
                 <div className="space-y-4 p-5">
                     <div>
-                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Full Name *</label>
-                        <input className="form-input w-full" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Full name" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Relationship</label>
-                            <input
-                                className="form-input w-full"
-                                value={form.relationship}
-                                onChange={(e) => set('relationship', e.target.value)}
-                                placeholder="e.g. Spouse"
-                            />
-                        </div>
-                        <div>
-                            <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Role</label>
-                            <select className="form-select w-full" value={form.role} onChange={(e) => set('role', e.target.value as ContactRoleUi)}>
-                                {(['Next of Kin', 'Guardian', 'Emergency Contact', 'Family', 'Other'] as ContactRoleUi[]).map((r) => (
-                                    <option key={r} value={r}>
-                                        {r}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
+                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            Full Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                            className={`form-input w-full ${errors.name ? 'border-red-500 focus:border-red-500' : ''}`}
+                            value={form.name}
+                            onChange={(e) => set('name', e.target.value)}
+                            onBlur={() => handleBlur('name')}
+                            placeholder="Full name"
+                        />
+                        {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
                     </div>
                     <div>
-                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Phone *</label>
-                        <input className="form-input w-full" value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="Phone number" />
+                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Relationship</label>
+                        <input
+                            className={`form-input w-full ${errors.relationship ? 'border-red-500 focus:border-red-500' : ''}`}
+                            value={form.relationship}
+                            onChange={(e) => set('relationship', e.target.value)}
+                            onBlur={() => handleBlur('relationship')}
+                            placeholder="e.g. Spouse, Parent, Sibling"
+                        />
+                        {errors.relationship && <p className="mt-1 text-xs text-red-500">{errors.relationship}</p>}
+                    </div>
+                    <div>
+                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            Phone <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                            className={`form-input w-full ${errors.phone ? 'border-red-500 focus:border-red-500' : ''}`}
+                            value={form.phone}
+                            onChange={(e) => set('phone', e.target.value)}
+                            onBlur={() => handleBlur('phone')}
+                            placeholder="10-digit mobile number"
+                        />
+                        {errors.phone && <p className="mt-1 text-xs text-red-500">{errors.phone}</p>}
                     </div>
                     <div>
                         <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">Email</label>
-                        <input type="email" className="form-input w-full" value={form.email ?? ''} onChange={(e) => set('email', e.target.value)} placeholder="Optional" />
+                        <input
+                            type="email"
+                            className={`form-input w-full ${errors.email ? 'border-red-500 focus:border-red-500' : ''}`}
+                            value={form.email ?? ''}
+                            onChange={(e) => set('email', e.target.value)}
+                            onBlur={() => handleBlur('email')}
+                            placeholder="email@example.com"
+                        />
+                        {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email}</p>}
                     </div>
                     <label className="flex cursor-pointer items-center gap-2">
                         <input type="checkbox" className="form-checkbox" checked={form.isNOK} onChange={(e) => set('isNOK', e.target.checked)} />
@@ -344,7 +600,7 @@ function ContactModal({
                     <button type="button" className="btn btn-outline-primary" onClick={onClose}>
                         Cancel
                     </button>
-                    <button type="button" className="btn btn-primary" disabled={!valid || saving} onClick={() => onSave(form)}>
+                    <button type="button" className="btn btn-primary" disabled={!valid || saving} onClick={handleSubmit}>
                         {saving ? 'Saving…' : 'Save'}
                     </button>
                 </div>
@@ -372,7 +628,6 @@ const VisitorsContacts: React.FC = () => {
         onConfirm: () => {},
     });
 
-    // Pagination states
     const [visitorPage, setVisitorPage] = useState(1);
     const [contactPage, setContactPage] = useState(1);
     const itemsPerPage = 5;
@@ -454,26 +709,42 @@ const VisitorsContacts: React.FC = () => {
 
     const visitors = visitorsQuery.data ?? [];
     const contacts = contactsQuery.data ?? [];
-    const nok = contacts.find((c) => c.isNOK);
+const [visitorSearch, setVisitorSearch] = useState("");
+const filteredVisitors = visitors.filter((v) =>
+    v.firstName?.toLowerCase().includes(visitorSearch.toLowerCase()) ||
+    v.restrictions?.toLowerCase().includes(visitorSearch.toLowerCase()) ||
+    dashFmt(v.checkInAt)?.toLowerCase().includes(visitorSearch.toLowerCase())
+);
     const listError = visitorsQuery.error ?? contactsQuery.error;
     const listErrorMessage = listError instanceof Error ? listError.message : listError ? 'Failed to load data' : null;
-
-    // Pagination calculations
-    const visitorTotalPages = Math.ceil(visitors.length / itemsPerPage);
     const visitorStartIndex = (visitorPage - 1) * itemsPerPage;
     const visitorEndIndex = visitorStartIndex + itemsPerPage;
-    const paginatedVisitors = visitors.slice(visitorStartIndex, visitorEndIndex);
+    const visitorTotalPages = Math.ceil(filteredVisitors.length / itemsPerPage);
+const paginatedVisitors = filteredVisitors.slice(
+    (visitorPage - 1) * itemsPerPage,
+    visitorPage * itemsPerPage
+);
 
-    const contactTotalPages = Math.ceil(contacts.length / itemsPerPage);
-    const contactStartIndex = (contactPage - 1) * itemsPerPage;
-    const contactEndIndex = contactStartIndex + itemsPerPage;
-    const paginatedContacts = contacts.slice(contactStartIndex, contactEndIndex);
+    const [contactSearch, setContactSearch] = useState("");
+
+const filteredContacts = contacts.filter((c) =>
+    c.name?.toLowerCase().includes(contactSearch.toLowerCase()) ||
+    c.relationship?.toLowerCase().includes(contactSearch.toLowerCase()) ||
+    c.phone?.toLowerCase().includes(contactSearch.toLowerCase()) ||
+    c.email?.toLowerCase().includes(contactSearch.toLowerCase())
+);
+
+const contactTotalPages = Math.ceil(filteredContacts.length / itemsPerPage);
+const paginatedContacts = filteredContacts.slice(
+    (contactPage - 1) * itemsPerPage,
+    contactPage * itemsPerPage
+);
 
     const handleDeleteVisitor = (visitor: VisitorRecord) => {
         setConfirmDialog({
             open: true,
             title: 'Delete Visitor',
-            message: `Are you sure you want to delete visitor "${visitor.name}"? This action cannot be undone.`,
+            message: `Are you sure you want to delete visitor "${visitor.firstName.trim() || 'this visitor'}"? This action cannot be undone.`,
             onConfirm: () => deleteVisitorMut.mutate(visitor.id),
         });
     };
@@ -513,17 +784,6 @@ const VisitorsContacts: React.FC = () => {
                 </div>
             ) : null}
 
-            {nok ? (
-                <div className="mb-5 flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
-                    <span className="font-semibold text-primary">NOK:</span>
-                    <span className="text-gray-800 dark:text-gray-200">{nok.name}</span>
-                    <span className="text-gray-500">·</span>
-                    <span className="text-gray-600 dark:text-gray-400">{nok.relationship}</span>
-                    <span className="text-gray-500">·</span>
-                    <span className="text-gray-600 dark:text-gray-400">{nok.phone}</span>
-                </div>
-            ) : null}
-
             <div className="mb-5">
                 <ul className="flex border-b border-white-light dark:border-[#191e3a]">
                     <li>
@@ -555,95 +815,127 @@ const VisitorsContacts: React.FC = () => {
 
             {activeTab === 'visitors' && patientId?.trim() ? (
                 <div>
-                    <div className="mb-4 flex items-center justify-between">
-                        <h3 className="text-lg font-semibold">Visitor log</h3>
+                       <div className="mb-4 flex items-center justify-between gap-3">
+                        <h3 className="text-lg font-semibold">Visitor Log</h3>
+          
+        <div className="relative w-full md:max-w-md mr-auto">
+        <input
+          type="text"
+          className="form-input pl-10 w-full"
+          placeholder="Search here"
+          value={visitorSearch}
+          onChange={(e) => setVisitorSearch(e.target.value)}
+        />
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+          <IconSearch className="w-4 h-4" />
+        </span>
+      </div>
                         <button
                             type="button"
-                            className="btn btn-primary btn-sm flex items-center gap-2"
-                            disabled={visitorsQuery.isLoading}
-                            onClick={() => setVisitorModal({ open: true })}
+                                  className="
+    inline-flex items-center gap-2 text-sm font-medium
+    px-4 py-2 rounded-md transition-all duration-200
+    bg-[#F6F6FA] text-[#8B5E3C]   /* Normal state like Quick Add */
+    hover:bg-[#8B5E3C] hover:text-white /* Hover like Add New */
+    border border-transparent"
+                            disabled={contactsQuery.isLoading}
+                            onClick={() => setContactModal({ open: true })}
                         >
-                            <FaPlus className="h-3 w-3" /> Add Visitor
+                            <FaPlus className="h-3 w-3" /> Add Contact
                         </button>
+                 
                     </div>
-
                     {visitorsQuery.isLoading ? (
                         <div className="h-40 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
                     ) : visitors.length === 0 ? (
                         <p className="py-8 text-center text-gray-500 dark:text-gray-400">No visitors recorded.</p>
                     ) : (
                         <>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="border-b border-white-light dark:border-[#191e3a]">
-                                            <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Name</th>
-                                            <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Relationship</th>
-                                            <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Check-in</th>
-                                            <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Check-out</th>
-                                            <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Status</th>
-                                            <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Restrictions</th>
-                                            <th className="px-3 py-2" />
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {paginatedVisitors.map((v) => (
-                                            <tr key={v.id} className="border-b border-white-light hover:bg-gray-50 dark:border-[#191e3a] dark:hover:bg-white/5">
-                                                <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{v.name}</td>
-                                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{v.relationship}</td>
-                                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{fmt(v.checkIn)}</td>
-                                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{v.checkOut ? fmt(v.checkOut) : '—'}</td>
-                                                <td className="px-3 py-2">
-                                                    <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${statusBadge[v.status]}`}>
-                                                        {statusLabel[v.status]}
-                                                    </span>
-                                                </td>
-                                                <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{v.restrictions || '—'}</td>
-                                                <td className="px-3 py-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            type="button"
-                                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
-                                                            onClick={() => setVisitorModal({ open: true, editing: v })}
-                                                            title="Edit"
-                                                        >
-                                                            <Pencil className="h-4 w-4" />
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                                                            disabled={deleteVisitorMut.isPending}
-                                                            onClick={() => handleDeleteVisitor(v)}
-                                                            title="Delete"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <Pagination
-                                currentPage={visitorPage}
-                                totalPages={visitorTotalPages}
-                                onPageChange={setVisitorPage}
-                                totalItems={visitors.length}
-                                itemsPerPage={itemsPerPage}
-                            />
-                        </>
-                    )}
-                </div>
-            ) : null}
+<div className="overflow-x-auto">
+    <table className="w-full text-sm">
+        <thead>
+            <tr className="border-b border-white-light dark:border-[#191e3a]">
+                <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">First name</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Check-in</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Check-out</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Status</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Restrictions</th>
+                <th className="px-3 py-2" />
+            </tr>
+        </thead>
+        <tbody>
+            {paginatedVisitors.map((v) => (
+                <tr key={v.id} className="border-b border-white-light hover:bg-gray-50 dark:border-[#191e3a] dark:hover:bg-white/5">
+                    <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{dashText(v.firstName)}</td>
+                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{dashFmt(v.checkInAt)}</td>
+                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{dashFmt(v.checkOutAt)}</td>
+                    <td className="px-3 py-2">
+                        <VisitorStatusPill status={v.status} />
+                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{dashText(v.restrictions)}</td>
+                    <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
+                                onClick={() => setVisitorModal({ open: true, editing: v })}
+                                title="Edit"
+                            >
+                                <Pencil className="h-4 w-4" />
+                            </button>
+                            <button
+                                type="button"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                                disabled={deleteVisitorMut.isPending}
+                                onClick={() => handleDeleteVisitor(v)}
+                                title="Delete"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            ))}
+        </tbody>
+    </table>
+</div>
+<Pagination
+    currentPage={visitorPage}
+    totalPages={visitorTotalPages}
+    onPageChange={setVisitorPage}
+    totalItems={filteredVisitors.length}
+    itemsPerPage={itemsPerPage}
+                />
+            </>
+        )}
+    </div>
+) : null}
 
             {activeTab === 'contacts' && patientId?.trim() ? (
                 <div>
-                    <div className="mb-4 flex items-center justify-between">
+                    <div className="mb-4 flex items-center justify-between gap-3">
                         <h3 className="text-lg font-semibold">Family & Contacts</h3>
+       
+<div className="relative w-full md:max-w-md mr-auto">
+        <input
+          type="text"
+          className="form-input pl-10 w-full"
+          placeholder="Search here"
+          value={contactSearch}
+          onChange={(e) => setContactSearch(e.target.value)}
+        />
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+          <IconSearch className="w-4 h-4" />
+        </span>
+      </div>
                         <button
                             type="button"
-                            className="btn btn-primary btn-sm flex items-center gap-2"
+                                  className="
+    inline-flex items-center gap-2 text-sm font-medium
+    px-4 py-2 rounded-md transition-all duration-200
+    bg-[#F6F6FA] text-[#8B5E3C]   /* Normal state like Quick Add */
+    hover:bg-[#8B5E3C] hover:text-white /* Hover like Add New */
+    border border-transparent"
                             disabled={contactsQuery.isLoading}
                             onClick={() => setContactModal({ open: true })}
                         >
@@ -663,7 +955,6 @@ const VisitorsContacts: React.FC = () => {
                                         <tr className="border-b border-white-light dark:border-[#191e3a]">
                                             <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Name</th>
                                             <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Relationship</th>
-                                            <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Role</th>
                                             <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Phone</th>
                                             <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Email</th>
                                             <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">NOK</th>
@@ -671,39 +962,36 @@ const VisitorsContacts: React.FC = () => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {paginatedContacts.map((c) => (
-                                            <tr key={c.id} className="border-b border-white-light hover:bg-gray-50 dark:border-[#191e3a] dark:hover:bg-white/5">
-                                                <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{c.name}</td>
-                                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{c.relationship}</td>
-                                                <td className="px-3 py-2">
-                                                    <span className="inline-block rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{c.role}</span>
-                                                </td>
-                                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{c.phone}</td>
-                                                <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{c.email || '—'}</td>
-                                                <td className="px-3 py-2">
-                                                    {c.isNOK ? (
-                                                        <span className="inline-block rounded bg-success/10 px-2 py-0.5 text-xs font-medium text-success">NOK</span>
-                                                    ) : null}
-                                                </td>
-                                                <td className="px-3 py-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            type="button"
-                                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
-                                                            onClick={() => setContactModal({ open: true, editing: c })}
-                                                            title="Edit"
-                                                        >
-                                                            <Pencil className="h-4 w-4" />
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                                                            disabled={deleteContactMut.isPending}
-                                                            onClick={() => handleDeleteContact(c)}
-                                                            title="Delete"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </button>
+        {paginatedContacts.map((c) => (
+            <tr key={c.id} className="border-b border-white-light hover:bg-gray-50 dark:border-[#191e3a] dark:hover:bg-white/5">
+                <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{c.name}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{c.relationship}</td>
+                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{c.phone}</td>
+                <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{c.email || '—'}</td>
+                <td className="px-3 py-2">
+                    {c.isNOK ? (
+                        <span className="inline-block rounded bg-success/10 px-2 py-0.5 text-xs font-medium text-success">NOK</span>
+                    ) : null}
+                </td>
+                <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
+                            onClick={() => setContactModal({ open: true, editing: c })}
+                            title="Edit"
+                        >
+                            <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                            type="button"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                            disabled={deleteContactMut.isPending}
+                            onClick={() => handleDeleteContact(c)}
+                            title="Delete"
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </button>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -715,7 +1003,7 @@ const VisitorsContacts: React.FC = () => {
                                 currentPage={contactPage}
                                 totalPages={contactTotalPages}
                                 onPageChange={setContactPage}
-                                totalItems={contacts.length}
+                                totalItems={filteredContacts.length}
                                 itemsPerPage={itemsPerPage}
                             />
                         </>
@@ -742,7 +1030,6 @@ const VisitorsContacts: React.FC = () => {
                 />
             ) : null}
 
-            {/* Confirmation Dialog */}
             <ConfirmationDialog
                 open={confirmDialog.open}
                 title={confirmDialog.title}

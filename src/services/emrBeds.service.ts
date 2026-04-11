@@ -76,6 +76,33 @@ export async function fetchEmrBedList(): Promise<EmrBedListItem[]> {
 }
 
 /**
+ * Facesheet header line from bed list row (backed by active encounter bed id).
+ * Prefers "Bed {identifier} - {ward}"; falls back to normalized list label.
+ */
+export function formatBedHeaderLine(bed: EmrBedListItem): string {
+    const row = bed.raw;
+    const bedName =
+        pickString(row, 'bedLabel', 'bedName', 'name', 'label', 'bedNumber', 'number', 'title').trim() || '';
+    const ward = pickString(row, 'wardName', 'ward', 'unitName', 'unit').trim() || '';
+    if (bedName && ward) return `Bed ${bedName} - ${ward}`;
+    if (bedName) return `Bed ${bedName}`;
+    const lbl = bed.label.trim();
+    if (lbl.includes('·')) {
+        const parts = lbl
+            .split(/\s*·\s*/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+        if (parts.length >= 2) {
+            const wardPart = parts[0];
+            const bedPart = parts[parts.length - 1];
+            if (bedPart && wardPart) return `Bed ${bedPart} - ${wardPart}`;
+        }
+    }
+    if (lbl) return lbl;
+    return '';
+}
+
+/**
  * Beds eligible for admit / transfer destination. Unknown/missing status is treated as available
  * (many APIs omit status for open beds).
  */

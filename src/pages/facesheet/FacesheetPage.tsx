@@ -3,6 +3,8 @@ import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import type { AppDispatch, IRootState } from '../../store';
 import { fetchFacesheetPatient } from '../../store/facesheetSlice';
+import { mergeActiveEncountersFromServer } from '../../store/adtEncounterSlice';
+import { activeEncounterRowsToAdtMergePayload, listActiveEncounters } from '../../services/adt.service';
 import { Loader2 } from 'lucide-react';
 import { EncounterHeader } from '../../components/facesheet/EncounterHeader';
 import { ModuleContainer } from '../../components/facesheet/ModuleContainer';
@@ -22,8 +24,6 @@ const LabOrders = lazy(() => import('../patient/LabOrders'));
 const Documents = lazy(() => import('../patient/Documents'));
 const Notes = lazy(() => import('../patient/Notes'));
 const PreventiveScreening = lazy(() => import('../patient/PreventiveScreening'));
-const Pharmacies = lazy(() => import('../patient/Pharmacies'));
-const PharmacyMessage = lazy(() => import('../patient/PharmacyMessage'));
 const VisitorsContacts = lazy(() => import('../patient/VisitorsContacts'));
 const PatientLocation = lazy(() => import('../patient/PatientLocation'));
 const Adt = lazy(() => import('../patient/Adt'));
@@ -45,6 +45,20 @@ const FacesheetPage = () => {
     useEffect(() => {
         if (!id?.trim()) return;
         dispatch(fetchFacesheetPatient(id.trim()));
+    }, [id, dispatch]);
+
+    useEffect(() => {
+        const pid = id?.trim();
+        if (!pid) return;
+        let cancelled = false;
+        void (async () => {
+            const res = await listActiveEncounters({ patientId: pid });
+            if (cancelled || !res.ok) return;
+            dispatch(mergeActiveEncountersFromServer(activeEncounterRowsToAdtMergePayload(res.data)));
+        })();
+        return () => {
+            cancelled = true;
+        };
     }, [id, dispatch]);
 
     if (!id?.trim()) {
@@ -112,8 +126,6 @@ const FacesheetPage = () => {
                         <Route path="documents" element={<Documents />} />
                         <Route path="notes" element={<Notes />} />
                         <Route path="preventive-screening" element={<PreventiveScreening />} />
-                        <Route path="pharmacies" element={<Pharmacies />} />
-                        <Route path="pharmacy-message" element={<PharmacyMessage />} />
                         <Route path="visitors-contacts" element={<VisitorsContacts />} />
                         <Route path="*" element={<Navigate to="demographic" replace />} />
                     </Routes>

@@ -4,6 +4,8 @@ import type { EncounterHeaderAdtModalState } from './encounterHeaderTypes';
 export interface EncounterActionButtonsProps {
     admitted: boolean;
     dischargeInitiated: boolean;
+    /** Encounter has a non-null bed assignment in workspace state (required to begin discharge). */
+    bedReadyForDischarge: boolean;
     /** When true, transfer is disabled (no listed available beds after a successful fetch). */
     transferBlockedNoBeds: boolean;
     bedsFetchError: boolean;
@@ -14,6 +16,7 @@ export interface EncounterActionButtonsProps {
 export function EncounterActionButtons({
     admitted,
     dischargeInitiated,
+    bedReadyForDischarge,
     transferBlockedNoBeds,
     bedsFetchError,
     onOpenAdt,
@@ -57,8 +60,14 @@ export function EncounterActionButtons({
             {!dischargeInitiated ? (
                 <button
                     type="button"
+                    title={
+                        !bedReadyForDischarge
+                            ? 'No bed linked to this encounter — refresh the chart or open from the bed board'
+                            : undefined
+                    }
+                    disabled={!bedReadyForDischarge}
                     onClick={() => onOpenAdt({ intent: 'discharge', dischargeInitialStep: 'initiate' })}
-                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-amber-200/90 bg-amber-50 px-3 text-xs font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400/50 dark:border-amber-900/45 dark:bg-amber-950/35 dark:text-amber-100 dark:hover:bg-amber-950/55"
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-amber-200/90 bg-amber-50 px-3 text-xs font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400/50 disabled:pointer-events-none disabled:opacity-45 dark:border-amber-900/45 dark:bg-amber-950/35 dark:text-amber-100 dark:hover:bg-amber-950/55"
                 >
                     <DoorOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     Discharge
