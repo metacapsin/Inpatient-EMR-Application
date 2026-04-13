@@ -1,9 +1,3 @@
-<<<<<<< Updated upstream
-import React, { memo, useState } from 'react';
-
-import type { EligibilityRecord } from '../../../types/dischargeReadiness';
-import AppButton from '@/components/ui/AppButton';
-=======
 import React, { memo, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button } from '../../ui/button';
@@ -12,7 +6,6 @@ import { useDischargeReadinessOptional } from '../../../contexts/DischargeReadin
 import { eligibilityExpiresAtMs, formatEligibilityExpiryLabel } from '../../../utils/dischargeReadinessValidation';
 
 type RunResult = { ok: true } | { ok: false; message: string };
->>>>>>> Stashed changes
 
 type Props = {
     history: EligibilityRecord[];
@@ -60,25 +53,22 @@ function EligibilityTabInner({ history, canRun, onRunCheck }: Props) {
             ) : null}
 
             <div className="flex flex-wrap items-center gap-3">
-<<<<<<< Updated upstream
-                <AppButton type="button" disabled={!canRun || running} onClick={() => void (async () => {
-                    setRunning(true);
-                    await onRunCheck();
-                    setRunning(false);
-                })()}>
-                    {running ? 'Checking…' : 'ligibility (270 / 271)'}
-                </AppButton>
-=======
                 <Button
                     type="button"
                     disabled={!canRun || running}
                     onClick={() =>
                         void (async () => {
+                            if (running) return;
                             setRunning(true);
                             setRunError(null);
-                            const res = await onRunCheck();
-                            setRunning(false);
-                            if (!res.ok) setRunError(res.message);
+                            try {
+                                const res = await onRunCheck();
+                                if (!res.ok) setRunError(res.message);
+                            } catch {
+                                setRunError('Eligibility check failed. Please try again.');
+                            } finally {
+                                setRunning(false);
+                            }
                         })()
                     }
                 >
@@ -91,7 +81,6 @@ function EligibilityTabInner({ history, canRun, onRunCheck }: Props) {
                         'Run eligibility (270 / 271)'
                     )}
                 </Button>
->>>>>>> Stashed changes
                 {!canRun ? <span className="text-sm text-gray-500">Your role cannot run eligibility.</span> : null}
             </div>
 

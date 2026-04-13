@@ -33,12 +33,12 @@ import type {
     ServiceResult,
 } from '../types/dischargeReadiness';
 import { asRecord } from '../lib/apiPayload';
+import { getApiErrorMessage } from '../lib/httpError';
+import api from './api';
 import {
-    CLAIM_SUBMIT_CLINICAL_NOT_READY_MSG,
-    CLAIM_SUBMIT_REQUIRES_SIGNED_DISCHARGE_MSG,
     computeReadinessSnapshot,
-    isDischargeSignedForClaim,
     isDischargeSummaryDocumentationComplete,
+    validateInpatientClaimSubmission,
 } from '../utils/dischargeReadinessValidation';
 
 function diagnosisArrayLine(row: Record<string, unknown>): string {
@@ -114,8 +114,6 @@ function normalizeDischargeSummary(raw: unknown): DischargeSummaryState {
             s.signedByName === null || typeof s.signedByName === 'string' ? (s.signedByName as string | null) : null,
     };
 }
-import { getApiErrorMessage } from '../lib/httpError';
-import api from './api';
 
 /** When `"true"`, use in-memory seed data instead of HTTP (see `VITE_USE_MOCK_FACILITY` pattern). */
 export const USE_MOCK_DISCHARGE_READINESS = import.meta.env.VITE_USE_MOCK_DISCHARGE_READINESS === 'true';
@@ -126,6 +124,8 @@ export const DISCHARGE_READINESS_HTTP_ROUTES = {
     dischargeSummary: (encounterId: string) => `/api/encounters/${encodeURIComponent(encounterId)}/discharge-summary`,
     dischargeSummarySign: (encounterId: string) => `/api/encounters/${encodeURIComponent(encounterId)}/discharge-summary/sign`,
     checklist: (encounterId: string) => `/api/encounters/${encodeURIComponent(encounterId)}/discharge-checklist`,
+    checklistTask: (encounterId: string, taskId: string) =>
+        `/api/encounters/${encodeURIComponent(encounterId)}/discharge-checklist/tasks/${encodeURIComponent(taskId)}`,
     charges: (encounterId: string) => `/api/encounters/${encodeURIComponent(encounterId)}/charges`,
     chargeById: (encounterId: string, chargeId: string) =>
         `/api/encounters/${encodeURIComponent(encounterId)}/charges/${encodeURIComponent(chargeId)}`,
@@ -163,22 +163,17 @@ function seedPayload(encounterId: string): DischargeReadinessPayload {
         admissionDiagnosis: 'Community-acquired pneumonia',
         hospitalCourse:
             'Admitted for hypoxia and fever. IV antibiotics started day 1. Oxygen weaned by day 3. Ambulating independently.',
-        procedures: [
-            { id: 'p1', code: '0BH17EZ', description: 'Insertion of endotracheal tube, via natural or artificial opening' },
-        ],
-        finalDiagnoses: [
-            { id: 'd1', code: 'J18.9', description: 'Pneumonia, unspecified organism', isPrincipal: true },
-            { id: 'd2', code: 'I10', description: 'Essential (primary) hypertension', isPrincipal: false },
-        ],
+        procedures: '0BH17EZ Insertion of endotracheal tube, via natural or artificial opening',
+        finalDiagnoses:
+            'Principal: J18.9 — Pneumonia, unspecified organism\nI10 — Essential (primary) hypertension',
         disposition: 'Home',
         conditionAtDischarge: 'Improved',
-        dischargeMedications: [
-            { id: 'm1', name: 'Amoxicillin-clavulanate 875/125 mg', sig: '1 tablet PO BID x 7 days' },
-            { id: 'm2', name: 'Albuterol inhaler', sig: '2 puffs INH q4h PRN wheeze' },
-        ],
+        dischargeMedications:
+            'Amoxicillin-clavulanate 875/125 mg — 1 tablet PO BID x 7 days\nAlbuterol inhaler — 2 puffs INH q4h PRN wheeze',
         followUpInstructions: 'PCP in 7–10 days. Return for fever, worsening shortness of breath, or inability to take oral meds.',
         signedAt: null,
         signedBy: null,
+        signedByName: null,
     };
 
     const checklist: ChecklistTask[] = [
@@ -310,6 +305,17 @@ function deriveReadiness(p: DischargeReadinessPayload): DischargeReadinessView {
     };
 }
 
+function viewToPayload(v: DischargeReadinessView): DischargeReadinessPayload {
+    return {
+        context: v.context,
+        summary: v.summary,
+        checklist: v.checklist,
+        charges: v.charges,
+        eligibilityHistory: v.eligibilityHistory,
+        claimPrep: v.claimPrep,
+    };
+}
+
 function unwrapEnvelope(raw: unknown): Record<string, unknown> {
     const o = asRecord(raw);
     if (!o) throw new Error('Empty discharge readiness response');
@@ -369,22 +375,43 @@ function mockDelay(ms: number): Promise<void> {
 }
 
 export async function fetchDischargeReadiness(encounterId: string): Promise<ServiceResult<DischargeReadinessView>> {
-    await new Promise((r) => setTimeout(r, 120));
-    if (!encounterId.trim()) return { ok: false, message: 'Encounter id is required' };
-    const p = ensurePayload(encounterId.trim());
-    return { ok: true, data: deriveReadiness(p) };
+    const id = encounterId.trim();
+    if (!id) return { ok: false, message: 'Encounter id is required' };
+    if (USE_MOCK_DISCHARGE_READINESS) {
+        await mockDelay(120);
+        const p = ensurePayload(id);
+        return { ok: true, data: deriveReadiness(p) };
+    }
+    try {
+        const { data } = await api.get(DISCHARGE_READINESS_HTTP_ROUTES.readiness(id));
+        return { ok: true, data: parseDischargeReadinessView(data) };
+    } catch (e) {
+        return { ok: false, message: getApiErrorMessage(e) };
+    }
 }
 
 export async function saveDischargeSummaryDraft(
     encounterId: string,
     partial: Partial<DischargeSummaryState>
 ): Promise<ServiceResult<DischargeReadinessView>> {
-    await new Promise((r) => setTimeout(r, 80));
-    const p = ensurePayload(encounterId.trim());
-    if (p.summary.status === 'signed') return { ok: false, message: 'Signed summaries cannot be edited (use amendment flow on backend).' };
-    p.summary = { ...p.summary, ...partial };
-    store.set(encounterId.trim(), p);
-    return { ok: true, data: deriveReadiness(p) };
+    const id = encounterId.trim();
+    if (USE_MOCK_DISCHARGE_READINESS) {
+        await mockDelay(80);
+        const p = ensurePayload(id);
+        if (p.summary.status === 'signed') {
+            return { ok: false, message: 'Signed summaries cannot be edited (use amendment flow on backend).' };
+        }
+        p.summary = { ...p.summary, ...partial };
+        store.set(id, p);
+        return { ok: true, data: deriveReadiness(p) };
+    }
+    try {
+        const { data } = await api.put(DISCHARGE_READINESS_HTTP_ROUTES.dischargeSummary(id), partial);
+        const view = await afterMutation(id, data);
+        return { ok: true, data: view };
+    } catch (e) {
+        return { ok: false, message: getApiErrorMessage(e) };
+    }
 }
 
 /** Body for `POST .../discharge-summary/sign` (encounter id is also in the URL). */
@@ -418,11 +445,9 @@ export async function signDischargeSummary(
         p.summary.signedBy = payload.signedBy.trim();
         p.summary.signedByName = payload.signedByName.trim() || null;
         store.set(id, p);
-        console.log('Signing payload:', payload);
         return { ok: true, data: deriveReadiness(p) };
     }
     try {
-        console.log('Signing payload:', payload);
         const { data } = await api.post(DISCHARGE_READINESS_HTTP_ROUTES.dischargeSummarySign(id), payload);
         const view = await afterMutation(id, data);
         return { ok: true, data: view };
@@ -436,38 +461,58 @@ export async function updateChecklistTask(
     taskId: string,
     patch: Partial<Pick<ChecklistTask, 'completed' | 'notes'>>
 ): Promise<ServiceResult<DischargeReadinessView>> {
-    await new Promise((r) => setTimeout(r, 80));
-    const p = ensurePayload(encounterId.trim());
-    const t = p.checklist.find((x) => x.id === taskId);
-    if (!t) return { ok: false, message: 'Checklist task not found' };
-    Object.assign(t, patch);
-    store.set(encounterId.trim(), p);
-    return { ok: true, data: deriveReadiness(p) };
+    const id = encounterId.trim();
+    if (USE_MOCK_DISCHARGE_READINESS) {
+        await mockDelay(80);
+        const p = ensurePayload(id);
+        const t = p.checklist.find((x) => x.id === taskId);
+        if (!t) return { ok: false, message: 'Checklist task not found' };
+        Object.assign(t, patch);
+        store.set(id, p);
+        return { ok: true, data: deriveReadiness(p) };
+    }
+    try {
+        const { data } = await api.patch(DISCHARGE_READINESS_HTTP_ROUTES.checklistTask(id, taskId), patch);
+        const view = await afterMutation(id, data);
+        return { ok: true, data: view };
+    } catch (e) {
+        return { ok: false, message: getApiErrorMessage(e) };
+    }
 }
 
 export async function addChargeLine(
     encounterId: string,
     line: Omit<ChargeLine, 'id' | 'total'> & { total?: number }
 ): Promise<ServiceResult<DischargeReadinessView>> {
-    await new Promise((r) => setTimeout(r, 80));
-    const p = ensurePayload(encounterId.trim());
-    const id = `ch-${Date.now()}`;
-    const total = money(line.quantity * line.unitPrice);
-    const row: ChargeLine = {
-        id,
-        category: line.category,
-        description: line.description,
-        serviceDate: line.serviceDate,
-        serviceCode: line.serviceCode,
-        quantity: line.quantity,
-        unitPrice: line.unitPrice,
-        total,
-        status: line.status,
-    };
-    p.charges.push(row);
-    p.claimPrep.totalCharges = sumCharges(p.charges);
-    store.set(encounterId.trim(), p);
-    return { ok: true, data: deriveReadiness(p) };
+    const id = encounterId.trim();
+    if (USE_MOCK_DISCHARGE_READINESS) {
+        await mockDelay(80);
+        const p = ensurePayload(id);
+        const rowId = `ch-${Date.now()}`;
+        const total = money(line.quantity * line.unitPrice);
+        const row: ChargeLine = {
+            id: rowId,
+            category: line.category,
+            description: line.description,
+            serviceDate: line.serviceDate,
+            serviceCode: line.serviceCode,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            total,
+            status: line.status,
+        };
+        p.charges.push(row);
+        p.claimPrep.totalCharges = sumCharges(p.charges);
+        store.set(id, p);
+        return { ok: true, data: deriveReadiness(p) };
+    }
+    try {
+        const { data } = await api.post(DISCHARGE_READINESS_HTTP_ROUTES.charges(id), line);
+        const view = await afterMutation(id, data);
+        return { ok: true, data: view };
+    } catch (e) {
+        return { ok: false, message: getApiErrorMessage(e) };
+    }
 }
 
 export async function updateChargeLine(
@@ -501,9 +546,6 @@ export async function updateChargeLine(
     } catch (e) {
         return { ok: false, message: getApiErrorMessage(e) };
     }
-    p.claimPrep.totalCharges = sumCharges(p.charges);
-    store.set(encounterId.trim(), p);
-    return { ok: true, data: deriveReadiness(p) };
 }
 
 export async function deleteChargeLine(encounterId: string, chargeId: string): Promise<ServiceResult<DischargeReadinessView>> {
@@ -568,11 +610,21 @@ export async function updateClaimPrep(
     encounterId: string,
     patch: Partial<ClaimPrepState>
 ): Promise<ServiceResult<DischargeReadinessView>> {
-    await new Promise((r) => setTimeout(r, 80));
-    const p = ensurePayload(encounterId.trim());
-    p.claimPrep = { ...p.claimPrep, ...patch };
-    store.set(encounterId.trim(), p);
-    return { ok: true, data: deriveReadiness(p) };
+    const id = encounterId.trim();
+    if (USE_MOCK_DISCHARGE_READINESS) {
+        await mockDelay(80);
+        const p = ensurePayload(id);
+        p.claimPrep = { ...p.claimPrep, ...patch };
+        store.set(id, p);
+        return { ok: true, data: deriveReadiness(p) };
+    }
+    try {
+        const { data } = await api.put(DISCHARGE_READINESS_HTTP_ROUTES.claimPrep(id), patch);
+        const view = await afterMutation(id, data);
+        return { ok: true, data: view };
+    } catch (e) {
+        return { ok: false, message: getApiErrorMessage(e) };
+    }
 }
 
 export async function submitClaimPrep(encounterId: string): Promise<ServiceResult<DischargeReadinessView>> {
@@ -580,16 +632,8 @@ export async function submitClaimPrep(encounterId: string): Promise<ServiceResul
     if (USE_MOCK_DISCHARGE_READINESS) {
         await mockDelay(200);
         const p = ensurePayload(id);
-        if (!isDischargeSignedForClaim(p)) {
-            return { ok: false, message: CLAIM_SUBMIT_REQUIRES_SIGNED_DISCHARGE_MSG };
-        }
-        const snap = computeReadinessSnapshot(p);
-        if (!snap.isClinicalReady) {
-            return { ok: false, message: CLAIM_SUBMIT_CLINICAL_NOT_READY_MSG };
-        }
-        if (snap.hardBlockers.length > 0) {
-            return { ok: false, message: 'Resolve all readiness blockers before submitting the claim.' };
-        }
+        const block = validateInpatientClaimSubmission(p);
+        if (block) return { ok: false, message: block };
         p.claimPrep.status = 'submitted';
         p.claimPrep.lastSubmittedAt = new Date().toISOString();
         p.claimPrep.payerClaimId = `PAYER-${Math.floor(Math.random() * 1e9)}`;
@@ -597,6 +641,9 @@ export async function submitClaimPrep(encounterId: string): Promise<ServiceResul
         return { ok: true, data: deriveReadiness(p) };
     }
     try {
+        const current = await refetchView(id);
+        const block = validateInpatientClaimSubmission(viewToPayload(current));
+        if (block) return { ok: false, message: block };
         const { data } = await api.post(DISCHARGE_READINESS_HTTP_ROUTES.claimSubmit(id));
         const view = await afterMutation(id, data);
         return { ok: true, data: view };

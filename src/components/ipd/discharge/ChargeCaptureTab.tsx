@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState } from 'react';
+import React, { memo, useMemo, useRef, useState } from 'react';
 import { Loader2, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
@@ -172,6 +172,7 @@ function ChargeCaptureTabInner({ charges, canEdit, onUpdateCharge, onAddCharge, 
     const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
     const [adding, setAdding] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
+    const addInFlight = useRef(false);
 
     const total = charges.reduce((s, c) => s + c.total, 0);
 
@@ -185,15 +186,13 @@ function ChargeCaptureTabInner({ charges, canEdit, onUpdateCharge, onAddCharge, 
     }, [ctx?.snapshot]);
 
     return (
-        <div className="space-y-6">
-            <div className="rounded-md border border-gray-200 bg-gray-50/80 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/40">
-                <p className="text-sm text-gray-600 dark:text-gray-400">Encounter charge total (mock)</p>
-                <p className="text-xl font-semibold text-gray-900 dark:text-white">${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
         <div className="space-y-6" data-charges-tab>
             <div
                 className={cn(
                     'rounded-lg border px-4 py-4 dark:border-gray-700',
-                    chargeGateHint ? 'border-amber-300 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/30' : 'border-gray-200 bg-gray-50/80 dark:bg-gray-900/40',
+                    chargeGateHint
+                        ? 'border-amber-300 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/30'
+                        : 'border-gray-200 bg-gray-50/80 dark:bg-gray-900/40',
                 )}
             >
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Encounter charge total</p>
@@ -219,59 +218,6 @@ function ChargeCaptureTabInner({ charges, canEdit, onUpdateCharge, onAddCharge, 
                         </tr>
                     </thead>
                     <tbody>
-                        {/* {charges.map((c) => (
-                            <tr key={c.id} className="border-b border-gray-100 dark:border-gray-800">
-                                <td className="py-2 pr-2 whitespace-nowrap">{c.serviceDate}</td>
-                                <td className="py-2 pr-2">{categoryLabel[c.category]}</td>
-                                <td className="py-2 pr-2">{c.description}</td>
-                                <td className="py-2 pr-2 font-mono text-xs">{c.serviceCode}</td>
-                                <td className="py-2 pr-2">{c.quantity}</td>
-                                <td className="py-2 pr-2">${c.unitPrice.toFixed(2)}</td>
-                                <td className="py-2 pr-2 font-medium">${c.total.toFixed(2)}</td>
-                                <td className="py-2">
-                                    <select
-                                        className="h-8 rounded border border-gray-300 bg-white text-xs dark:border-gray-600 dark:bg-gray-900"
-                                        disabled={!canEdit}
-                                        value={c.status}
-                                        onChange={(e) =>
-                                            void onUpdateCharge(c.id, { status: e.target.value as ChargeLineStatus })
-                                        }
-                                    >
-                                        <option value="pending_capture">Pending capture</option>
-                                        <option value="posted">Posted</option>
-                                        <option value="hold">Hold</option>
-                                    </select>
-                                </td>
-                            </tr>
-                        ))} */}
-                        {charges.map((c) => (
-  <tr key={c.id} className="border-b border-gray-100 dark:border-gray-800">
-    <td className="py-2 pr-2 whitespace-nowrap">{c.serviceDate}</td>
-    <td className="py-2 pr-2">{categoryLabel[c.category]}</td>
-    <td className="py-2 pr-2">{c.description}</td>
-    <td className="py-2 pr-2 font-mono text-xs">{c.serviceCode}</td>
-    <td className="py-2 pr-2">{c.quantity}</td>
-    <td className="py-2 pr-2">${c.unitPrice.toFixed(2)}</td>
-    <td className="py-2 pr-2 font-medium">${c.total.toFixed(2)}</td>
-
-    <td className="py-2">
-      <div className="w-25">
-        <NewDropdown
-          options={[
-            { value: "pending_capture", label: "Pending capture" },
-            { value: "posted", label: "Posted" },
-            { value: "hold", label: "Hold" },
-          ]}
-          value={c.status}
-          onChange={(v) =>
-            void onUpdateCharge(c.id, { status: v as ChargeLineStatus })
-          }
-          disabled={!canEdit}
-        />
-      </div>
-    </td>
-  </tr>
-))}
                         {charges.length === 0 ? (
                             <tr>
                                 <td colSpan={canEdit ? 9 : 8} className="py-6 text-center text-sm text-gray-500">
@@ -280,7 +226,13 @@ function ChargeCaptureTabInner({ charges, canEdit, onUpdateCharge, onAddCharge, 
                             </tr>
                         ) : (
                             charges.map((c) => (
-                                <ChargeRow key={c.id} c={c} canEdit={canEdit} onUpdateCharge={onUpdateCharge} onDeleteCharge={onDeleteCharge} />
+                                <ChargeRow
+                                    key={c.id}
+                                    c={c}
+                                    canEdit={canEdit}
+                                    onUpdateCharge={onUpdateCharge}
+                                    onDeleteCharge={onDeleteCharge}
+                                />
                             ))
                         )}
                     </tbody>
@@ -290,41 +242,66 @@ function ChargeCaptureTabInner({ charges, canEdit, onUpdateCharge, onAddCharge, 
             {canEdit ? (
                 <div className="rounded-lg border border-dashed border-gray-300 p-4 dark:border-gray-600">
                     <p className="mb-3 text-sm font-medium text-gray-900 dark:text-white">Add charge (CDM)</p>
-                    <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4">
-                        <Input placeholder="Description *" value={desc} onChange={(e) => setDesc(e.target.value)} aria-invalid={Boolean(formError)} />
-                        <Input placeholder="Service code *" value={code} onChange={(e) => setCode(e.target.value)} />
-                        <Input type="number" min={1} placeholder="Qty *" value={qty} onChange={(e) => setQty(e.target.value)} />
-                        <Input type="text" inputMode="decimal" placeholder="Unit price *" value={price} onChange={(e) => setPrice(e.target.value)} />
+                    <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                        <Input
+                            placeholder="Description *"
+                            value={desc}
+                            onChange={(e) => {
+                                setFormError(null);
+                                setDesc(e.target.value);
+                            }}
+                            aria-invalid={Boolean(formError)}
+                            className="min-w-0 xl:col-span-2"
+                        />
+                        <Input
+                            placeholder="Service code *"
+                            value={code}
+                            onChange={(e) => {
+                                setFormError(null);
+                                setCode(e.target.value);
+                            }}
+                        />
+                        <Input
+                            type="number"
+                            min={1}
+                            placeholder="Qty *"
+                            value={qty}
+                            onChange={(e) => {
+                                setFormError(null);
+                                setQty(e.target.value);
+                            }}
+                        />
+                        <Input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="Unit price *"
+                            value={price}
+                            onChange={(e) => {
+                                setFormError(null);
+                                setPrice(e.target.value);
+                            }}
+                        />
                         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-                        {/* <select
-                            className="h-9 rounded-md border border-gray-300 bg-white px-2 text-sm dark:border-gray-600 dark:bg-gray-900"
-                            value={category}
-                            onChange={(e) => setCategory(e.target.value as ChargeCategory)}
-                        >
-                            {(Object.keys(categoryLabel) as ChargeCategory[]).map((k) => (
-                                <option key={k} value={k}>
-                                    {categoryLabel[k]}
-                                </option>
-                            ))}
-                        </select> */}
-                    <div className="h-2 w-full size-sm">
+                        <div className="min-w-0 md:col-span-2 xl:col-span-1">
+                            <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Category</label>
                             <NewDropdown
-                                options={Object.keys(categoryLabel).map((k) => ({
-                                value: k,
-                                label: categoryLabel[k as ChargeCategory],
+                                options={(Object.keys(categoryLabel) as ChargeCategory[]).map((k) => ({
+                                    value: k,
+                                    label: categoryLabel[k],
                                 }))}
                                 value={category}
                                 onChange={(v) => setCategory(v as ChargeCategory)}
-                                placeholder="Select..."
+                                placeholder="Category…"
                             />
-</div>
-                    
+                        </div>
                     </div>
+                    {formError ? <p className="mt-2 text-sm text-red-600">{formError}</p> : null}
                     <AppButton
                         type="button"
                         className="mt-3"
                         disabled={adding}
                         onClick={async () => {
+                            if (addInFlight.current) return;
                             setFormError(null);
                             const q = Number(qty);
                             const u = parseMoney(price);
@@ -344,22 +321,27 @@ function ChargeCaptureTabInner({ charges, canEdit, onUpdateCharge, onAddCharge, 
                                 setFormError('Unit price must be a valid non-negative number.');
                                 return;
                             }
+                            addInFlight.current = true;
                             setAdding(true);
-                            const ok = await onAddCharge({
-                                category,
-                                description: desc.trim(),
-                                serviceCode: code.trim(),
-                                serviceDate: date,
-                                quantity: q,
-                                unitPrice: u,
-                                status: 'pending_capture',
-                            });
-                            setAdding(false);
-                            if (ok) {
-                                setDesc('');
-                                setCode('');
-                                setPrice('');
-                                setQty('1');
+                            try {
+                                const ok = await onAddCharge({
+                                    category,
+                                    description: desc.trim(),
+                                    serviceCode: code.trim(),
+                                    serviceDate: date,
+                                    quantity: q,
+                                    unitPrice: u,
+                                    status: 'pending_capture',
+                                });
+                                if (ok) {
+                                    setDesc('');
+                                    setCode('');
+                                    setPrice('');
+                                    setQty('1');
+                                }
+                            } finally {
+                                setAdding(false);
+                                addInFlight.current = false;
                             }
                         }}
                     >
@@ -370,8 +352,6 @@ function ChargeCaptureTabInner({ charges, canEdit, onUpdateCharge, onAddCharge, 
                 <p className="text-sm text-gray-500">Your role cannot add or change charge lines.</p>
             )}
         </div>
-    </div>
-    </div>
     );
 }
 

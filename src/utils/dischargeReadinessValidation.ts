@@ -333,6 +333,20 @@ export function canSubmitInpatientClaim(params: {
     return getClaimSubmitBlockedReason(params) === undefined;
 }
 
+/**
+ * Server-style claim submit validation (no RBAC). Use before POST claim submit for mock and live API.
+ */
+export function validateInpatientClaimSubmission(p: DischargeReadinessPayload): string | undefined {
+    const snapshot = computeReadinessSnapshot(p);
+    return getClaimSubmitBlockedReason({
+        payload: p,
+        snapshot,
+        principalDxCodeForm: p.claimPrep.principalDxCode?.trim() ?? '',
+        canEdit: true,
+        claimPrepStatus: p.claimPrep.status,
+    });
+}
+
 /** Visual form order for scrolling to the first invalid summary field. */
 export const DISCHARGE_SUMMARY_ERROR_SCROLL_ORDER: DischargeSummaryRequiredKey[] = [
     'admissionDiagnosis',

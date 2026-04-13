@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { IRootState } from '../../store';
+import type { User } from '../../store/authSlice';
 import NewDropdown from '../../components/ui/NewDropdown';
 import {
     canBillingFinancialActions,
@@ -33,9 +34,7 @@ import { NursingChecklistTab } from '../../components/ipd/discharge/NursingCheck
 import { ChargeCaptureTab } from '../../components/ipd/discharge/ChargeCaptureTab';
 import { EligibilityTab } from '../../components/ipd/discharge/EligibilityTab';
 import { BillingTab } from '../../components/ipd/discharge/BillingTab';
-
-const selectClass =
-    'h-10 w-full max-w-md rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100';
+import { providerDisplayNameFromUser, providerSignUserIdFromUser } from '../../utils/dischargeReadinessUser';
 
 type TabId = 'summary' | 'checklist' | 'charges' | 'insurance' | 'billing';
 
@@ -59,7 +58,6 @@ function DischargeReadinessLoaded({
     tab,
     setTab,
     canPhysician,
-    canSignDischarge,
     providerSignUserId,
     dischargeSignDisabledExplanation,
     rolesNorm,
@@ -73,7 +71,6 @@ function DischargeReadinessLoaded({
     tab: TabId;
     setTab: React.Dispatch<React.SetStateAction<TabId>>;
     canPhysician: boolean;
-    canSignDischarge: boolean;
     providerSignUserId: string;
     dischargeSignDisabledExplanation: string | null;
     rolesNorm: ReturnType<typeof normalizeRoles>;
@@ -115,7 +112,7 @@ function DischargeReadinessLoaded({
                     <DischargeSummaryTab
                         summary={view.summary}
                         canEdit={canPhysician}
-                        canSign={canSignDischarge}
+                        canSign={canPhysician}
                         signDisabledExplanation={dischargeSignDisabledExplanation}
                         onSaveDraft={async (partial) => {
                             const res = await saveDischargeSummaryDraft(eid, partial);
@@ -128,7 +125,7 @@ function DischargeReadinessLoaded({
                             return true;
                         }}
                         onSign={async () => {
-                            if (!canSignDischargeSummary(rolesNorm)) {
+                            if (!canSignPhysicianNote(rolesNorm)) {
                                 toast.error('Only a provider can sign the discharge summary.');
                                 return false;
                             }
@@ -229,6 +226,7 @@ function DischargeReadinessLoaded({
                 <div className={tab === 'billing' ? '' : 'hidden'} aria-hidden={tab !== 'billing'}>
                     <BillingTab
                         claimPrep={view.claimPrep}
+                        billingReady={view.billingReady}
                         canEdit={canBilling}
                         onSaveClaimPrep={async (patch) => {
                             const res = await updateClaimPrep(eid, patch);
@@ -241,14 +239,19 @@ function DischargeReadinessLoaded({
                             return true;
                         }}
                         onSubmitClaim={async () => {
-                            const res = await submitClaimPrep(eid);
-                            if (!res.ok) {
-                                toast.error(res.message);
+                            try {
+                                const res = await submitClaimPrep(eid);
+                                if (!res.ok) {
+                                    toast.error(res.message);
+                                    return false;
+                                }
+                                setView(res.data);
+                                toast.success('Claim submitted');
+                                return true;
+                            } catch {
+                                toast.error('Could not submit claim. Please try again.');
                                 return false;
                             }
-                            setView(res.data);
-                            toast.success('Claim submitted');
-                            return true;
                         }}
                     />
                 </div>
@@ -269,6 +272,7 @@ export default function DischargeReadinessPage() {
     const canPhysician = canSignPhysicianNote(rolesNorm);
     const canNursing = canNursingActions(rolesNorm);
     const canBilling = canBillingFinancialActions(rolesNorm);
+    const providerSignUserId = useMemo(() => providerSignUserIdFromUser(user), [user]);
 
     const [tab, setTab] = useState<TabId>('summary');
     const [view, setView] = useState<DischargeReadinessView | null>(null);
@@ -334,19 +338,26 @@ export default function DischargeReadinessPage() {
         }
         let cancelled = false;
         setLoading(true);
-        void fetchDischargeReadiness(eid).then((res) => {
-            if (cancelled) return;
-            setLoading(false);
-            if (!res.ok) {
-                toast.error(res.message);
-                setView(null);
-                return;
-            }
-            setView(res.data);
-        });
+        void fetchDischargeReadiness(eid)
+            .then((res) => {
+                if (cancelled) return;
+                if (!res.ok) {
+                    toast.error(res.message);
+                    setView(null);
+                    return;
+                }
+                setView(res.data);
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
         return () => {
             cancelled = true;
         };
+    }, [eid]);
+
+    useEffect(() => {
+        setTab('summary');
     }, [eid]);
 
     const patientInList = patientId && patients.some((p) => p.id === patientId);
@@ -373,7 +384,7 @@ export default function DischargeReadinessPage() {
                 <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Patient</label>
                     {/* <select
-                        className={selectClass}
+                        className="h-10 w-full max-w-md rounded-md border border-gray-300 bg-white px-3 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-900"
                         value={patientId}
                         disabled={patientsLoading}
                         onChange={(e) => setPatientSelection(e.target.value)}
@@ -466,7 +477,7 @@ export default function DischargeReadinessPage() {
 
     const dischargeSignDisabledExplanation = useMemo(() => {
         if (!view || view.summary.status === 'signed') return null;
-        if (!canSignDischargeSummary(rolesNorm)) {
+        if (!canSignPhysicianNote(rolesNorm)) {
             return 'Only a provider can sign the discharge summary.';
         }
         if (!providerSignUserId) {
@@ -507,7 +518,6 @@ export default function DischargeReadinessPage() {
                     tab={tab}
                     setTab={setTab}
                     canPhysician={canPhysician}
-                    canSignDischarge={canSignDischarge}
                     providerSignUserId={providerSignUserId}
                     dischargeSignDisabledExplanation={dischargeSignDisabledExplanation}
                     rolesNorm={rolesNorm}

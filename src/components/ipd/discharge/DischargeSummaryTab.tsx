@@ -1,11 +1,11 @@
-import React, { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
+import React, { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../ui/button';
 import { Textarea } from '../../ui/textarea';
 import { Input } from '../../ui/input';
 import type { DischargeSummaryState } from '../../../types/dischargeReadiness';
-import NewDropdown from '@/components/ui/NewDropdown';
+import { cn } from '@/lib/utils';
 import { useDischargeReadinessOptional } from '../../../contexts/DischargeReadinessContext';
 import {
     scrollToFirstDischargeSummaryError,
@@ -23,6 +23,7 @@ type Props = {
     summary: DischargeSummaryState;
     canEdit: boolean;
     canSign: boolean;
+    signDisabledExplanation?: string | null;
     onSaveDraft: (partial: Partial<DischargeSummaryState>) => Promise<boolean>;
     onSign: () => Promise<boolean>;
 };
@@ -94,9 +95,12 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
     const [fieldErrors, setFieldErrors] = useState<DischargeSummaryRequiredErrors>({});
     const [saving, setSaving] = useState(false);
     const [signing, setSigning] = useState(false);
+    const saveDraftInFlight = useRef(false);
+    const signInFlight = useRef(false);
 
     useEffect(() => {
-        setLocal(summary);
+        setForm(summaryToFormState(summary));
+        setFieldErrors({});
     }, [summary]);
 
     useEffect(() => {
@@ -124,7 +128,13 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
         setFieldErrors(ok ? {} : errors);
         if (!ok) scrollToFirstDischargeSummaryError(errors);
         return ok;
-    }, [form.admissionDiagnosis, form.hospitalCourse, form.finalDiagnoses, form.dischargeMedications, form.followUpInstructions]);
+    }, [
+        form.admissionDiagnosis,
+        form.hospitalCourse,
+        form.finalDiagnoses,
+        form.dischargeMedications,
+        form.followUpInstructions,
+    ]);
 
     useImperativeHandle(ref, () => ({
         validate: async () => validateForm(),
@@ -153,7 +163,7 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
         'mt-1 h-10 w-full rounded-md border bg-white px-2 text-sm dark:bg-gray-900 dark:text-gray-100 focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary';
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-4" data-discharge-summary-tab>
             <div className="flex flex-wrap items-center gap-2">
                 <span
                     className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
@@ -164,19 +174,34 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
                 >
                     {summary.status === 'signed' ? `Signed ${summary.signedAt ? new Date(summary.signedAt).toLocaleString() : ''}` : 'Draft'}
                 </span>
-                {summary.signedBy ? <span className="text-xs text-gray-500">by {summary.signedBy}</span> : null}
+                {summary.status === 'signed' && (summary.signedByName || summary.signedBy) ? (
+                    <span className="text-xs text-gray-500">
+                        by {summary.signedByName?.trim() || summary.signedBy}
+                    </span>
+                ) : null}
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                    <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Admission diagnosis / reason</label>
+                <div data-discharge-field="admissionDiagnosis">
+                    <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                        Admission diagnosis / reason
+                        <Req />
+                    </label>
                     <Textarea
-                        className="mt-1"
+                        className={cn('mt-1', fieldErrors.admissionDiagnosis && 'border-destructive')}
                         rows={2}
                         disabled={locked}
-                        value={local.admissionDiagnosis}
-                        onChange={(e) => setLocal((s) => ({ ...s, admissionDiagnosis: e.target.value }))}
+                        aria-invalid={Boolean(fieldErrors.admissionDiagnosis)}
+                        value={form.admissionDiagnosis}
+                        onChange={(e) => {
+                            const v = e.target.value;
+                            setForm((prev) => ({ ...prev, admissionDiagnosis: v }));
+                            clearError('admissionDiagnosis');
+                        }}
                     />
+                    {fieldErrors.admissionDiagnosis ? (
+                        <p className="mt-1 text-xs text-red-600">{fieldErrors.admissionDiagnosis}</p>
+                    ) : null}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                     <div data-discharge-field="disposition">
@@ -313,13 +338,18 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
             <div className="flex flex-wrap gap-2">
                 <Button
                     type="button"
-                    disabled={locked || saving}
+                    disabled={locked || saving || signing}
                     onClick={async () => {
+                        if (saveDraftInFlight.current) return;
+                        saveDraftInFlight.current = true;
                         setSaving(true);
-                        const ok = await onSaveDraft(formStateToPartial(form));
-                        if (ok) ctx?.clearSummaryDraft();
-                        setSaving(false);
-                        return ok;
+                        try {
+                            const ok = await onSaveDraft(formStateToPartial(form));
+                            if (ok) ctx?.clearSummaryDraft();
+                        } finally {
+                            setSaving(false);
+                            saveDraftInFlight.current = false;
+                        }
                     }}
                 >
                     {saving ? (
@@ -336,12 +366,14 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
                         type="button"
                         disabled={signDisabled}
                         onClick={async () => {
+                            if (signInFlight.current || signing) return;
                             if (!validateForm()) return;
                             if (snapshot && !snapshot.canSignDischargeSummary) {
                                 toast.error('Resolve all readiness blockers before signing the discharge summary.');
                                 scrollToFirstReadinessIssue(snapshot);
                                 return;
                             }
+                            signInFlight.current = true;
                             setSigning(true);
                             try {
                                 const saved = await onSaveDraft(formStateToPartial(form));
@@ -349,8 +381,11 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
                                     await onSign();
                                     ctx?.clearSummaryDraft();
                                 }
+                            } catch {
+                                toast.error('Signing failed. Please try again.');
                             } finally {
                                 setSigning(false);
+                                signInFlight.current = false;
                             }
                         }}
                     >
@@ -370,6 +405,6 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
             ) : null}
         </div>
     );
-}
+});
 
 export const DischargeSummaryTab = memo(DischargeSummaryTabInner);

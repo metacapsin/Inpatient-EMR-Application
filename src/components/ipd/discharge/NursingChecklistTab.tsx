@@ -7,19 +7,36 @@ type Props = {
     tasks: ChecklistTask[];
     canEdit: boolean;
     onUpdateTask: (taskId: string, patch: Partial<Pick<ChecklistTask, 'completed' | 'notes'>>) => Promise<boolean>;
-    /** @deprecated highlight is derived from readiness blockers when inside provider */
-    highlightIncompleteRequired?: boolean;
 };
 
-function TaskRow({ t, canEdit, onUpdateTask }: { t: ChecklistTask; canEdit: boolean; onUpdateTask: Props['onUpdateTask'] }) {
+function TaskRow({
+    t,
+    canEdit,
+    onUpdateTask,
+    highlight,
+}: {
+    t: ChecklistTask;
+    canEdit: boolean;
+    onUpdateTask: Props['onUpdateTask'];
+    highlight: boolean;
+}) {
     const [notesLocal, setNotesLocal] = useState(t.notes);
 
     useEffect(() => {
         setNotesLocal(t.notes);
     }, [t.notes]);
 
+    const showHighlight = highlight && t.blocksDischarge && !t.completed;
+
     return (
-        <li className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+        <li
+            className={cn(
+                'rounded-lg border p-3 dark:border-gray-700',
+                showHighlight
+                    ? 'border-amber-400 bg-amber-50/60 dark:border-amber-700 dark:bg-amber-950/25'
+                    : 'border-gray-200 dark:border-gray-700',
+            )}
+        >
             <div className="flex items-start gap-3">
                 <input
                     type="checkbox"
@@ -52,30 +69,22 @@ function TaskRow({ t, canEdit, onUpdateTask }: { t: ChecklistTask; canEdit: bool
     );
 }
 
-function NursingChecklistTabInner({ tasks, canEdit, onUpdateTask, highlightIncompleteRequired }: Props) {
+function NursingChecklistTabInner({ tasks, canEdit, onUpdateTask }: Props) {
     const ctx = useDischargeReadinessOptional();
-    const highlightFromBlockers = useMemo(() => {
+    const highlight = useMemo(() => {
         const g = ctx?.snapshot.gates.find((x) => x.id === 'gate-nursing-checklist');
         return Boolean(g && !g.resolved && g.severity === 'hard');
     }, [ctx?.snapshot]);
 
-    const highlight = highlightFromBlockers || Boolean(highlightIncompleteRequired);
-
     return (
-        <div className="space-y-4">
+        <div className="space-y-4" data-nursing-checklist-tab>
             <p className="text-sm text-gray-600 dark:text-gray-400">
                 Required items must be completed before the clinical discharge track clears. Incomplete items appear as hard blockers in the
                 readiness header.
             </p>
             <ul className="space-y-3">
                 {tasks.map((t) => (
-                    <TaskRow
-                        key={t.id}
-                        t={t}
-                        canEdit={canEdit}
-                        onUpdateTask={onUpdateTask}
-                        highlightIncompleteRequired={highlight}
-                    />
+                    <TaskRow key={t.id} t={t} canEdit={canEdit} onUpdateTask={onUpdateTask} highlight={highlight} />
                 ))}
             </ul>
             {!canEdit ? <p className="text-sm text-gray-500">Your role cannot update the nursing checklist.</p> : null}

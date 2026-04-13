@@ -1,8 +1,5 @@
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
-import { LiveBedBoardFiltersProps, BED_STATUS_FILTERS } from "@/modules/bed-board/LiveBedBoardFilters";
-// import { LabeledDropdown } from "../shared/LabeledDropdown";
-
 
 interface DropdownOption {
   value: string | number;
@@ -23,10 +20,13 @@ interface NewDropdownProps {
 }
 
 export default function NewDropdown({
+  id,
   options,
   value,
   placeholder = "Select option",
   onChange,
+  disabled = false,
+  className = "",
 }: NewDropdownProps) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -42,46 +42,30 @@ export default function NewDropdown({
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, []);  
-  {options.map((opt) => (
-  <div
-    key={opt.value}
-    onClick={() => {
-      onChange(opt.value);
-      setOpen(false);
-    }}
-    className={`
-      px-4 py-3 cursor-pointer transition-all
+  }, []);
 
-      ${
-        value === opt.value
-          ? "bg-[#E9E3DC] text-[#6B3F1F] font-medium"  // ← SELECTED (darker)
-          : "text-gray-700 hover:bg-[#F3F1EE]"         // ← NORMAL
-      }
-    `}
-  >
-    {opt.label}
-  </div>
-  
-))}
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
 
   return (
-    <div className="w-full relative" ref={dropdownRef}>
+    <div id={id} className={`w-full relative ${className}`.trim()} ref={dropdownRef}>
       {/* Selected Box */}
 
       <div
-className="
+        className={`
   h-9
   border border-gray-300 rounded-md 
   px-2 
   bg-[#F6F6FA]
-  cursor-pointer flex justify-between items-center
+  flex justify-between items-center
   text-[#8B5E3C]
-  hover:border-[#8B5E3C]
   transition-all duration-200
-"
-  onClick={() => setOpen(!open)}
->
+  ${disabled ? "cursor-not-allowed opacity-50 pointer-events-none" : "cursor-pointer hover:border-[#8B5E3C]"}
+`}
+        onClick={() => !disabled && setOpen(!open)}
+        aria-disabled={disabled}
+      >
   <span className={!selectedOption ? "text-gray-400" : "text-[#8B5E3C]"}>
     {selectedOption ? selectedOption.label : placeholder}
   </span>
@@ -94,7 +78,7 @@ className="
 </div>
 
       {/* Dropdown menu */}
-      {open && (
+      {open && !disabled && (
         <div
           className="
             absolute top-full left-0 right-0 mt-2 

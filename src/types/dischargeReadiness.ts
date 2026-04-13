@@ -16,6 +16,7 @@ export type ReadinessGate = {
 
 export type DischargeSummaryStatus = 'draft' | 'signed';
 
+/** Legacy row shapes; APIs may return arrays that normalize to multiline text in the client. */
 export type DischargeProcedureRow = {
     id: string;
     code: string;
@@ -39,14 +40,18 @@ export type DischargeSummaryState = {
     status: DischargeSummaryStatus;
     admissionDiagnosis: string;
     hospitalCourse: string;
-    procedures: DischargeProcedureRow[];
-    finalDiagnoses: DischargeDiagnosisRow[];
+    /** CPT / ICD-10-PCS free text (normalized from string or legacy row[]). */
+    procedures: string;
+    /** ICD-10-CM narrative lines (normalized from string or legacy row[]). */
+    finalDiagnoses: string;
     disposition: string;
     conditionAtDischarge: string;
-    dischargeMedications: DischargeMedicationRow[];
+    /** Discharge med list as free text (normalized from string or legacy row[]). */
+    dischargeMedications: string;
     followUpInstructions: string;
     signedAt: string | null;
     signedBy: string | null;
+    signedByName?: string | null;
 };
 
 export type ChecklistTask = {

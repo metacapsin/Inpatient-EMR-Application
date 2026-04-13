@@ -1,8 +1,11 @@
-import React, { memo, useState, useEffect } from 'react';
+import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import type { ClaimPrepState } from '../../../types/dischargeReadiness';
 import AppButton from '@/components/ui/AppButton';
+import { useDischargeReadiness } from '../../../contexts/DischargeReadinessContext';
+import { getClaimSubmitBlockedReason } from '../../../utils/dischargeReadinessValidation';
 
 type Props = {
     claimPrep: ClaimPrepState;
@@ -13,16 +16,54 @@ type Props = {
 };
 
 function BillingTabInner({ claimPrep, billingReady, canEdit, onSaveClaimPrep, onSubmitClaim }: Props) {
+    const ctx = useDischargeReadiness();
+    const { setClaimPrepDraft, clearClaimPrepDraft } = ctx;
     const [principalCode, setPrincipalCode] = useState(claimPrep.principalDxCode ?? '');
     const [principalDesc, setPrincipalDesc] = useState(claimPrep.principalDxDescription ?? '');
     const [procCodes, setProcCodes] = useState(claimPrep.procedureCodes.join(', '));
     const [saving, setSaving] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const saveInFlight = useRef(false);
+    const submitInFlight = useRef(false);
 
     useEffect(() => {
         setPrincipalCode(claimPrep.principalDxCode ?? '');
         setPrincipalDesc(claimPrep.principalDxDescription ?? '');
         setProcCodes(claimPrep.procedureCodes.join(', '));
     }, [claimPrep]);
+
+    const procedureCodesParsed = useMemo(
+        () =>
+            procCodes
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean),
+        [procCodes],
+    );
+
+    useEffect(() => {
+        if (claimPrep.status === 'submitted') {
+            clearClaimPrepDraft();
+            return;
+        }
+        setClaimPrepDraft({
+            principalDxCode: principalCode.trim() || null,
+            principalDxDescription: principalDesc.trim() || null,
+            procedureCodes: procedureCodesParsed,
+        });
+    }, [principalCode, principalDesc, procedureCodesParsed, claimPrep.status, setClaimPrepDraft, clearClaimPrepDraft]);
+
+    const submitBlockedReason = useMemo(
+        () =>
+            getClaimSubmitBlockedReason({
+                payload: ctx.view,
+                snapshot: ctx.snapshot,
+                principalDxCodeForm: principalCode.trim(),
+                canEdit,
+                claimPrepStatus: claimPrep.status,
+            }),
+        [ctx.view, ctx.snapshot, principalCode, canEdit, claimPrep.status],
+    );
 
     const statusLabel: Record<ClaimPrepState['status'], string> = {
         not_ready: 'Not ready',
@@ -31,6 +72,9 @@ function BillingTabInner({ claimPrep, billingReady, canEdit, onSaveClaimPrep, on
         denied: 'Denied',
         paid: 'Paid',
     };
+
+    const submitDisabled =
+        !canEdit || saving || submitting || claimPrep.status === 'submitted' || submitBlockedReason != null;
 
     return (
         <div className="space-y-6">
@@ -48,7 +92,7 @@ function BillingTabInner({ claimPrep, billingReady, canEdit, onSaveClaimPrep, on
 
             <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
-                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Totals (mock)</h3>
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Totals</h3>
                     <dl className="mt-2 space-y-1 text-sm">
                         <div className="flex justify-between">
                             <dt className="text-gray-500">Total charges</dt>
@@ -80,7 +124,7 @@ function BillingTabInner({ claimPrep, billingReady, canEdit, onSaveClaimPrep, on
             <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
                 <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">Coding confirmation</h3>
                 <div className="grid gap-3 md:grid-cols-2">
-                    <div>
+                    <div data-billing-field="principalDxCode">
                         <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Principal ICD-10-CM</label>
                         <Input
                             className="mt-1 font-mono"
@@ -111,38 +155,60 @@ function BillingTabInner({ claimPrep, billingReady, canEdit, onSaveClaimPrep, on
                 <div className="mt-3 flex flex-wrap gap-2">
                     <AppButton
                         type="button"
-                        disabled={!canEdit || saving || claimPrep.status === 'submitted'}
+                        disabled={!canEdit || saving || submitting || claimPrep.status === 'submitted'}
                         onClick={async () => {
+                            if (saveInFlight.current) return;
+                            saveInFlight.current = true;
                             setSaving(true);
-                            const codes = procCodes
-                                .split(',')
-                                .map((s) => s.trim())
-                                .filter(Boolean);
-                            await onSaveClaimPrep({
-                                principalDxCode: principalCode.trim() || null,
-                                principalDxDescription: principalDesc.trim() || null,
-                                procedureCodes: codes,
-                            });
-                            setSaving(false);
+                            try {
+                                const ok = await onSaveClaimPrep({
+                                    principalDxCode: principalCode.trim() || null,
+                                    principalDxDescription: principalDesc.trim() || null,
+                                    procedureCodes: procedureCodesParsed,
+                                });
+                                if (ok) clearClaimPrepDraft();
+                            } finally {
+                                setSaving(false);
+                                saveInFlight.current = false;
+                            }
                         }}
                     >
                         {saving ? 'Saving…' : 'Save claim prep'}
                     </AppButton>
                     <Button
                         type="button"
-                        disabled={!canEdit || saving || claimPrep.status === 'submitted' || !billingReady}
+                        disabled={submitDisabled}
+                        title={submitBlockedReason ?? undefined}
                         onClick={async () => {
-                            setSaving(true);
-                            await onSubmitClaim();
-                            setSaving(false);
+                            if (submitInFlight.current) return;
+                            submitInFlight.current = true;
+                            setSubmitting(true);
+                            try {
+                                const saved = await onSaveClaimPrep({
+                                    principalDxCode: principalCode.trim() || null,
+                                    principalDxDescription: principalDesc.trim() || null,
+                                    procedureCodes: procedureCodesParsed,
+                                });
+                                if (saved) clearClaimPrepDraft();
+                                if (!saved) return;
+                                await onSubmitClaim();
+                            } catch {
+                                toast.error('Claim submission failed. Please try again.');
+                            } finally {
+                                setSubmitting(false);
+                                submitInFlight.current = false;
+                            }
                         }}
                     >
-                        Submit claim (mock)
+                        {submitting ? 'Submitting…' : 'Submit claim'}
                     </Button>
                 </div>
-                {!billingReady && claimPrep.status !== 'submitted' ? (
-                    <p className="mt-2 text-sm text-amber-800 dark:text-amber-200">
-                        Hard billing blockers remain — see readiness header before submitting.
+                {submitBlockedReason && claimPrep.status !== 'submitted' ? (
+                    <p className="mt-2 text-sm text-amber-800 dark:text-amber-200">{submitBlockedReason}</p>
+                ) : null}
+                {!billingReady && claimPrep.status !== 'submitted' && canEdit ? (
+                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        Billing readiness (charges, eligibility, principal diagnosis) must be green in the header before submit.
                     </p>
                 ) : null}
                 {!canEdit ? <p className="mt-2 text-sm text-gray-500">Your role cannot edit claim preparation.</p> : null}

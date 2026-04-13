@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ClaimPrepState, DischargeReadinessView, DischargeSummaryState } from '../types/dischargeReadiness';
 import {
     computeReadinessSnapshot,
@@ -41,6 +41,11 @@ type ProviderProps = {
 export function DischargeReadinessProvider({ encounterId, view, setView, children }: ProviderProps) {
     const [summaryDraft, setSummaryDraft] = useState<Partial<DischargeSummaryState> | null>(null);
     const [claimPrepDraft, setClaimPrepDraft] = useState<Partial<ClaimPrepState> | null>(null);
+
+    useEffect(() => {
+        setSummaryDraft(null);
+        setClaimPrepDraft(null);
+    }, [encounterId]);
 
     const snapshot = useMemo(() => {
         const merged: DischargeReadinessView = {
