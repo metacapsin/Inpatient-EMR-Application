@@ -76,13 +76,17 @@ const PatientTable = ({
         disabled: sortDisabled,
     });
 
+    const theadClassName =
+        'sticky top-0 z-10 border-b border-gray-200 bg-white dark:border-gray-600 dark:bg-[#1a1a1a]';
+
     if (loading) {
         return (
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-[#1a1a1a]">
-                <div className="hidden min-w-0 overflow-x-hidden md:block">
-                    <table className="w-full table-fixed text-left text-sm">
-                        <PatientTableColGroup />
-                        <thead className="sticky top-0 z-10 border-b border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/80">
+            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-[#1a1a1a] md:flex md:min-h-0 md:flex-1 md:flex-col">
+                <div className="hidden min-h-0 min-w-0 md:flex md:min-h-0 md:flex-1 md:flex-col">
+                    <div className="max-h-[min(70vh,40rem)] min-h-0 flex-1 overflow-y-auto overflow-x-hidden md:max-h-none">
+                        <table className="w-full table-fixed text-left text-sm">
+                            <PatientTableColGroup />
+                            <thead className={theadClassName}>
                             <tr>
                                 <SortableHeader {...headerProps('patient')}>Patient</SortableHeader>
                                 <SortableHeader {...headerProps('dob')}>DOB / Age</SortableHeader>
@@ -98,11 +102,12 @@ const PatientTable = ({
                                     Actions
                                 </SortableHeader>
                             </tr>
-                        </thead>
-                        <tbody>
-                            <TableSkeleton />
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                <TableSkeleton />
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
                 <div className="space-y-3 p-4 md:hidden">
                     {Array.from({ length: 4 }).map((_, i) => (
@@ -126,11 +131,11 @@ const PatientTable = ({
 
     return (
         <>
-            <div className="hidden min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-[#1a1a1a] md:block">
-                <div className="min-h-0 overflow-x-hidden">
+            <div className="hidden min-h-0 min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-[#1a1a1a] md:flex md:min-h-0 md:flex-1 md:flex-col">
+                <div className="max-h-[min(70vh,40rem)] min-h-0 flex-1 overflow-y-auto overflow-x-hidden md:max-h-none">
                     <table className="w-full table-fixed text-left text-sm">
                         <PatientTableColGroup />
-                        <thead className="sticky top-0 z-10 border-b border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/80">
+                        <thead className={theadClassName}>
                             <tr>
                                 <SortableHeader {...headerProps('patient')}>Patient</SortableHeader>
                                 <SortableHeader {...headerProps('dob')}>DOB / Age</SortableHeader>
