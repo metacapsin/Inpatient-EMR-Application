@@ -3,6 +3,7 @@ import { Button } from '../../ui/button';
 import { Textarea } from '../../ui/textarea';
 import { Input } from '../../ui/input';
 import type { DischargeSummaryState } from '../../../types/dischargeReadiness';
+import NewDropdown from '@/components/ui/NewDropdown';
 
 type Props = {
     summary: DischargeSummaryState;
@@ -53,7 +54,7 @@ function DischargeSummaryTabInner({ summary, canEdit, canSign, onSaveDraft, onSi
                 <div className="grid grid-cols-2 gap-2">
                     <div>
                         <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Disposition</label>
-                        <select
+                        {/* <select
                             className="mt-1 h-10 w-full rounded-md border border-gray-300 bg-white px-2 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                             disabled={locked}
                             value={local.disposition}
@@ -64,7 +65,25 @@ function DischargeSummaryTabInner({ summary, canEdit, canSign, onSaveDraft, onSi
                                     {d}
                                 </option>
                             ))}
-                        </select>
+                        </select> */}
+                        <NewDropdown
+                            options={[
+                                { value: "", label: "Select..." },
+                                ...dispositionOptions.map((d) => ({
+                                value: d,
+                                label: d,
+                                })),
+                            ]}
+                            value={local.disposition}
+                            placeholder="Select..."
+                            disabled={locked}
+                            onChange={(v) =>
+                                setLocal((s) => ({
+                                ...s,
+                                disposition: String(v),
+                                }))
+                            }
+                            />
                     </div>
                     <div>
                         <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Condition at discharge</label>

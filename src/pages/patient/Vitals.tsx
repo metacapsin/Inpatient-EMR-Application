@@ -6,6 +6,7 @@ import IconSearch from '../../components/Icon/IconSearch';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { healthMetricsAPI } from '../../services/healthMonitoringService';
+import AppButton from '@/components/ui/AppButton';
 
 interface VitalsRecord {
   id?: string;
@@ -420,14 +421,14 @@ const Vitals: React.FC = () => {
     {/* Right Section */}
     {!showRecordForm && (
       <div className="w-full md:w-auto">
-        <button
+        <AppButton
           type="button"
-          className="btn btn-primary w-full md:w-auto flex items-center justify-center gap-1"
+        
           onClick={() => setShowRecordForm(true)}
         >
           <FaPlus className="w-4 h-4" />
           Record Vitals
-        </button>
+        </AppButton>
       </div>
     )}
 

@@ -2,6 +2,8 @@ import React, { memo, useState } from 'react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import type { ChargeCategory, ChargeLine, ChargeLineStatus } from '../../../types/dischargeReadiness';
+import NewDropdown from '@/components/ui/NewDropdown';
+import AppButton from '@/components/ui/AppButton';
 
 type Props = {
     charges: ChargeLine[];
@@ -53,7 +55,7 @@ function ChargeCaptureTabInner({ charges, canEdit, onUpdateCharge, onAddCharge }
                         </tr>
                     </thead>
                     <tbody>
-                        {charges.map((c) => (
+                        {/* {charges.map((c) => (
                             <tr key={c.id} className="border-b border-gray-100 dark:border-gray-800">
                                 <td className="py-2 pr-2 whitespace-nowrap">{c.serviceDate}</td>
                                 <td className="py-2 pr-2">{categoryLabel[c.category]}</td>
@@ -77,7 +79,35 @@ function ChargeCaptureTabInner({ charges, canEdit, onUpdateCharge, onAddCharge }
                                     </select>
                                 </td>
                             </tr>
-                        ))}
+                        ))} */}
+                        {charges.map((c) => (
+  <tr key={c.id} className="border-b border-gray-100 dark:border-gray-800">
+    <td className="py-2 pr-2 whitespace-nowrap">{c.serviceDate}</td>
+    <td className="py-2 pr-2">{categoryLabel[c.category]}</td>
+    <td className="py-2 pr-2">{c.description}</td>
+    <td className="py-2 pr-2 font-mono text-xs">{c.serviceCode}</td>
+    <td className="py-2 pr-2">{c.quantity}</td>
+    <td className="py-2 pr-2">${c.unitPrice.toFixed(2)}</td>
+    <td className="py-2 pr-2 font-medium">${c.total.toFixed(2)}</td>
+
+    <td className="py-2">
+      <div className="w-25">
+        <NewDropdown
+          options={[
+            { value: "pending_capture", label: "Pending capture" },
+            { value: "posted", label: "Posted" },
+            { value: "hold", label: "Hold" },
+          ]}
+          value={c.status}
+          onChange={(v) =>
+            void onUpdateCharge(c.id, { status: v as ChargeLineStatus })
+          }
+          disabled={!canEdit}
+        />
+      </div>
+    </td>
+  </tr>
+))}
                     </tbody>
                 </table>
             </div>
@@ -91,7 +121,7 @@ function ChargeCaptureTabInner({ charges, canEdit, onUpdateCharge, onAddCharge }
                         <Input type="number" min={1} placeholder="Qty" value={qty} onChange={(e) => setQty(e.target.value)} />
                         <Input type="number" step="0.01" placeholder="Unit price" value={price} onChange={(e) => setPrice(e.target.value)} />
                         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-                        <select
+                        {/* <select
                             className="h-9 rounded-md border border-gray-300 bg-white px-2 text-sm dark:border-gray-600 dark:bg-gray-900"
                             value={category}
                             onChange={(e) => setCategory(e.target.value as ChargeCategory)}
@@ -101,9 +131,21 @@ function ChargeCaptureTabInner({ charges, canEdit, onUpdateCharge, onAddCharge }
                                     {categoryLabel[k]}
                                 </option>
                             ))}
-                        </select>
+                        </select> */}
+                    <div className="h-2 w-full size-sm">
+                            <NewDropdown
+                                options={Object.keys(categoryLabel).map((k) => ({
+                                value: k,
+                                label: categoryLabel[k as ChargeCategory],
+                                }))}
+                                value={category}
+                                onChange={(v) => setCategory(v as ChargeCategory)}
+                                placeholder="Select..."
+                            />
+</div>
+                    
                     </div>
-                    <Button
+                    <AppButton
                         type="button"
                         className="mt-3"
                         disabled={adding || !desc.trim() || !code.trim()}
@@ -128,7 +170,7 @@ function ChargeCaptureTabInner({ charges, canEdit, onUpdateCharge, onAddCharge }
                         }}
                     >
                         {adding ? 'Adding…' : 'Add charge'}
-                    </Button>
+                    </AppButton>
                 </div>
             ) : (
                 <p className="text-sm text-gray-500">Your role cannot add or change charge lines.</p>

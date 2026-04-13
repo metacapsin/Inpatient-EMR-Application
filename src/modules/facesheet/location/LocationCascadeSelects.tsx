@@ -7,6 +7,7 @@ import {
 } from '../../../services/patientLocation.service';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { cn } from '../../../lib/utils';
+import NewDropdown from '@/components/ui/NewDropdown';
 
 export interface LocationCascadeSelectsProps {
     patientId: string;
@@ -48,10 +49,11 @@ export function LocationCascadeSelects({
     const roomLocked = disabled || roomsQuery.isLoading || !value.wardId.trim();
     const bedLocked = disabled || bedsQuery.isLoading || !value.roomId.trim();
 
-    const onWardChange = (wardId: string) => {
-        const w = wardsQuery.data?.find((x) => x.id === wardId);
+    const onWardChange = (wardId: string | number) => {
+        const wardIdStr = String(wardId);
+        const w = wardsQuery.data?.find((x) => x.id === wardIdStr);
         onChange({
-            wardId,
+            wardId: wardIdStr,
             wardName: w?.name ?? '',
             roomId: '',
             roomName: '',
@@ -96,29 +98,31 @@ export function LocationCascadeSelects({
                     <label className="text-sm font-medium text-gray-800 dark:text-gray-200" htmlFor="loc-ward">
                         Ward / unit
                     </label>
-                    <Select
-                        value={value.wardId.trim() ? value.wardId : undefined}
-                        onValueChange={onWardChange}
-                        disabled={wardLocked}
-                    >
-                        <SelectTrigger id="loc-ward" className="h-10 w-full min-w-0 shadow-sm" aria-busy={wardsQuery.isLoading}>
-                            <SelectValue placeholder={wardsQuery.isLoading ? 'Loading wards…' : 'Select ward'} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {(wardsQuery.data ?? []).map((w) => (
-                                <SelectItem key={w.id} value={w.id}>
-                                    {w.name} ({w.code})
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                  <div className="w-full">
+                    <NewDropdown
+                        options={[
+                        {
+                            value: "",
+                            label: wardsQuery.isLoading ? "Loading wards…" : "Select ward",
+                        },
+                        ...(wardsQuery.data ?? []).map((w) => ({
+                            value: w.id,
+                            label: `${w.name} (${w.code})`,
+                        })),
+                        ]}
+                        value={value.wardId.trim() ? value.wardId : ""}
+                        placeholder={wardsQuery.isLoading ? "Loading wards…" : "Select ward"}
+                        onChange={(v: string | number) => onWardChange(v)}
+                        disabled={wardLocked || wardsQuery.isLoading}
+                    />
+                    </div>
                 </div>
 
                 <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-800 dark:text-gray-200" htmlFor="loc-room">
                         Room
                     </label>
-                    <Select
+                    {/* <Select
                         value={value.roomId.trim() ? value.roomId : undefined}
                         onValueChange={onRoomChange}
                         disabled={roomLocked}
@@ -141,7 +145,35 @@ export function LocationCascadeSelects({
                                 </SelectItem>
                             ))}
                         </SelectContent>
-                    </Select>
+                    </Select> */}
+                    <div className="w-full">
+  <NewDropdown
+    options={[
+      {
+        value: "",
+        label: !value.wardId.trim()
+          ? "Choose a ward first"
+          : roomsQuery.isLoading
+          ? "Loading rooms…"
+          : "Select room",
+      },
+      ...(roomsQuery.data ?? []).map((r) => ({
+        value: r.id,
+        label: `${r.name} (${r.number})`,
+      })),
+    ]}
+    value={value.roomId.trim() ? value.roomId : ""}
+    placeholder={
+      !value.wardId.trim()
+        ? "Choose a ward first"
+        : roomsQuery.isLoading
+        ? "Loading rooms…"
+        : "Select room"
+    }
+    onChange={(v) => onRoomChange(String(v))}
+    disabled={roomLocked || roomsQuery.isLoading || !value.wardId.trim()}
+  />
+</div>
                     {roomsEmpty ? (
                         <p className="text-xs text-gray-500 dark:text-gray-400">No rooms available for this ward.</p>
                     ) : null}
@@ -151,7 +183,7 @@ export function LocationCascadeSelects({
                     <label className="text-sm font-medium text-gray-800 dark:text-gray-200" htmlFor="loc-bed">
                         Bed
                     </label>
-                    <Select
+                    {/* <Select
                         value={value.bedId.trim() ? value.bedId : undefined}
                         onValueChange={onBedChange}
                         disabled={bedLocked}
@@ -175,7 +207,36 @@ export function LocationCascadeSelects({
                                 </SelectItem>
                             ))}
                         </SelectContent>
-                    </Select>
+                    </Select> */}
+                    <div className="w-full">
+  <NewDropdown
+    options={[
+      {
+        value: "",
+        label: !value.roomId.trim()
+          ? "Choose a room first"
+          : bedsQuery.isLoading
+          ? "Loading beds…"
+          : "Select bed",
+      },
+      ...(bedsQuery.data ?? []).map((b) => ({
+        value: b.id,
+        label: b.label + (b.occupied && !b.selectable ? " (occupied)" : ""),
+        disabled: !b.selectable,
+      })),
+    ]}
+    value={value.bedId.trim() ? value.bedId : ""}
+    placeholder={
+      !value.roomId.trim()
+        ? "Choose a room first"
+        : bedsQuery.isLoading
+        ? "Loading beds…"
+        : "Select bed"
+    }
+    onChange={(v) => onBedChange(String(v))}
+    disabled={bedLocked || bedsQuery.isLoading || !value.roomId.trim()}
+  />
+</div>
                     {bedsEmpty ? (
                         <p className="text-xs text-gray-500 dark:text-gray-400">No beds available for this room.</p>
                     ) : null}

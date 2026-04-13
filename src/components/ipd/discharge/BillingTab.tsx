@@ -2,6 +2,7 @@ import React, { memo, useState, useEffect } from 'react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import type { ClaimPrepState } from '../../../types/dischargeReadiness';
+import AppButton from '@/components/ui/AppButton';
 
 type Props = {
     claimPrep: ClaimPrepState;
@@ -108,7 +109,7 @@ function BillingTabInner({ claimPrep, billingReady, canEdit, onSaveClaimPrep, on
                     </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                    <Button
+                    <AppButton
                         type="button"
                         disabled={!canEdit || saving || claimPrep.status === 'submitted'}
                         onClick={async () => {
@@ -126,7 +127,7 @@ function BillingTabInner({ claimPrep, billingReady, canEdit, onSaveClaimPrep, on
                         }}
                     >
                         {saving ? 'Saving…' : 'Save claim prep'}
-                    </Button>
+                    </AppButton>
                     <Button
                         type="button"
                         disabled={!canEdit || saving || claimPrep.status === 'submitted' || !billingReady}

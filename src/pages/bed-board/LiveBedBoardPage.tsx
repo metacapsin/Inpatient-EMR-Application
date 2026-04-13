@@ -6,7 +6,7 @@ import { BedDouble, RefreshCw } from 'lucide-react';
 import { fetchLiveBedBoard } from '../../services/liveBedBoard.service';
 import { getRooms, getWards } from '../../services/rooms.service';
 import { LiveBedBoardSummaryBar } from '../../modules/bed-board/LiveBedBoardSummaryBar';
-import { LiveBedBoardFilters } from '../../modules/bed-board/LiveBedBoardFilters';
+import { LiveBedBoardFilters } from '@/components/ui/NewDropdown';
 import { LiveBedBoardGrid } from '../../modules/bed-board/LiveBedBoardGrid';
 import { ActiveEncountersPanel } from '../../modules/bed-board/ActiveEncountersPanel';
 

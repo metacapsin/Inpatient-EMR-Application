@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'sonner';
 import { AppModal } from '../shared/AppModal';
-import { LabeledDropdown } from '../shared/LabeledDropdown';
+// import { LabeledDropdown } from '../shared/LabeledDropdown'
+// import {NewDropdown} from '../ui/NewDropdown';
 import {
     adtApi,
     formatAdtUserMessage,
@@ -23,6 +24,7 @@ import {
     setAdtCurrentBed,
     setAdtDischargeInitiated,
 } from '../../store/adtEncounterSlice';
+import NewDropdown from '../ui/NewDropdown';
 
 export type AdtWorkflowIntent = 'admit' | 'transfer' | 'discharge';
 
@@ -423,7 +425,7 @@ export function AdtPatientWorkflowModal({
 
                 {intent === 'admit' ? (
                     <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="sm:col-span-2">
+                        {/* <div className="sm:col-span-2">
                             <LabeledDropdown
                                 id="modal-adt-admit-bed"
                                 label="Bed (available)"
@@ -439,11 +441,37 @@ export function AdtPatientWorkflowModal({
                                 onChange={setAdmitBedId}
                                 disabled={busy || bedsQuery.isLoading || admitBlocked}
                             />
-                        </div>
-                        <LabeledDropdown
+                        </div> */}
+                        <div className="sm:col-span-2">
+                    <label
+                        htmlFor="modal-adt-admit-bed"
+                        className="block text-sm font-medium text-gray-700 mb-1"
+                    >
+                        Bed (available)
+                    </label>
+
+                    <NewDropdown
+                        id="modal-adt-admit-bed"
+                        value={admitBedId || ""}
+                        placeholder={
+                        bedsQuery.isLoading
+                            ? "Loading beds…"
+                            : admitOptions.length
+                            ? "Select bed"
+                            : "No available beds"
+                        }
+                        options={admitOptions.map((o) => ({
+                        value: o.value,
+                        label: o.label,
+                        }))}
+                        onChange={(v) => setAdmitBedId(String(v))}
+                        disabled={busy || bedsQuery.isLoading || admitBlocked}
+                    />
+                    </div>
+                        <NewDropdown
                             id="modal-adt-admission-type"
                             label="Admission type (optional)"
-                            value={admissionType || undefined}
+                            value={admissionType }
                             placeholder="Any"
                             options={ADMISSION_TYPES.map((t) => ({ value: t.value, label: t.label }))}
                             onChange={(v) => setAdmissionType(v as AdmissionType)}
@@ -455,10 +483,10 @@ export function AdtPatientWorkflowModal({
                 {intent === 'transfer' ? (
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="sm:col-span-2">
-                            <LabeledDropdown
+                            <NewDropdown
                                 id="modal-adt-transfer-bed"
                                 label="New bed (available)"
-                                value={transferBedId || undefined}
+                                value={transferBedId}
                                 placeholder={
                                     bedsQuery.isLoading
                                         ? 'Loading beds…'
@@ -467,7 +495,7 @@ export function AdtPatientWorkflowModal({
                                           : 'No available beds'
                                 }
                                 options={transferOptions.map((o) => ({ value: o.value, label: o.label }))}
-                                onChange={setTransferBedId}
+                                onChange={(v) => setTransferBedId(String(v))}
                                 disabled={busy || bedsQuery.isLoading || transferBlocked}
                             />
                         </div>

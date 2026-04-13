@@ -6,6 +6,7 @@ import { MarTab } from './MarTab';
 import { PrnStatTab } from './PrnStatTab';
 import { PharmacyTab } from './PharmacyTab';
 import { DischargeMedsTab } from './DischargeMedsTab';
+import NewDropdown from '@/components/ui/NewDropdown';
 
 const selectClass =
     'h-10 w-full max-w-md rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100';
@@ -83,7 +84,7 @@ export default function MedicationManagementPage() {
 
                 <div className="mt-4 max-w-md">
                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Patient</label>
-                    <select
+                    {/* <select
                         className={selectClass}
                         value={patientId}
                         disabled={patientsLoading}
@@ -99,7 +100,29 @@ export default function MedicationManagementPage() {
                                 {p.mrn ? ` · MRN ${p.mrn}` : ''}
                             </option>
                         ))}
-                    </select>
+                    </select> */}
+                    <NewDropdown    
+    value={patientId || ""}
+    placeholder={patientsLoading ? "Loading patients…" : "Select patient…"}
+    disabled={patientsLoading}
+    options={[
+        { value: "", label: patientsLoading ? "Loading patients…" : "Select patient…" },
+
+        // If patient is pre-selected but not in patients list
+        ...(patientId && !patientInList
+            ? [{ value: patientId, label: `Current selection · ${patientId.slice(-12)}…` }]
+            : []),
+
+        // Actual patients list
+        ...patients.map((p) => ({
+            value: p.id,
+            label: `${p.name}${p.mrn ? ` · MRN ${p.mrn}` : ""}`,
+        })),
+    ]}
+    onChange={(v) => setPatientSelection(String(v))}
+/>
+
+
                 </div>
             </div>
 
