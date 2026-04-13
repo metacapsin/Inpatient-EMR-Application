@@ -277,12 +277,12 @@ const Allergies: React.FC = () => {
                             {allergy.allergyType || '---'}
                           </span>
                         </div>
-                        <div>
+                        {/* <div>
                           <span className="text-gray-600 dark:text-gray-400 text-sm">Severity:</span>
                           <span className="font-bold ml-2 text-sm text-gray-900 dark:text-white">
                             {allergy.severity || '---'}
                           </span>
-                        </div>
+                        </div> */}
                         <div>
                           <span className="text-gray-600 dark:text-gray-400 text-sm">Reaction:</span>
                           <span className="font-bold ml-2 text-sm text-gray-900 dark:text-white">
