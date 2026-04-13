@@ -378,7 +378,7 @@ const PatientList = () => {
                 ) : null}
 
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                    <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+                    <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto md:flex md:flex-col md:overflow-hidden">
                         <PatientTable
                             patients={items}
                             loading={loading}

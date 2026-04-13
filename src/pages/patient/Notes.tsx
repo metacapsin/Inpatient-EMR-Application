@@ -314,7 +314,7 @@ const Notes: React.FC = () => {
                         <div>
                           <span className="text-gray-600 dark:text-gray-400 text-sm">Type:</span>
                           <span className="font-bold ml-2 text-sm text-gray-900 dark:text-white">
-                            {note.noteType || '---'}
+                            {note.notesType || '---'}
                           </span>
                         </div>
                         <div>
@@ -326,7 +326,7 @@ const Notes: React.FC = () => {
                         <div>
                           <span className="text-gray-600 dark:text-gray-400 text-sm">Date:</span>
                           <span className="font-bold ml-2 text-sm text-gray-900 dark:text-white">
-                            {note.noteDate || '---'}
+                            {note.date || '---'}
                           </span>
                         </div>
                       </div>
