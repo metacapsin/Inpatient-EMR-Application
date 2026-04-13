@@ -113,14 +113,42 @@ const Diagnoses: React.FC = () => {
             onsetDate = item.OnsetDate[0] || '';
         }
         
-        // Extract Last Modified Date
-        let lastModifiedDate = '';
-        if (item.LastModifiedDate) {
-            lastModifiedDate = item.LastModifiedDate;
-        } else if (item.updatedAt) {
-            lastModifiedDate = formatDate(item.updatedAt);
+        // Extract Last Modified Date: API uses array (e.g. LastModifiedDate[0]); fallback to updatedAt
+        let lastModifiedRaw = '';
+        if (item.LastModifiedDate && Array.isArray(item.LastModifiedDate) && item.LastModifiedDate.length > 0) {
+            const first = item.LastModifiedDate[0];
+            lastModifiedRaw = typeof first === 'string' ? first.trim() : first != null ? String(first).trim() : '';
+        } else if (typeof item.LastModifiedDate === 'string' && item.LastModifiedDate.trim()) {
+            lastModifiedRaw = item.LastModifiedDate.trim();
         }
-        
+
+        let lastModifiedDate = '';
+        if (lastModifiedRaw) {
+            lastModifiedDate = formatDate(lastModifiedRaw);
+        } else if (item.updatedAt != null && item.updatedAt !== '') {
+            const updated =
+                typeof item.updatedAt === 'string' ? item.updatedAt : String(item.updatedAt);
+            lastModifiedDate = formatDate(updated);
+        }
+
+        // Status from Status[0] Active/Inactive keys (Rcopia shape), not boolean item.status
+        let statusFromApi: string | boolean | undefined;
+        if (item.Status && Array.isArray(item.Status) && item.Status.length > 0) {
+            const statusObj = item.Status[0];
+            if (statusObj && typeof statusObj === 'object' && !Array.isArray(statusObj)) {
+                if (statusObj.Active !== undefined) {
+                    statusFromApi = 'active';
+                } else if (statusObj.Inactive !== undefined) {
+                    statusFromApi = 'inactive';
+                }
+            } else if (typeof statusObj === 'string' && statusObj.trim()) {
+                statusFromApi = statusObj.trim();
+            }
+        }
+        if (statusFromApi === undefined && item.status !== undefined) {
+            statusFromApi = item.status;
+        }
+
         return {
             _id: item._id ?? item.id ?? Math.random().toString(),
             rcopiaId: rcopiaId,
@@ -128,7 +156,7 @@ const Diagnoses: React.FC = () => {
             description: description,
             onsetDate: onsetDate,
             lastModifiedDate: lastModifiedDate,
-            status: normalizeStatus(item.status === true ? 'active' : item.status === false ? 'inactive' : item.status),
+            status: normalizeStatus(statusFromApi),
         };
     }, [formatDate, normalizeStatus]);
 
