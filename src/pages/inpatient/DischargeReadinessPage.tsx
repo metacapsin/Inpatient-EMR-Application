@@ -1,8 +1,4 @@
-<<<<<<< Updated upstream
-import { useEffect, useMemo, useState } from 'react';
-=======
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
->>>>>>> Stashed changes
 import { useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { Loader2 } from 'lucide-react';
@@ -494,19 +490,6 @@ export default function DischargeReadinessPage() {
         );
     }
 
-<<<<<<< Updated upstream
-    const eid = encounterId.trim();
-
-    const tabButtons: { id: TabId; label: string }[] = [
-        { id: 'summary', label: 'Summary' },
-        { id: 'checklist', label: 'Checklist' },
-        { id: 'charges', label: 'Charges' },
-        { id: 'insurance', label: 'Insurance' },
-        { id: 'billing', label: 'Billing' },
-    ];
-
-=======
->>>>>>> Stashed changes
     return (
         <div className="space-y-4">
             {loading && !view ? (
@@ -517,143 +500,6 @@ export default function DischargeReadinessPage() {
             ) : null}
 
             {view ? (
-<<<<<<< Updated upstream
-                <>
-                    <DischargeReadinessHeader view={view} />
-
-                    <div className="panel p-4">
-                        <div className="mb-4 flex flex-wrap gap-2 border-b border-gray-200 pb-2 dark:border-gray-700">
-                            {tabButtons.map((b) => (
-                                <button
-                                    key={b.id}
-                                    type="button"
-                                    className={`rounded px-3 py-1 text-sm ${
-                                        tab === b.id ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'
-                                    }`}
-                                    onClick={() => setTab(b.id)}
-                                >
-                                    {b.label}
-                                </button>
-                            ))}
-                        </div>
-
-                        {tab === 'summary' && (
-                            <DischargeSummaryTab
-                                summary={view.summary}
-                                canEdit={canPhysician}
-                                canSign={canPhysician}
-                                onSaveDraft={async (partial) => {
-                                    const res = await saveDischargeSummaryDraft(eid, partial);
-                                    if (!res.ok) {
-                                        toast.error(res.message);
-                                        return false;
-                                    }
-                                    setView(res.data);
-                                    toast.success('Summary saved');
-                                    return true;
-                                }}
-                                onSign={async () => {
-                                    const res = await signDischargeSummary(eid);
-                                    if (!res.ok) {
-                                        toast.error(res.message);
-                                        return false;
-                                    }
-                                    setView(res.data);
-                                    toast.success('Discharge summary signed');
-                                    return true;
-                                }}
-                            />
-                        )}
-
-                        {tab === 'checklist' && (
-                            <NursingChecklistTab
-                                tasks={view.checklist}
-                                canEdit={canNursing}
-                                onUpdateTask={async (taskId, patch) => {
-                                    const res = await updateChecklistTask(eid, taskId, patch);
-                                    if (!res.ok) {
-                                        toast.error(res.message);
-                                        return false;
-                                    }
-                                    setView(res.data);
-                                    return true;
-                                }}
-                            />
-                        )}
-
-                        {tab === 'charges' && (
-                            <ChargeCaptureTab
-                                charges={view.charges}
-                                canEdit={canBilling}
-                                onUpdateCharge={async (chargeId, patch) => {
-                                    const res = await updateChargeLine(eid, chargeId, patch);
-                                    if (!res.ok) {
-                                        toast.error(res.message);
-                                        return false;
-                                    }
-                                    setView(res.data);
-                                    return true;
-                                }}
-                                onAddCharge={async (line) => {
-                                    const res = await addChargeLine(eid, line);
-                                    if (!res.ok) {
-                                        toast.error(res.message);
-                                        return false;
-                                    }
-                                    setView(res.data);
-                                    toast.success('Charge added');
-                                    return true;
-                                }}
-                            />
-                        )}
-
-                        {tab === 'insurance' && (
-                            <EligibilityTab
-                                history={view.eligibilityHistory}
-                                canRun={canBilling}
-                                onRunCheck={async () => {
-                                    const res = await runEligibilityCheck(eid);
-                                    if (!res.ok) {
-                                        toast.error(res.message);
-                                        return false;
-                                    }
-                                    setView(res.data);
-                                    toast.success('Eligibility response recorded (mock)');
-                                    return true;
-                                }}
-                            />
-                        )}
-
-                        {tab === 'billing' && (
-                            <BillingTab
-                                claimPrep={view.claimPrep}
-                                billingReady={view.billingReady}
-                                canEdit={canBilling}
-                                onSaveClaimPrep={async (patch) => {
-                                    const res = await updateClaimPrep(eid, patch);
-                                    if (!res.ok) {
-                                        toast.error(res.message);
-                                        return false;
-                                    }
-                                    setView(res.data);
-                                    toast.success('Claim prep updated');
-                                    return true;
-                                }}
-                                onSubmitClaim={async () => {
-                                    const res = await submitClaimPrep(eid);
-                                    if (!res.ok) {
-                                        toast.error(res.message);
-                                        return false;
-                                    }
-                                    setView(res.data);
-                                    toast.success('Claim submitted (mock)');
-                                    return true;
-                                }}
-                            />
-                        )}
-                    </div>
-                </>
-=======
                 <DischargeReadinessLoaded
                     eid={eid}
                     view={view}
@@ -669,7 +515,6 @@ export default function DischargeReadinessPage() {
                     canNursing={canNursing}
                     canBilling={canBilling}
                 />
->>>>>>> Stashed changes
             ) : !loading ? (
                 <div className="panel p-6 text-sm text-red-600">Could not load readiness for this encounter.</div>
             ) : null}
