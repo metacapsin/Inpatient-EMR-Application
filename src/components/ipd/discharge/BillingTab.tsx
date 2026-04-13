@@ -3,16 +3,6 @@ import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { cn } from '@/lib/utils';
 import type { ClaimPrepState } from '../../../types/dischargeReadiness';
-import {
-    getPrincipalIcdValidationError,
-    isValidPrincipalIcd,
-    normalizePrincipalIcdInput,
-    scrollToPrincipalIcdField,
-} from '../../../utils/dischargeReadinessValidation';
-
-export type BillingTabHandle = {
-    validate: () => Promise<boolean>;
-};
 
 type Props = {
     claimPrep: ClaimPrepState;
@@ -167,9 +157,6 @@ const BillingTabInner = forwardRef<BillingTabHandle, Props>(function BillingTabI
                     </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" onClick={() => validateForm()}>
-                        Check errors
-                    </Button>
                     <Button
                         type="button"
                         disabled={!canEdit || saving || !principalOkSubmitted}
@@ -188,7 +175,7 @@ const BillingTabInner = forwardRef<BillingTabHandle, Props>(function BillingTabI
                         }}
                     >
                         {saving ? 'Saving…' : 'Save claim prep'}
-                    </Button>
+                    </AppButton>
                     <Button
                         type="button"
                         disabled={!canEdit || saving || claimPrep.status === 'submitted' || !billingReady}

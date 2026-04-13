@@ -4,16 +4,6 @@ import { Textarea } from '../../ui/textarea';
 import { Input } from '../../ui/input';
 import { cn } from '@/lib/utils';
 import type { DischargeSummaryState } from '../../../types/dischargeReadiness';
-import {
-    scrollToFirstDischargeSummaryError,
-    validateDischargeSummaryRequired,
-    type DischargeSummaryRequiredErrors,
-    type DischargeSummaryRequiredKey,
-} from '../../../utils/dischargeReadinessValidation';
-
-export type DischargeSummaryTabHandle = {
-    validate: () => Promise<boolean>;
-};
 
 type Props = {
     summary: DischargeSummaryState;
@@ -193,13 +183,10 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
                     ) : null}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                    <div data-discharge-field="disposition">
-                        <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                            Disposition
-                            <Req />
-                        </label>
+                    <div>
+                        <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Disposition</label>
                         <select
-                            className={cn(selectBase, 'border-gray-300 dark:border-gray-600', fieldErrors.disposition && 'border-destructive')}
+                            className="mt-1 h-10 w-full rounded-md border border-gray-300 bg-white px-2 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                             disabled={locked}
                             aria-invalid={Boolean(fieldErrors.disposition)}
                             value={form.disposition}
@@ -216,7 +203,6 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
                                 </option>
                             ))}
                         </select>
-                        {fieldErrors.disposition ? <p className="mt-1 text-xs text-red-600">{fieldErrors.disposition}</p> : null}
                     </div>
                     <div data-discharge-field="conditionAtDischarge">
                         <label className="text-xs font-medium text-gray-600 dark:text-gray-400">

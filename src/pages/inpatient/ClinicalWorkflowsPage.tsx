@@ -34,6 +34,8 @@ import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
 import { getPatientsList, type PatientListItem } from '../../services/patient.service';
 import { listActiveEncounters, type ActiveEncounterRow } from '../../services/adt.service';
+import NewDropdown from '@/components/ui/NewDropdown';
+import AppButton from '@/components/ui/AppButton';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
@@ -449,27 +451,38 @@ function ClinicalWorkflowsPage() {
                 <div className="grid gap-4 md:grid-cols-2">
                     <div>
                         <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Patient</label>
-                        <select
-                            className={selectClass}
-                            value={patientId}
-                            disabled={patientsLoading}
-                            onChange={(e) => setPatientSelection(e.target.value)}
-                        >
-                            <option value="">{patientsLoading ? 'Loading patients…' : 'Select patient…'}</option>
-                            {patientId && !patientInList ? (
-                                <option value={patientId}>Current selection (not in list) · {patientId.slice(-10)}…</option>
-                            ) : null}
-                            {patients.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                    {p.name}
-                                    {p.mrn ? ` · MRN ${p.mrn}` : ''}
-                                </option>
-                            ))}
-                        </select>
+                      <div className="w-full">
+                    <NewDropdown
+                        options={[
+                        {
+                            value: "",
+                            label: patientsLoading ? "Loading patients…" : "Select patient…",
+                        },
+
+                        ...(patientId && !patientInList
+                            ? [
+                                {
+                                value: patientId,
+                                label: `Current selection (not in list) · ${patientId.slice(-10)}…`,
+                                },
+                            ]
+                            : []),
+
+                        ...patients.map((p) => ({
+                            value: p.id,
+                            label: `${p.name}${p.mrn ? ` · MRN ${p.mrn}` : ""}`,
+                        })),
+                        ]}
+                        value={patientId || ""}
+                        placeholder="Select patient…"
+                        onChange={(value) => setPatientSelection(String(value))}
+                        disabled={patientsLoading}
+                    />
+                    </div>
                     </div>
                     <div>
                         <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Encounter</label>
-                        <select
+                        {/* <select
                             className={selectClass}
                             value={encounterId}
                             disabled={!patientId || encountersLoading}
@@ -490,7 +503,39 @@ function ClinicalWorkflowsPage() {
                                     {formatEncounterLabel(enc)}
                                 </option>
                             ))}
-                        </select>
+                        </select> */}
+                        <div className="w-full">
+  <NewDropdown
+    options={[
+      {
+        value: "",
+        label: !patientId
+          ? "Select a patient first…"
+          : encountersLoading
+          ? "Loading encounters…"
+          : "Select active encounter…",
+      },
+
+      ...(encounterId && !encounterInList && patientId
+        ? [
+            {
+              value: encounterId,
+              label: `Current selection · …${encounterId.slice(-8)}`,
+            },
+          ]
+        : []),
+
+      ...encounters.map((enc) => ({
+        value: enc.id,
+        label: formatEncounterLabel(enc),
+      })),
+    ]}
+    value={encounterId || ""}
+    placeholder="Select active encounter…"
+    onChange={(value) => setEncounterSelection(String(value))}
+    disabled={!patientId || encountersLoading}
+  />
+</div>
                         {patientId && !encountersLoading && encounters.length === 0 ? (
                             <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">No active encounter for this patient. Admit the patient from ADT first.</p>
                         ) : null}
@@ -553,7 +598,7 @@ function ClinicalWorkflowsPage() {
                     <div className="mt-4 space-y-4">
                         <div className="flex flex-wrap gap-2">
                             <label className="text-sm font-medium">Template</label>
-                            <select
+                            {/* <select
                                 className="rounded border border-gray-300 bg-white px-2 py-1 dark:border-gray-600 dark:bg-gray-900"
                                 value={noteType}
                                 onChange={(e) => setNoteType(e.target.value)}
@@ -563,7 +608,18 @@ function ClinicalWorkflowsPage() {
                                         {n.label}
                                     </option>
                                 ))}
-                            </select>
+                            </select> */}
+                             <div className="w-34 mt-1 ">
+                            <NewDropdown
+                            options={NOTE_TEMPLATES.map((n) => ({
+                                value: n.value,
+                                label: n.label,
+                            }))}
+                            value={noteType}
+                            onChange={(v) => setNoteType(String(v))}
+                            placeholder="Select..."
+/>
+                        </div>
                         </div>
                         <div className="grid gap-3 md:grid-cols-2">
                             <div>
@@ -597,9 +653,9 @@ function ClinicalWorkflowsPage() {
                             <div className="rounded border border-gray-200 p-3 dark:border-gray-700">
                                 <p className="text-sm font-medium">Addendum (signed notes only)</p>
                                 <Textarea value={addendumText} onChange={(e) => setAddendumText(e.target.value)} rows={2} className="mt-2" />
-                                <Button type="button" className="mt-2" variant="outline" onClick={() => void submitAddendum()}>
+                                <AppButton type="button" className="mt-2" onClick={() => void submitAddendum()}>
                                     Append addendum
-                                </Button>
+                                </AppButton>
                             </div>
                         )}
                         <div>
@@ -634,7 +690,7 @@ function ClinicalWorkflowsPage() {
                         <div className="grid gap-6 md:grid-cols-2">
                             <div>
                                 <h3 className="font-medium">Nursing note</h3>
-                                <select
+                                {/* <select
                                     className="mt-2 rounded border px-2 py-1 dark:border-gray-600 dark:bg-gray-900"
                                     value={nursingShift}
                                     onChange={(e) => setNursingShift(e.target.value as typeof nursingShift)}
@@ -642,7 +698,19 @@ function ClinicalWorkflowsPage() {
                                     <option value="morning">Morning</option>
                                     <option value="evening">Evening</option>
                                     <option value="night">Night</option>
-                                </select>
+                                </select> */}
+                                <div className="w-32 mt-2">
+                                <NewDropdown
+                                    options={[
+                                    { value: "morning", label: "Morning" },
+                                    { value: "evening", label: "Evening" },
+                                    { value: "night", label: "Night" }
+                                    ]}
+                                    value={nursingShift}
+                                    onChange={(v) => setNursingShift(v as typeof nursingShift)}
+                                    placeholder="Select..."
+                                />
+                                </div>
                                 <Textarea className="mt-2" rows={6} value={nursingText} onChange={(e) => setNursingText(e.target.value)} />
                                 <Button type="button" className="mt-2" onClick={() => void submitNursing()}>
                                     Save nursing note
@@ -714,41 +782,42 @@ function ClinicalWorkflowsPage() {
                         <div>
                             <h3 className="font-medium">Record vital</h3>
                             <div className="mt-2 flex flex-wrap gap-2">
-                                <select
-                                    className="rounded border px-2 py-1 dark:border-gray-600 dark:bg-gray-900"
-                                    value={vitalType}
-                                    onChange={(e) => setVitalType(e.target.value as typeof vitalType)}
-                                >
-                                    {(['HR', 'BP', 'Temp', 'SpO2', 'RR'] as const).map((t) => (
-                                        <option key={t} value={t}>
-                                            {t}
-                                        </option>
-                                    ))}
-                                </select>
+                                <div className="w-28 mt-1 ">
+                                <NewDropdown
+                        options={(['HR', 'BP', 'Temp', 'SpO2', 'RR'] as const).map((t) => ({
+                            value: t,
+                            label: t,
+                        }))}
+                        value={vitalType}
+                        onChange={(v) => setVitalType(v as typeof vitalType)}
+                        placeholder="Select..."
+                        />
+                        </div>
+        
                                 <Input
                                     placeholder={vitalType === 'BP' ? 'Systolic' : 'Value'}
                                     value={vitalValue}
                                     onChange={(e) => setVitalValue(e.target.value)}
-                                    className="w-28"
+                                    className="w-32"
                                 />
                                 {vitalType === 'BP' && (
                                     <Input
                                         placeholder="Diastolic"
                                         value={vitalSecondary}
                                         onChange={(e) => setVitalSecondary(e.target.value)}
-                                        className="w-28"
+                                        className="w-32"
                                     />
                                 )}
-                                <Button type="button" onClick={() => void submitVital()}>
-                                    Save
-                                </Button>
+                                <AppButton type="button" onClick={() => void submitVital()}>
+                                    Save 
+                                </AppButton>
                             </div>
                             <p className="mt-2 text-xs text-gray-500">Temp uses °C; abnormal values trigger clinical alerts on the server.</p>
                         </div>
                         <div>
                             <div className="mb-2 flex items-center gap-2">
                                 <span className="text-sm">Chart</span>
-                                <select
+                                {/* <select
                                     className="rounded border px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900"
                                     value={chartVitalType}
                                     onChange={(e) => setChartVitalType(e.target.value)}
@@ -758,7 +827,19 @@ function ClinicalWorkflowsPage() {
                                             {t}
                                         </option>
                                     ))}
-                                </select>
+                                </select> */}
+                                 <div className="w-28">
+                                <NewDropdown
+  options={['HR', 'BP', 'Temp', 'SpO2', 'RR'].map((t) => ({
+    value: t,
+    label: t,
+  }))}
+  value={chartVitalType}
+  onChange={(v) => setChartVitalType(String(v))}
+  placeholder="Select..."
+/>
+
+                            </div>
                             </div>
                             <div className="h-64 rounded border border-gray-200 p-2 dark:border-gray-700">
                                 {vitals.some((v) => v.type === chartVitalType) ? (
@@ -788,7 +869,7 @@ function ClinicalWorkflowsPage() {
                         {showOrders ? (
                             <>
                                 <label className="text-xs text-gray-500">Priority</label>
-                                <select
+                                {/* <select
                                     className="mb-2 ml-2 rounded border px-2 py-1 dark:border-gray-600 dark:bg-gray-900"
                                     value={orderPriority}
                                     onChange={(e) => setOrderPriority(e.target.value as typeof orderPriority)}
@@ -796,7 +877,19 @@ function ClinicalWorkflowsPage() {
                                     <option value="routine">routine</option>
                                     <option value="urgent">urgent</option>
                                     <option value="stat">stat</option>
-                                </select>
+                                </select> */}
+                                <div className="w-28">
+                                <NewDropdown
+                                        options={[
+                                            { value: "routine", label: "routine" },
+                                            { value: "urgent", label: "urgent" },
+                                            { value: "stat", label: "stat" }
+                                        ]}
+                                        value={orderPriority}
+                                        onChange={(v) => setOrderPriority(v as typeof orderPriority)}
+                                        placeholder="Select..."
+                                    />
+                                    </div>
                                 <Textarea
                                     rows={4}
                                     value={orderJson}

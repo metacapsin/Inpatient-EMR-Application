@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { toast } from 'sonner';
 import type { IRootState } from '../../store';
+import NewDropdown from '../../components/ui/NewDropdown';
 import {
     canBillingFinancialActions,
     canNursingActions,
@@ -192,7 +193,7 @@ export default function DischargeReadinessPage() {
             <div className="grid gap-4 md:grid-cols-2">
                 <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Patient</label>
-                    <select
+                    {/* <select
                         className={selectClass}
                         value={patientId}
                         disabled={patientsLoading}
@@ -208,32 +209,71 @@ export default function DischargeReadinessPage() {
                                 {p.mrn ? ` · MRN ${p.mrn}` : ''}
                             </option>
                         ))}
-                    </select>
+                    </select> */}
+                    <div className="w-full">
+  <NewDropdown
+    options={[
+      {
+        value: "",
+        label: patientsLoading ? "Loading patients…" : "Select patient…",
+      },
+
+      ...(patientId && !patientInList
+        ? [
+            {
+              value: patientId,
+              label: `Current selection (not in list) · ${patientId.slice(-10)}…`,
+            },
+          ]
+        : []),
+
+      ...patients.map((p) => ({
+        value: p.id,
+        label: p.mrn ? `${p.name} · MRN ${p.mrn}` : p.name,
+      })),
+    ]}
+    value={patientId || ""}
+    placeholder="Select patient…"
+    onChange={(value) => setPatientSelection(String(value))}
+    disabled={patientsLoading}
+  />
+</div>
                 </div>
                 <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Encounter</label>
-                    <select
-                        className={selectClass}
-                        value={encounterId}
-                        disabled={!patientId || encountersLoading}
-                        onChange={(e) => setEncounterSelection(e.target.value)}
-                    >
-                        <option value="">
-                            {!patientId
-                                ? 'Select a patient first…'
-                                : encountersLoading
-                                  ? 'Loading encounters…'
-                                  : 'Select active encounter…'}
-                        </option>
-                        {encounterId && !encounterInList && patientId ? (
-                            <option value={encounterId}>Current selection · …{encounterId.slice(-8)}</option>
-                        ) : null}
-                        {encounters.map((enc) => (
-                            <option key={enc.id} value={enc.id}>
-                                {formatEncounterLabel(enc)}
-                            </option>
-                        ))}
-                    </select>
+                 
+                    <div className="w-full">
+  <NewDropdown
+    options={[
+      {
+        value: "",
+        label: !patientId
+          ? "Select a patient first…"
+          : encountersLoading
+          ? "Loading encounters…"
+          : "Select active encounter…",
+      },
+
+      ...(encounterId && !encounterInList && patientId
+        ? [
+            {
+              value: encounterId,
+              label: `Current selection · …${encounterId.slice(-8)}`,
+            },
+          ]
+        : []),
+
+      ...encounters.map((enc) => ({
+        value: enc.id,
+        label: formatEncounterLabel(enc),
+      })),
+    ]}
+    value={encounterId || ""}
+    placeholder="Select active encounter…"
+    onChange={(value) => setEncounterSelection(String(value))}
+    disabled={!patientId || encountersLoading}
+  />
+</div>
                     {patientId && !encountersLoading && encounters.length === 0 ? (
                         <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
                             No active encounter for this patient. You can still open this page with an encounter id in the URL, or set{' '}

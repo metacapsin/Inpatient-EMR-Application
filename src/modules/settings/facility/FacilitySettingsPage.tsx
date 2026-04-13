@@ -22,6 +22,7 @@ import { SimpleDataTable } from '../../../components/shared/SimpleDataTable';
 import { useCanEditPatientLocation } from '../../../hooks/useCanEditPatientLocation';
 import { DEFAULT_ROOM_TYPE, ROOM_TYPES } from '../../../constants/facility';
 import IconSearch from '@/components/Icon/IconSearch';
+import AppButton from '@/components/ui/AppButton';
 
 type TabId = 'wards' | 'rooms' | 'beds';
 
@@ -565,18 +566,11 @@ const currentItems = filteredItems.slice(startIndex, endIndex);
               </div>
 
                 {canEdit ? (
-                    <button type="button" onClick={onAdd}   
-                     className="
-    inline-flex items-center gap-2 text-sm font-medium
-    px-4 py-2 rounded-md transition-all duration-200
-    bg-[#F6F6FA] text-[#8B5E3C]   /* Normal state like Quick Add */
-    hover:bg-[#8B5E3C] hover:text-white /* Hover like Add New */
-    border border-transparent"
 
->
-                        <Plus className="h-4 w-4" />
-                        Add ward
-                    </button>
+                      <AppButton onClick={onAdd}>
+                       <Plus className="h-4 w-4" />
+                      Add Ward
+                    </AppButton>
                 ) : null}
             </div>
             {loading ? (
@@ -695,15 +689,11 @@ const currentItems = filteredRooms.slice(startIndex, endIndex);
                 </span>
               </div>
                 {canEdit ? (
-                    <button type="button" onClick={onAdd}       className="
-    inline-flex items-center gap-2 text-sm font-medium
-    px-4 py-2 rounded-md transition-all duration-200
-    bg-[#F6F6FA] text-[#8B5E3C]   /* Normal state like Quick Add */
-    hover:bg-[#8B5E3C] hover:text-white /* Hover like Add New */
-    border border-transparent">
-                        <Plus className="h-4 w-4" />
-                        Add room
-                    </button>
+   
+     <AppButton onClick={onAdd}>
+                       <Plus className="h-4 w-4" />
+                      Add Room
+                    </AppButton>
                 ) : null}
             </div>
             {loading ? (
@@ -821,15 +811,10 @@ const currentItems = filteredBeds.slice(startIndex, endIndex);
                 </span>
               </div>
                 {canEdit ? (
-                    <button type="button" onClick={onAdd}       className="
-    inline-flex items-center gap-2 text-sm font-medium
-    px-4 py-2 rounded-md transition-all duration-200
-    bg-[#F6F6FA] text-[#8B5E3C]   /* Normal state like Quick Add */
-    hover:bg-[#8B5E3C] hover:text-white /* Hover like Add New */
-    border border-transparent">
-                        <Plus className="h-4 w-4" />
-                        Add bed
-                    </button>
+                 <AppButton onClick={onAdd}>
+                       <Plus className="h-4 w-4" />
+                      Add Beds
+                    </AppButton>
                 ) : null}
             </div>
             {loading ? (

@@ -6,6 +6,7 @@ import { FaUser, FaClipboardList, FaPlus, FaTimes } from '../../lib/fa-icons';
 import { Pencil, Trash2, AlertTriangle, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { usePatientId } from '../../hooks/usePatientId';
+import  AppButton from "../../components/ui/AppButton";
 import type { FamilyContactRecord, VisitorRecord, VisitorStatusUi } from '../../services/visitorsFamily.service';
 import {
     createFamilyContactForPatient,
@@ -830,19 +831,10 @@ const paginatedContacts = filteredContacts.slice(
           <IconSearch className="w-4 h-4" />
         </span>
       </div>
-                        <button
-                            type="button"
-                                  className="
-    inline-flex items-center gap-2 text-sm font-medium
-    px-4 py-2 rounded-md transition-all duration-200
-    bg-[#F6F6FA] text-[#8B5E3C]   /* Normal state like Quick Add */
-    hover:bg-[#8B5E3C] hover:text-white /* Hover like Add New */
-    border border-transparent"
-                            disabled={contactsQuery.isLoading}
-                            onClick={() => setContactModal({ open: true })}
-                        >
-                            <FaPlus className="h-3 w-3" /> Add Contact
-                        </button>
+                     <AppButton onClick={() => setContactModal({ open: true })}>
+  <FaPlus className="h-3 w-3" />
+  Add Contact
+</AppButton>
                  
                     </div>
                     {visitorsQuery.isLoading ? (
@@ -928,19 +920,11 @@ const paginatedContacts = filteredContacts.slice(
           <IconSearch className="w-4 h-4" />
         </span>
       </div>
-                        <button
-                            type="button"
-                                  className="
-    inline-flex items-center gap-2 text-sm font-medium
-    px-4 py-2 rounded-md transition-all duration-200
-    bg-[#F6F6FA] text-[#8B5E3C]   /* Normal state like Quick Add */
-    hover:bg-[#8B5E3C] hover:text-white /* Hover like Add New */
-    border border-transparent"
-                            disabled={contactsQuery.isLoading}
-                            onClick={() => setContactModal({ open: true })}
-                        >
-                            <FaPlus className="h-3 w-3" /> Add Contact
-                        </button>
+      <AppButton onClick={() => setContactModal({ open: true })}>
+  <FaPlus className="h-3 w-3" />
+  Add Contact
+</AppButton>
+
                     </div>
 
                     {contactsQuery.isLoading ? (

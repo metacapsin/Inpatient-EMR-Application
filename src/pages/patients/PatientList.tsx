@@ -22,6 +22,7 @@ import {
     type PatientListItem,
     type PatientListSortField,
 } from '../../services/patient.service';
+import NewDropdown from '@/components/ui/NewDropdown';
 type DateRange = {
     from: string;
     to: string;
@@ -334,24 +335,69 @@ const PatientList = () => {
             <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white-light pt-4 dark:border-[#191e3a]">
                 <div className="mb-3 flex shrink-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
                     <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3 lg:gap-4">
-                        <FilterSelect label="Status" value={status} onChange={(v) => {
-                            setStatus(v as StatusValue);
-                            setPage(1);
-                        }} options={STATUS_OPTIONS} />
-                        <FilterSelect label="Gender" value={gender} onChange={(v) => {
-                            setGender(v);
-                            setPage(1);
-                        }} options={GENDER_OPTIONS} />
-                        <FilterSelect label="Age range" value={ageRange} onChange={(v) => {
-                            setAgeRange(v);
-                            setPage(1);
-                        }} options={AGE_OPTIONS} />
-                        <FilterSelect label="Recent patients" value={recent} onChange={(v) => {
-                            setRecent(v);
-                            setPage(1);
-                        }} options={RECENT_OPTIONS} />
+                        <div className="flex gap-4 flex-wrap">
+                          <div className="w-40">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Status
+                                </label>
+                                <NewDropdown
+                                    options={STATUS_OPTIONS}
+                                    value={status || ""}
+                                    placeholder="Select Status"
+                                    onChange={(v) => {
+                                    setStatus(v as StatusValue);
+                                    setPage(1);
+                                    }}
+                                />
+                                </div>
+                      <div className="w-40">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Gender
+                            </label>
+
+                            <NewDropdown
+                                options={GENDER_OPTIONS}
+                                value={gender || ""}
+                                placeholder="Select Gender"
+                                onChange={(v) => {
+                                setGender(v as string);
+                                setPage(1);
+                                }}
+                            />
+                            </div>
+                             <div className="w-40">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Age range
+                                    </label>
+
+                                    <NewDropdown
+                                        options={AGE_OPTIONS}
+                                        value={ageRange || ""}
+                                        placeholder="Select Age range"
+                                        onChange={(v) => {
+                                        setAgeRange(v as string);
+                                        setPage(1);
+                                        }}
+                                    />
+                                    </div>
+                           <div className="w-40">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Recent patients
+                                </label>
+
+                                <NewDropdown
+                                    options={RECENT_OPTIONS}
+                                    value={recent || ""}
+                                    placeholder="Select Recent patients"
+                                    onChange={(v) => {
+                                    setRecent(v as string);
+                                    setPage(1);
+                                    }}
+                                />
+                                </div>
+                                <div className="w-50">
                         <DateRangePicker
-                            label="Reg date"
+                            label="Reg Date"
                             value={dateRange}
                             onChange={(range) => {
                                 setDateRange(range);
@@ -361,6 +407,8 @@ const PatientList = () => {
                                 }
                             }}
                         />
+                        </div>
+                        </div>
                     </div>
                     <button
                         type="button"

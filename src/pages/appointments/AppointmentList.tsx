@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { appointmentAPI } from '../../services/api';
+import AppButton from '@/components/ui/AppButton';
+import NewDropdown from '@/components/ui/NewDropdown';
 
 type AppointmentRow = {
   _id?: string;
@@ -224,25 +226,18 @@ const AppointmentList: React.FC = () => {
     onChange={(e) => setSearch(e.target.value)}
   />
 
-</div>
-  
-      <button
-             className="
-    inline-flex items-center gap-2 text-sm font-medium
-    px-4 py-2 rounded-md transition-all duration-200
-    bg-[#F6F6FA] text-[#8B5E3C]   /* Normal state like Quick Add */
-    hover:bg-[#8B5E3C] hover:text-white /* Hover like Add New */
-    border border-transparent"
-        onClick={() => navigate('/app/appointments/add')}
-      >
-        Create Appointment
-      </button>
+</div>  
+        <AppButton onClick={() => navigate('/app/appointments/add')}>
+      Create Appointment
+      </AppButton>
+
+
     </div>
   </div>
 
  
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
-        <select
+        {/* <select
           className="form-select"
           value={filters.status}
           onChange={(e) => {
@@ -255,8 +250,25 @@ const AppointmentList: React.FC = () => {
           <option value="Completed">Completed</option>
           <option value="Cancelled">Cancelled</option>
           <option value="No Show">No Show</option>
-        </select>
-        <select
+        </select> */}
+        <div className="w-55">
+  <NewDropdown
+    options={[
+      { value: "", label: "All Status" },
+      { value: "Scheduled", label: "Scheduled" },
+      { value: "Completed", label: "Completed" },
+      { value: "Cancelled", label: "Cancelled" },
+      { value: "No Show", label: "No Show" },
+    ]}
+    value={filters.status}
+    onChange={(v) => {
+      setPage(1);
+      setFilters((prev) => ({ ...prev, status: v as string  }));
+    }}
+    placeholder="All Status"
+  />
+</div>
+        {/* <select
           className="form-select"
           value={filters.providerId}
           onChange={(e) => {
@@ -268,7 +280,24 @@ const AppointmentList: React.FC = () => {
           {providers.map((provider) => (
             <option key={provider.id} value={provider.id}>{provider.name}</option>
           ))}
-        </select>
+        </select> */}
+        <div className="w-55"> 
+  <NewDropdown
+    options={[
+      { value: "", label: "All Providers" },
+      ...providers.map((p) => ({
+        value: p.id,
+        label: p.name,
+      })),
+    ]}
+    value={filters.providerId}
+    onChange={(v) => {
+      setPage(1);
+      setFilters((prev) => ({ ...prev, providerId: v as string  }));
+    }}
+    placeholder="All Providers"
+  />
+</div>
         <input
           type="date"
           className="form-input"

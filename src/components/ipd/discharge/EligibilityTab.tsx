@@ -1,6 +1,7 @@
 import React, { memo, useState } from 'react';
-import { Button } from '../../ui/button';
+
 import type { EligibilityRecord } from '../../../types/dischargeReadiness';
+import AppButton from '@/components/ui/AppButton';
 
 type Props = {
     history: EligibilityRecord[];
@@ -27,13 +28,13 @@ function EligibilityTabInner({ history, canRun, onRunCheck }: Props) {
     return (
         <div className="space-y-6">
             <div className="flex flex-wrap items-center gap-3">
-                <Button type="button" disabled={!canRun || running} onClick={() => void (async () => {
+                <AppButton type="button" disabled={!canRun || running} onClick={() => void (async () => {
                     setRunning(true);
                     await onRunCheck();
                     setRunning(false);
                 })()}>
-                    {running ? 'Checking…' : 'Run eligibility (270 / 271)'}
-                </Button>
+                    {running ? 'Checking…' : 'ligibility (270 / 271)'}
+                </AppButton>
                 {!canRun ? <span className="text-sm text-gray-500">Your role cannot run eligibility.</span> : null}
             </div>
 

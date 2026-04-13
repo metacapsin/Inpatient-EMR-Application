@@ -17,6 +17,7 @@ import {
 import { Loader2 } from 'lucide-react';
 import { appointmentAPI } from '../../services/api';
 import { cn } from '../../lib/utils';
+import NewDropdown from '../ui/NewDropdown';
 
 type DropdownOption = {
   id: string;
@@ -475,7 +476,7 @@ export default function BookAppointment() {
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 Patient <span className="text-primary-600">*</span>
               </label>
-              <select
+              {/* <select
                 className={cn(
                   'w-full rounded-lg border-2 bg-gray-50 px-4 py-2.5 transition-colors',
                   errors.patientId ? 'border-primary-600' : 'border-gray-200 focus:border-primary'
@@ -491,25 +492,36 @@ export default function BookAppointment() {
                   clearError('patientId');
                 }}
               >
+               
+                
                 <option value="">Select Patient</option>
                 {patients.map((patient) => (
                   <option key={patient.id} value={patient.id}>
                     {patient.label}
                   </option>
-                ))}
-              </select>
-              {errors.patientId && <p className="mt-1 text-xs text-primary-600">{errors.patientId}</p>}
-            </div>
+                ))} 
+                
+            
+              </select> */}
+              {/* <label className="block text-gray-700">Patient *</label> */}
 
-            <div className="flex flex-col space-y-1">
-              <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
-              <input
-                type="email"
-                className="w-full rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-2.5 focus:border-primary"
-                value={form.patientEmail}
-                onChange={(event) => setForm((prev) => ({ ...prev, patientEmail: event.target.value }))}
-                placeholder={selectedPatient ? 'Auto-filled if available, or type email' : 'Select patient first'}
-              />
+<div className="w-full mt-1">
+  <NewDropdown
+    options={[
+      { value: "", label: "Select Patient" },
+      ...patients.map((p) => ({
+        value: p.id,
+        label: p.label,
+      })),
+    ]}
+    value={form.patientId}
+    placeholder="Select Patient"
+    onChange={(value) =>
+      setForm((prev) => ({ ...prev, patientId: String(value) }))
+    }
+  />
+</div>
+              {errors.patientId && <p className="mt-1 text-xs text-primary-600">{errors.patientId}</p>}
             </div>
 
             <div className="flex flex-col space-y-1">
@@ -527,7 +539,7 @@ export default function BookAppointment() {
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 Provider <span className="text-primary-600">*</span>
               </label>
-              <select
+              {/* <select
                 className={cn(
                   'w-full rounded-lg border-2 bg-gray-50 px-4 py-2.5 transition-colors',
                   errors.providerId ? 'border-primary-600' : 'border-gray-200 focus:border-primary'
@@ -551,7 +563,28 @@ export default function BookAppointment() {
                     {provider.label}
                   </option>
                 ))}
-              </select>
+              </select> */}
+              <div className="w-full mt-1">
+  <NewDropdown
+    options={providers.map((provider) => ({
+      value: provider.id,
+      label: provider.label,
+    }))}
+    value={form.providerId}
+    placeholder="Select Provider"
+    onChange={(value) => {
+      setForm((prev) => ({
+        ...prev,
+        providerId: String(value),
+        serviceLocationId: '',
+        timeSlot: '',
+      }));
+      clearError('providerId');
+      clearError('serviceLocationId');
+      clearError('timeSlot');
+    }}
+  />
+</div>
               {errors.providerId && <p className="mt-1 text-xs text-primary-600">{errors.providerId}</p>}
             </div>
 
@@ -559,7 +592,7 @@ export default function BookAppointment() {
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 Visit Type <span className="text-primary-600">*</span>
               </label>
-              <select
+              {/* <select
                 className={cn(
                   'w-full rounded-lg border-2 bg-gray-50 px-4 py-2.5 transition-colors',
                   errors.visitTypeId ? 'border-primary-600' : 'border-gray-200 focus:border-primary'
@@ -576,7 +609,24 @@ export default function BookAppointment() {
                     {visitType.label}
                   </option>
                 ))}
-              </select>
+              </select> */}
+              <div className="w-full mt-1">
+                <NewDropdown
+                  options={visitTypes.map((visitType) => ({
+                    value: visitType.id,
+                    label: visitType.label,
+                  }))}
+                  value={form.visitTypeId}
+                  placeholder="Select Visit Type"
+                  onChange={(value) => {
+                    setForm((prev) => ({
+                      ...prev,
+                      visitTypeId: String(value),
+                    }));
+                    clearError('visitTypeId');
+                  }}
+                />
+              </div>
               {errors.visitTypeId && <p className="mt-1 text-xs text-primary-600">{errors.visitTypeId}</p>}
             </div>
 
@@ -584,7 +634,7 @@ export default function BookAppointment() {
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 Visit Reason <span className="text-primary-600">*</span>
               </label>
-              <select
+              {/* <select
                 className={cn(
                   'w-full rounded-lg border-2 bg-gray-50 px-4 py-2.5 transition-colors',
                   errors.visitReason ? 'border-primary-600' : 'border-gray-200 focus:border-primary'
@@ -607,7 +657,26 @@ export default function BookAppointment() {
                     {reason.label}
                   </option>
                 ))}
-              </select>
+              </select> */}
+              <div className="w-full mt-1">
+            <NewDropdown
+              options={visitReasons.map((reason) => ({
+                value: reason.label,
+                label: reason.label,
+              }))}
+              value={form.visitReason}
+              placeholder="Select Visit Reason"
+              onChange={(value) => {
+                setForm((prev) => ({
+                  ...prev,
+                  visitReason: String(value),
+                  otherReason: value === "Other" ? prev.otherReason : "",
+                }));
+                clearError("visitReason");
+                clearError("otherReason");
+              }}
+            />
+          </div>
               {errors.visitReason && <p className="mt-1 text-xs text-primary-600">{errors.visitReason}</p>}
             </div>
 
@@ -615,7 +684,7 @@ export default function BookAppointment() {
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 Service Location <span className="text-primary-600">*</span>
               </label>
-              <select
+              {/* <select
                 disabled={!form.providerId}
                 className={cn(
                   'w-full rounded-lg border-2 bg-gray-50 px-4 py-2.5 transition-colors disabled:opacity-60',
@@ -638,7 +707,26 @@ export default function BookAppointment() {
                     {location.label}
                   </option>
                 ))}
-              </select>
+              </select> */}
+              <div className={`w-full mt-1 ${!form.providerId ? "opacity-60 pointer-events-none" : ""}`}>
+                <NewDropdown
+                  options={serviceLocations.map((loc) => ({
+                    value: loc.id,
+                    label: loc.label,
+                  }))}
+                  value={form.serviceLocationId}
+                  placeholder={form.providerId ? "Select Location" : "Select Provider first"}
+                  onChange={(value) => {
+                    setForm((prev) => ({
+                      ...prev,
+                      serviceLocationId: String(value),
+                      timeSlot: "",
+                    }));
+                    clearError("serviceLocationId");
+                    clearError("timeSlot");
+                  }}
+                />
+</div>
               {errors.serviceLocationId && <p className="mt-1 text-xs text-primary-600">{errors.serviceLocationId}</p>}
             </div>
           </div>
@@ -835,7 +923,16 @@ export default function BookAppointment() {
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-blue-600 px-6 py-2 text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+               className="
+    inline-flex items-center gap-2 text-sm font-medium
+    px-4 py-2 rounded-md transition-all duration-200
+
+    bg-[#8B5E3C] text-[#f5f5f5]   /* Normal state like Quick Add */
+
+
+
+    border border-transparent
+  "
               disabled={submitting}
             >
               {submitting ? 'Saving...' : isEditMode ? 'Update Appointment' : 'Create Appointment'}
