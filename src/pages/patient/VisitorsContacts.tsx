@@ -311,10 +311,13 @@ function VisitorModal({
     
     const set = <K extends keyof VisitorFormFields>(k: K, v: VisitorFormFields[K]) => {
         setForm((f) => ({ ...f, [k]: v }));
-        // Clear error for this field when user starts typing
-        if (errors[k]) {
-            setErrors((prev) => ({ ...prev, [k]: '' }));
-        }
+        setErrors((prev) => {
+            const key = k as string;
+            if (!prev[key]) return prev;
+            const next = { ...prev };
+            delete next[key];
+            return next;
+        });
     };
 
     const validateField = (field: keyof VisitorFormFields, value: string): string => {
@@ -355,9 +358,14 @@ function VisitorModal({
 
     const handleBlur = (field: keyof VisitorFormFields) => {
         const error = validateField(field, form[field]);
-        if (error) {
-            setErrors((prev) => ({ ...prev, [field]: error }));
-        }
+        setErrors((prev) => {
+            if (error) return { ...prev, [field]: error };
+            const key = field as string;
+            if (!prev[key]) return prev;
+            const next = { ...prev };
+            delete next[key];
+            return next;
+        });
     };
 
     const handleSubmit = () => {
@@ -478,9 +486,13 @@ function ContactModal({
     
     const set = (k: keyof Omit<FamilyContactRecord, 'id'>, v: string | boolean) => {
         setForm((f) => ({ ...f, [k]: v }));
-        if (errors[k as string]) {
-            setErrors((prev) => ({ ...prev, [k as string]: '' }));
-        }
+        setErrors((prev) => {
+            const key = k as string;
+            if (!prev[key]) return prev;
+            const next = { ...prev };
+            delete next[key];
+            return next;
+        });
     };
 
     const validateField = (field: keyof Omit<FamilyContactRecord, 'id'>, value: any): string => {
@@ -520,9 +532,14 @@ function ContactModal({
     const handleBlur = (field: keyof Omit<FamilyContactRecord, 'id'>) => {
         const value = field === 'isNOK' ? form.isNOK : form[field as keyof typeof form];
         const error = validateField(field, value);
-        if (error) {
-            setErrors((prev) => ({ ...prev, [field]: error }));
-        }
+        setErrors((prev) => {
+            if (error) return { ...prev, [field]: error };
+            const key = field as string;
+            if (!prev[key]) return prev;
+            const next = { ...prev };
+            delete next[key];
+            return next;
+        });
     };
 
     const handleSubmit = () => {
