@@ -33,6 +33,13 @@ export function usePatientId(): string | null {
       const q = new URLSearchParams(location.search).get('patientId')?.trim();
       if (q) return decodeURIComponent(q);
     }
+    if (
+      location.pathname === '/app/inpatient/medication-management' ||
+      location.pathname.startsWith('/app/inpatient/medication-management/')
+    ) {
+      const q = new URLSearchParams(location.search).get('patientId')?.trim();
+      if (q) return decodeURIComponent(q);
+    }
     return patientIdFromLocalUser();
   }, [location.pathname, location.search]);
 }

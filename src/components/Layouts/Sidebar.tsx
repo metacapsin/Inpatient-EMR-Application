@@ -127,6 +127,14 @@ const Sidebar = () => {
                                                         Discharge &amp; billing readiness
                                                     </NavLink>
                                                 </li>
+                                                <li>
+                                                    <NavLink
+                                                        to="/app/inpatient/medication-management"
+                                                        title="MAR, PRN/STAT, pharmacy dispensing, discharge medications"
+                                                    >
+                                                        Medication management
+                                                    </NavLink>
+                                                </li>
                                                 {/* <li>
                                                     <NavLink to="/app/adt">ADT workspace</NavLink>
                                                 </li> */}
