@@ -5,45 +5,20 @@
  * Future REST integration (high-level contract)
  * -----------------------------------------------------------------------------
  *
- * Aggregate (optional convenience):
- *   GET  /api/encounters/:encounterId/discharge-readiness
- *        → { context, summary, checklist, charges, eligibilityHistory, claimPrep, gates?, clinicalReady?, billingReady? }
- *        Server may compute gates or return raw aggregates only.
+ * Live routes (2xx bodies should be `DischargeReadinessView`, or `{ status, data }` wrapping it):
+ *   GET    /api/encounters/:encounterId/discharge-readiness
+ *   PUT    /api/encounters/:encounterId/discharge-summary
+ *   POST   /api/encounters/:encounterId/discharge-summary/sign
+ *   PATCH  /api/encounters/:encounterId/discharge-checklist/tasks/:taskId
+ *   POST   /api/encounters/:encounterId/charges
+ *   PATCH  /api/encounters/:encounterId/charges/:chargeId
+ *   DELETE /api/encounters/:encounterId/charges/:chargeId
+ *   POST   /api/encounters/:encounterId/eligibility
+ *   PUT    /api/encounters/:encounterId/claim-prep
+ *   POST   /api/encounters/:encounterId/claim-prep/submit
  *
- * Discharge summary:
- *   GET  /api/encounters/:encounterId/discharge-summary
- *   PUT  /api/encounters/:encounterId/discharge-summary
- *        Body: Partial<DischargeSummaryState> (structured sections + narrative)
- *   POST /api/encounters/:encounterId/discharge-summary/sign
- *        Body: { attestedByUserId?: string } — server records signer + timestamp, applies lock policy.
- *
- * Nursing checklist:
- *   GET  /api/encounters/:encounterId/discharge-checklist
- *   PUT  /api/encounters/:encounterId/discharge-checklist
- *        Body: { tasks: Partial<ChecklistTask>[] } or PATCH per task id.
- *
- * Charges:
- *   GET  /api/encounters/:encounterId/charges
- *   POST /api/encounters/:encounterId/charges
- *        Body: Omit<ChargeLine, 'id'|'total'> & { id?: string } — server assigns id, computes total.
- *   PATCH /api/encounters/:encounterId/charges/:chargeId
- *
- * Eligibility (270/271 — async in production):
- *   POST /api/encounters/:encounterId/eligibility
- *        Body: { serviceDateFrom, serviceDateTo?, serviceTypeCodes?: string[] }
- *        → { requestId } | inline normalized 271 snapshot
- *   GET  /api/eligibility-requests/:requestId
- *        → status + normalized benefits + raw trace id for support.
- *
- * Claim preparation:
- *   GET  /api/encounters/:encounterId/claim-prep
- *   PUT  /api/encounters/:encounterId/claim-prep
- *   POST /api/encounters/:encounterId/claim-prep/submit
- *        → { claimId, clearinghouseTraceId }
- *
- * Validation / errors: 400 (business rule), 409 (version conflict on summary), 403 (RBAC),
- * 502/504 (clearinghouse). Frontend should surface message + correlation id.
- * -----------------------------------------------------------------------------
+ * Claim submit: backend MUST reject when `encounter.dischargeSigned !== true` (UI mirrors this via
+ * `context.dischargeSigned` and/or signed discharge summary).
  */
 
 import type {
@@ -55,9 +30,95 @@ import type {
     DischargeReadinessView,
     DischargeSummaryState,
     EligibilityRecord,
-    ReadinessGate,
     ServiceResult,
 } from '../types/dischargeReadiness';
+import { asRecord } from '../lib/apiPayload';
+import {
+    CLAIM_SUBMIT_CLINICAL_NOT_READY_MSG,
+    CLAIM_SUBMIT_REQUIRES_SIGNED_DISCHARGE_MSG,
+    computeReadinessSnapshot,
+    isDischargeSignedForClaim,
+    isDischargeSummaryDocumentationComplete,
+} from '../utils/dischargeReadinessValidation';
+
+function diagnosisArrayLine(row: Record<string, unknown>): string {
+    const code = typeof row.code === 'string' ? row.code : '';
+    const desc = typeof row.description === 'string' ? row.description : '';
+    const principal = row.isPrincipal === true;
+    const body = [code, desc].filter(Boolean).join(' — ');
+    if (principal && body) return `Principal: ${body}`;
+    return body || code || desc;
+}
+
+function procedureArrayLine(row: Record<string, unknown>): string {
+    const code = typeof row.code === 'string' ? row.code : '';
+    const desc = typeof row.description === 'string' ? row.description : '';
+    return [code, desc].filter(Boolean).join(' ').trim();
+}
+
+function medicationArrayLine(row: Record<string, unknown>): string {
+    const name = typeof row.name === 'string' ? row.name : '';
+    const sig = typeof row.sig === 'string' ? row.sig : '';
+    if (name && sig) return `${name} — ${sig}`;
+    return name || sig;
+}
+
+function coerceSummaryMultiline(
+    raw: unknown,
+    fromRow: (row: Record<string, unknown>) => string
+): string {
+    if (typeof raw === 'string') return raw;
+    if (!Array.isArray(raw)) return '';
+    return raw
+        .map((item) => {
+            const o = asRecord(item);
+            return o ? fromRow(o) : '';
+        })
+        .filter((line) => line.length > 0)
+        .join('\n');
+}
+
+/** Accepts string fields or legacy row[] from older API payloads. */
+function normalizeDischargeSummary(raw: unknown): DischargeSummaryState {
+    const s = asRecord(raw);
+    if (!s) {
+        return {
+            status: 'draft',
+            admissionDiagnosis: '',
+            hospitalCourse: '',
+            finalDiagnoses: '',
+            procedures: '',
+            disposition: 'Home',
+            conditionAtDischarge: '',
+            dischargeMedications: '',
+            followUpInstructions: '',
+            signedAt: null,
+            signedBy: null,
+            signedByName: null,
+        };
+    }
+    const st = s.status === 'signed' || s.status === 'draft' ? s.status : 'draft';
+    return {
+        status: st,
+        admissionDiagnosis: typeof s.admissionDiagnosis === 'string' ? s.admissionDiagnosis : '',
+        hospitalCourse: typeof s.hospitalCourse === 'string' ? s.hospitalCourse : '',
+        finalDiagnoses: coerceSummaryMultiline(s.finalDiagnoses, diagnosisArrayLine),
+        procedures: coerceSummaryMultiline(s.procedures, procedureArrayLine),
+        disposition: typeof s.disposition === 'string' ? s.disposition : 'Home',
+        conditionAtDischarge: typeof s.conditionAtDischarge === 'string' ? s.conditionAtDischarge : '',
+        dischargeMedications: coerceSummaryMultiline(s.dischargeMedications, medicationArrayLine),
+        followUpInstructions: typeof s.followUpInstructions === 'string' ? s.followUpInstructions : '',
+        signedAt: s.signedAt === null || typeof s.signedAt === 'string' ? (s.signedAt as string | null) : null,
+        signedBy: s.signedBy === null || typeof s.signedBy === 'string' ? (s.signedBy as string | null) : null,
+        signedByName:
+            s.signedByName === null || typeof s.signedByName === 'string' ? (s.signedByName as string | null) : null,
+    };
+}
+import { getApiErrorMessage } from '../lib/httpError';
+import api from './api';
+
+/** When `"true"`, use in-memory seed data instead of HTTP (see `VITE_USE_MOCK_FACILITY` pattern). */
+export const USE_MOCK_DISCHARGE_READINESS = import.meta.env.VITE_USE_MOCK_DISCHARGE_READINESS === 'true';
 
 /** Path templates for future `api` wiring — keep in sync with backend OpenAPI. */
 export const DISCHARGE_READINESS_HTTP_ROUTES = {
@@ -239,88 +300,72 @@ function ensurePayload(encounterId: string): DischargeReadinessPayload {
     return p;
 }
 
-function computeGates(p: DischargeReadinessPayload): ReadinessGate[] {
-    const gates: ReadinessGate[] = [];
-
-    const summarySigned = p.summary.status === 'signed';
-    gates.push({
-        id: 'gate-summary-signed',
-        category: 'clinical',
-        severity: 'hard',
-        message: 'Discharge summary must be signed by a provider',
-        resolved: summarySigned,
-        ownerRole: 'provider',
-    });
-
-    const checklistBlockers = p.checklist.filter((t) => t.blocksDischarge && !t.completed);
-    gates.push({
-        id: 'gate-nursing-checklist',
-        category: 'operational',
-        severity: checklistBlockers.length === 0 ? 'soft' : 'hard',
-        message:
-            checklistBlockers.length === 0
-                ? 'All required nursing discharge tasks are complete'
-                : `Incomplete nursing tasks: ${checklistBlockers.map((t) => t.label).join('; ')}`,
-        resolved: checklistBlockers.length === 0,
-        ownerRole: 'nursing',
-    });
-
-    const pendingCharges = p.charges.filter((c) => c.status === 'pending_capture');
-    gates.push({
-        id: 'gate-charges-pending',
-        category: 'financial',
-        severity: pendingCharges.length > 0 ? 'hard' : 'soft',
-        message:
-            pendingCharges.length === 0
-                ? 'No charges stuck in pending capture'
-                : `${pendingCharges.length} charge line(s) still pending capture`,
-        resolved: pendingCharges.length === 0,
-        ownerRole: 'billing',
-    });
-
-    const lastElig = p.eligibilityHistory[0];
-    const eligOk = Boolean(lastElig && (lastElig.status === 'active' || lastElig.status === 'unknown'));
-    gates.push({
-        id: 'gate-eligibility',
-        category: 'financial',
-        severity: 'hard',
-        message: lastElig
-            ? lastElig.status === 'inactive' || lastElig.status === 'error'
-                ? `Coverage issue: ${lastElig.displaySummary}`
-                : 'Coverage verified for inquiry window'
-            : 'Eligibility (270/271) has not been run for this encounter',
-        resolved: Boolean(lastElig && lastElig.status === 'active'),
-        ownerRole: 'billing',
-    });
-
-    const hasPrincipal = Boolean(p.claimPrep.principalDxCode?.trim());
-    gates.push({
-        id: 'gate-principal-dx',
-        category: 'financial',
-        severity: 'hard',
-        message: hasPrincipal ? 'Principal diagnosis present for claim' : 'Principal diagnosis required for inpatient claim',
-        resolved: hasPrincipal,
-        ownerRole: 'coding',
-    });
-
-    return gates;
-}
-
 function deriveReadiness(p: DischargeReadinessPayload): DischargeReadinessView {
-    const gates = computeGates(p);
-    const hardUnresolved = gates.filter((g) => g.severity === 'hard' && !g.resolved);
-    const clinicalIds = new Set(['gate-summary-signed', 'gate-nursing-checklist']);
-    const financialIds = new Set(['gate-charges-pending', 'gate-eligibility', 'gate-principal-dx']);
-
-    const clinicalHard = hardUnresolved.filter((g) => clinicalIds.has(g.id));
-    const billingHard = hardUnresolved.filter((g) => financialIds.has(g.id));
-
+    const snap = computeReadinessSnapshot(p);
     return {
         ...p,
-        gates,
-        clinicalReady: clinicalHard.length === 0,
-        billingReady: billingHard.length === 0,
+        gates: snap.gates,
+        clinicalReady: snap.isClinicalReady,
+        billingReady: snap.isBillingReady,
     };
+}
+
+function unwrapEnvelope(raw: unknown): Record<string, unknown> {
+    const o = asRecord(raw);
+    if (!o) throw new Error('Empty discharge readiness response');
+    const st = typeof o.status === 'string' ? o.status.toLowerCase() : '';
+    if ((st === 'success' || st === 'ok') && o.data !== undefined) {
+        const inner = asRecord(o.data);
+        if (inner) return inner;
+    }
+    return o;
+}
+
+function hasDischargePayloadShape(o: Record<string, unknown>): boolean {
+    return (
+        asRecord(o.context) != null &&
+        asRecord(o.summary) != null &&
+        Array.isArray(o.checklist) &&
+        Array.isArray(o.charges) &&
+        Array.isArray(o.eligibilityHistory) &&
+        asRecord(o.claimPrep) != null
+    );
+}
+
+function parseDischargeReadinessView(raw: unknown): DischargeReadinessView {
+    const body = unwrapEnvelope(raw);
+    if (!hasDischargePayloadShape(body)) {
+        throw new Error('Unexpected discharge readiness response shape');
+    }
+    const base = body as unknown as DischargeReadinessPayload;
+    const p: DischargeReadinessPayload = {
+        ...base,
+        summary: normalizeDischargeSummary(base.summary),
+    };
+    return deriveReadiness(p);
+}
+
+async function refetchView(encounterId: string): Promise<DischargeReadinessView> {
+    const { data } = await api.get(DISCHARGE_READINESS_HTTP_ROUTES.readiness(encounterId));
+    return parseDischargeReadinessView(data);
+}
+
+async function afterMutation(encounterId: string, raw: unknown): Promise<DischargeReadinessView> {
+    if (raw === undefined || raw === null || raw === '') {
+        return refetchView(encounterId);
+    }
+    if (typeof raw === 'object' && raw !== null && Object.keys(raw as object).length === 0) {
+        return refetchView(encounterId);
+    }
+    try {
+        return parseDischargeReadinessView(raw);
+    } catch {
+        return refetchView(encounterId);
+    }
+}
+
+function mockDelay(ms: number): Promise<void> {
+    return new Promise((r) => setTimeout(r, ms));
 }
 
 export async function fetchDischargeReadiness(encounterId: string): Promise<ServiceResult<DischargeReadinessView>> {
@@ -342,16 +387,48 @@ export async function saveDischargeSummaryDraft(
     return { ok: true, data: deriveReadiness(p) };
 }
 
-export async function signDischargeSummary(encounterId: string): Promise<ServiceResult<DischargeReadinessView>> {
-    await new Promise((r) => setTimeout(r, 100));
-    const p = ensurePayload(encounterId.trim());
-    if (!p.summary.hospitalCourse.trim()) return { ok: false, message: 'Hospital course is required before sign-off.' };
-    if (!p.summary.finalDiagnoses.some((d) => d.isPrincipal)) return { ok: false, message: 'A principal diagnosis is required.' };
-    p.summary.status = 'signed';
-    p.summary.signedAt = new Date().toISOString();
-    p.summary.signedBy = p.context.attendingName;
-    store.set(encounterId.trim(), p);
-    return { ok: true, data: deriveReadiness(p) };
+/** Body for `POST .../discharge-summary/sign` (encounter id is also in the URL). */
+export type DischargeSummarySignPayload = {
+    encounterId: string;
+    signedBy: string;
+    signedByName: string;
+    signedAt: string;
+};
+
+export async function signDischargeSummary(
+    encounterId: string,
+    payload: DischargeSummarySignPayload,
+): Promise<ServiceResult<DischargeReadinessView>> {
+    const id = encounterId.trim();
+    if (!payload.signedBy?.trim()) {
+        return { ok: false, message: 'Provider identity (signedBy) is required to sign the discharge summary.' };
+    }
+    if (USE_MOCK_DISCHARGE_READINESS) {
+        await mockDelay(100);
+        const p = ensurePayload(id);
+        if (!isDischargeSummaryDocumentationComplete(p.summary)) {
+            return {
+                ok: false,
+                message:
+                    'Complete all required discharge summary fields (including at least one valid ICD-10-CM code in final diagnoses) before sign-off.',
+            };
+        }
+        p.summary.status = 'signed';
+        p.summary.signedAt = payload.signedAt;
+        p.summary.signedBy = payload.signedBy.trim();
+        p.summary.signedByName = payload.signedByName.trim() || null;
+        store.set(id, p);
+        console.log('Signing payload:', payload);
+        return { ok: true, data: deriveReadiness(p) };
+    }
+    try {
+        console.log('Signing payload:', payload);
+        const { data } = await api.post(DISCHARGE_READINESS_HTTP_ROUTES.dischargeSummarySign(id), payload);
+        const view = await afterMutation(id, data);
+        return { ok: true, data: view };
+    } catch (e) {
+        return { ok: false, message: getApiErrorMessage(e) };
+    }
 }
 
 export async function updateChecklistTask(
@@ -398,37 +475,93 @@ export async function updateChargeLine(
     chargeId: string,
     patch: Partial<Pick<ChargeLine, 'status' | 'quantity' | 'unitPrice' | 'description'>>
 ): Promise<ServiceResult<DischargeReadinessView>> {
-    await new Promise((r) => setTimeout(r, 80));
-    const p = ensurePayload(encounterId.trim());
-    const c = p.charges.find((x) => x.id === chargeId);
-    if (!c) return { ok: false, message: 'Charge not found' };
-    Object.assign(c, patch);
-    if (patch.quantity != null || patch.unitPrice != null) {
-        c.total = money(c.quantity * c.unitPrice);
+    const id = encounterId.trim();
+    if (USE_MOCK_DISCHARGE_READINESS) {
+        await mockDelay(80);
+        const p = ensurePayload(id);
+        const c = p.charges.find((x) => x.id === chargeId);
+        if (!c) return { ok: false, message: 'Charge not found' };
+        if (c.status === 'posted') {
+            if (patch.quantity != null || patch.unitPrice != null || patch.description != null) {
+                return { ok: false, message: 'Posted charges cannot be edited (adjust via correction workflow).' };
+            }
+        }
+        Object.assign(c, patch);
+        if (patch.quantity != null || patch.unitPrice != null) {
+            c.total = money(c.quantity * c.unitPrice);
+        }
+        p.claimPrep.totalCharges = sumCharges(p.charges);
+        store.set(id, p);
+        return { ok: true, data: deriveReadiness(p) };
+    }
+    try {
+        const { data } = await api.patch(DISCHARGE_READINESS_HTTP_ROUTES.chargeById(id, chargeId), patch);
+        const view = await afterMutation(id, data);
+        return { ok: true, data: view };
+    } catch (e) {
+        return { ok: false, message: getApiErrorMessage(e) };
     }
     p.claimPrep.totalCharges = sumCharges(p.charges);
     store.set(encounterId.trim(), p);
     return { ok: true, data: deriveReadiness(p) };
 }
 
+export async function deleteChargeLine(encounterId: string, chargeId: string): Promise<ServiceResult<DischargeReadinessView>> {
+    const id = encounterId.trim();
+    if (USE_MOCK_DISCHARGE_READINESS) {
+        await mockDelay(80);
+        const p = ensurePayload(id);
+        const idx = p.charges.findIndex((x) => x.id === chargeId);
+        if (idx < 0) return { ok: false, message: 'Charge not found' };
+        const c = p.charges[idx];
+        if (c.status === 'posted') {
+            return { ok: false, message: 'Posted charges cannot be deleted (use a credit / adjustment workflow).' };
+        }
+        p.charges.splice(idx, 1);
+        p.claimPrep.totalCharges = sumCharges(p.charges);
+        store.set(id, p);
+        return { ok: true, data: deriveReadiness(p) };
+    }
+    try {
+        await api.delete(DISCHARGE_READINESS_HTTP_ROUTES.chargeById(id, chargeId));
+        const view = await refetchView(id);
+        return { ok: true, data: view };
+    } catch (e) {
+        return { ok: false, message: getApiErrorMessage(e) };
+    }
+}
+
 export async function runEligibilityCheck(encounterId: string): Promise<ServiceResult<DischargeReadinessView>> {
-    await new Promise((r) => setTimeout(r, 350));
-    const p = ensurePayload(encounterId.trim());
-    const record: EligibilityRecord = {
-        id: `elig-${Date.now()}`,
-        requestedAt: new Date().toISOString(),
-        status: 'active',
-        displaySummary: 'Active coverage — PPO medical in-network benefits apply for facility.',
-        planName: 'Mock Health PPO Gold',
-        memberId: 'X12****2193',
-        copayNote: 'Inpatient copay: $500 per admit (plan summary; verify with remittance).',
-        deductibleNote: 'Deductible: $500 individual — met amount not guaranteed from 271.',
-        priorAuthRequired: false,
-        errorCode: null,
-    };
-    p.eligibilityHistory.unshift(record);
-    store.set(encounterId.trim(), p);
-    return { ok: true, data: deriveReadiness(p) };
+    const id = encounterId.trim();
+    if (USE_MOCK_DISCHARGE_READINESS) {
+        await mockDelay(350);
+        const p = ensurePayload(id);
+        const requestedAt = new Date().toISOString();
+        const record: EligibilityRecord = {
+            id: `elig-${Date.now()}`,
+            requestedAt,
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+            status: 'active',
+            displaySummary: 'Active coverage — PPO medical in-network benefits apply for facility.',
+            planName: 'Mock Health PPO Gold',
+            memberId: 'X12****2193',
+            copayNote: 'Inpatient copay: $500 per admit (plan summary; verify with remittance).',
+            deductibleNote: 'Deductible: $500 individual — met amount not guaranteed from 271.',
+            priorAuthRequired: false,
+            errorCode: null,
+        };
+        p.eligibilityHistory.unshift(record);
+        store.set(id, p);
+        return { ok: true, data: deriveReadiness(p) };
+    }
+    try {
+        const serviceDateFrom = new Date().toISOString().slice(0, 10);
+        const { data } = await api.post(DISCHARGE_READINESS_HTTP_ROUTES.eligibility(id), { serviceDateFrom });
+        const view = await afterMutation(id, data);
+        return { ok: true, data: view };
+    } catch (e) {
+        return { ok: false, message: getApiErrorMessage(e) };
+    }
 }
 
 export async function updateClaimPrep(
@@ -443,13 +576,31 @@ export async function updateClaimPrep(
 }
 
 export async function submitClaimPrep(encounterId: string): Promise<ServiceResult<DischargeReadinessView>> {
-    await new Promise((r) => setTimeout(r, 200));
-    const view = deriveReadiness(ensurePayload(encounterId.trim()));
-    if (!view.billingReady) return { ok: false, message: 'Resolve all hard billing blockers before submit.' };
-    const p = ensurePayload(encounterId.trim());
-    p.claimPrep.status = 'submitted';
-    p.claimPrep.lastSubmittedAt = new Date().toISOString();
-    p.claimPrep.payerClaimId = `PAYER-${Math.floor(Math.random() * 1e9)}`;
-    store.set(encounterId.trim(), p);
-    return { ok: true, data: deriveReadiness(p) };
+    const id = encounterId.trim();
+    if (USE_MOCK_DISCHARGE_READINESS) {
+        await mockDelay(200);
+        const p = ensurePayload(id);
+        if (!isDischargeSignedForClaim(p)) {
+            return { ok: false, message: CLAIM_SUBMIT_REQUIRES_SIGNED_DISCHARGE_MSG };
+        }
+        const snap = computeReadinessSnapshot(p);
+        if (!snap.isClinicalReady) {
+            return { ok: false, message: CLAIM_SUBMIT_CLINICAL_NOT_READY_MSG };
+        }
+        if (snap.hardBlockers.length > 0) {
+            return { ok: false, message: 'Resolve all readiness blockers before submitting the claim.' };
+        }
+        p.claimPrep.status = 'submitted';
+        p.claimPrep.lastSubmittedAt = new Date().toISOString();
+        p.claimPrep.payerClaimId = `PAYER-${Math.floor(Math.random() * 1e9)}`;
+        store.set(id, p);
+        return { ok: true, data: deriveReadiness(p) };
+    }
+    try {
+        const { data } = await api.post(DISCHARGE_READINESS_HTTP_ROUTES.claimSubmit(id));
+        const view = await afterMutation(id, data);
+        return { ok: true, data: view };
+    } catch (e) {
+        return { ok: false, message: getApiErrorMessage(e) };
+    }
 }

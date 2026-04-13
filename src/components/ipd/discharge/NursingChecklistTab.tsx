@@ -1,10 +1,21 @@
+<<<<<<< Updated upstream
 import React, { memo, useState, useEffect } from 'react';
+=======
+import React, { memo, useEffect, useMemo, useState } from 'react';
+import { cn } from '@/lib/utils';
+>>>>>>> Stashed changes
 import type { ChecklistTask } from '../../../types/dischargeReadiness';
+import { useDischargeReadinessOptional } from '../../../contexts/DischargeReadinessContext';
 
 type Props = {
     tasks: ChecklistTask[];
     canEdit: boolean;
     onUpdateTask: (taskId: string, patch: Partial<Pick<ChecklistTask, 'completed' | 'notes'>>) => Promise<boolean>;
+<<<<<<< Updated upstream
+=======
+    /** @deprecated highlight is derived from readiness blockers when inside provider */
+    highlightIncompleteRequired?: boolean;
+>>>>>>> Stashed changes
 };
 
 function TaskRow({ t, canEdit, onUpdateTask }: { t: ChecklistTask; canEdit: boolean; onUpdateTask: Props['onUpdateTask'] }) {
@@ -48,15 +59,38 @@ function TaskRow({ t, canEdit, onUpdateTask }: { t: ChecklistTask; canEdit: bool
     );
 }
 
+<<<<<<< Updated upstream
 function NursingChecklistTabInner({ tasks, canEdit, onUpdateTask }: Props) {
+=======
+function NursingChecklistTabInner({ tasks, canEdit, onUpdateTask, highlightIncompleteRequired }: Props) {
+    const ctx = useDischargeReadinessOptional();
+    const highlightFromBlockers = useMemo(() => {
+        const g = ctx?.snapshot.gates.find((x) => x.id === 'gate-nursing-checklist');
+        return Boolean(g && !g.resolved && g.severity === 'hard');
+    }, [ctx?.snapshot]);
+
+    const highlight = highlightFromBlockers || Boolean(highlightIncompleteRequired);
+
+>>>>>>> Stashed changes
     return (
         <div className="space-y-4">
             <p className="text-sm text-gray-600 dark:text-gray-400">
-                Tasks marked as required for discharge must be completed before the clinical discharge track clears (see readiness header).
+                Required items must be completed before the clinical discharge track clears. Incomplete items appear as hard blockers in the
+                readiness header.
             </p>
             <ul className="space-y-3">
                 {tasks.map((t) => (
+<<<<<<< Updated upstream
                     <TaskRow key={t.id} t={t} canEdit={canEdit} onUpdateTask={onUpdateTask} />
+=======
+                    <TaskRow
+                        key={t.id}
+                        t={t}
+                        canEdit={canEdit}
+                        onUpdateTask={onUpdateTask}
+                        highlightIncompleteRequired={highlight}
+                    />
+>>>>>>> Stashed changes
                 ))}
             </ul>
             {!canEdit ? <p className="text-sm text-gray-500">Your role cannot update the nursing checklist.</p> : null}

@@ -1,12 +1,23 @@
+<<<<<<< Updated upstream
 import React, { memo, useState } from 'react';
 
 import type { EligibilityRecord } from '../../../types/dischargeReadiness';
 import AppButton from '@/components/ui/AppButton';
+=======
+import React, { memo, useMemo, useState } from 'react';
+import { Loader2 } from 'lucide-react';
+import { Button } from '../../ui/button';
+import type { EligibilityRecord } from '../../../types/dischargeReadiness';
+import { useDischargeReadinessOptional } from '../../../contexts/DischargeReadinessContext';
+import { eligibilityExpiresAtMs, formatEligibilityExpiryLabel } from '../../../utils/dischargeReadinessValidation';
+
+type RunResult = { ok: true } | { ok: false; message: string };
+>>>>>>> Stashed changes
 
 type Props = {
     history: EligibilityRecord[];
     canRun: boolean;
-    onRunCheck: () => Promise<boolean>;
+    onRunCheck: () => Promise<RunResult>;
 };
 
 function statusBadge(status: EligibilityRecord['status']) {
@@ -22,12 +33,34 @@ function statusBadge(status: EligibilityRecord['status']) {
 }
 
 function EligibilityTabInner({ history, canRun, onRunCheck }: Props) {
+    const ctx = useDischargeReadinessOptional();
     const [running, setRunning] = useState(false);
+    const [runError, setRunError] = useState<string | null>(null);
     const latest = history[0];
 
+    const gateMsg = useMemo(() => {
+        const g = ctx?.snapshot.gates.find((x) => x.id === 'gate-eligibility');
+        if (!g || g.resolved) return null;
+        return g.message;
+    }, [ctx?.snapshot]);
+
+    const now = Date.now();
+    const latestExpired = latest ? now >= eligibilityExpiresAtMs(latest) : false;
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-6" data-insurance-tab>
+            {gateMsg ? (
+                <div
+                    className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100"
+                    role="alert"
+                >
+                    <p className="font-medium">Discharge / billing hold (eligibility)</p>
+                    <p className="mt-1">{gateMsg}</p>
+                </div>
+            ) : null}
+
             <div className="flex flex-wrap items-center gap-3">
+<<<<<<< Updated upstream
                 <AppButton type="button" disabled={!canRun || running} onClick={() => void (async () => {
                     setRunning(true);
                     await onRunCheck();
@@ -35,20 +68,59 @@ function EligibilityTabInner({ history, canRun, onRunCheck }: Props) {
                 })()}>
                     {running ? 'Checking…' : 'ligibility (270 / 271)'}
                 </AppButton>
+=======
+                <Button
+                    type="button"
+                    disabled={!canRun || running}
+                    onClick={() =>
+                        void (async () => {
+                            setRunning(true);
+                            setRunError(null);
+                            const res = await onRunCheck();
+                            setRunning(false);
+                            if (!res.ok) setRunError(res.message);
+                        })()
+                    }
+                >
+                    {running ? (
+                        <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                            Checking…
+                        </>
+                    ) : (
+                        'Run eligibility (270 / 271)'
+                    )}
+                </Button>
+>>>>>>> Stashed changes
                 {!canRun ? <span className="text-sm text-gray-500">Your role cannot run eligibility.</span> : null}
             </div>
+
+            {runError ? (
+                <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100">
+                    {runError}
+                </div>
+            ) : null}
 
             {latest ? (
                 <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900/50">
                     <div className="flex flex-wrap items-center gap-2">
                         <h3 className="font-semibold text-gray-900 dark:text-white">Latest response</h3>
                         {statusBadge(latest.status)}
+                        {latest.status === 'active' && latestExpired ? (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
+                                Expired (24h window)
+                            </span>
+                        ) : null}
                     </div>
                     <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">{latest.displaySummary}</p>
                     <dl className="mt-3 grid gap-2 text-sm md:grid-cols-2">
                         <div>
                             <dt className="text-xs uppercase text-gray-500">Requested</dt>
                             <dd>{new Date(latest.requestedAt).toLocaleString()}</dd>
+                        </div>
+                        <div>
+                            <dt className="text-xs uppercase text-gray-500">Valid through</dt>
+                            <dd>{formatEligibilityExpiryLabel(latest)}</dd>
                         </div>
                         {latest.planName ? (
                             <div>
@@ -82,7 +154,7 @@ function EligibilityTabInner({ history, canRun, onRunCheck }: Props) {
                         ) : null}
                         {latest.errorCode ? (
                             <div>
-                                <dt className="text-xs uppercase text-gray-500">Error</dt>
+                                <dt className="text-xs uppercase text-gray-500">Payer / gateway code</dt>
                                 <dd className="text-red-700 dark:text-red-300">{latest.errorCode}</dd>
                             </div>
                         ) : null}
@@ -100,13 +172,14 @@ function EligibilityTabInner({ history, canRun, onRunCheck }: Props) {
                             <tr>
                                 <th className="p-2 font-medium">When</th>
                                 <th className="p-2 font-medium">Status</th>
+                                <th className="p-2 font-medium">Valid through</th>
                                 <th className="p-2 font-medium">Summary</th>
                             </tr>
                         </thead>
                         <tbody>
                             {history.length === 0 ? (
                                 <tr>
-                                    <td colSpan={3} className="p-3 text-gray-500">
+                                    <td colSpan={4} className="p-3 text-gray-500">
                                         No rows
                                     </td>
                                 </tr>
@@ -115,6 +188,7 @@ function EligibilityTabInner({ history, canRun, onRunCheck }: Props) {
                                     <tr key={h.id} className="border-t border-gray-100 dark:border-gray-800">
                                         <td className="p-2 whitespace-nowrap">{new Date(h.requestedAt).toLocaleString()}</td>
                                         <td className="p-2">{statusBadge(h.status)}</td>
+                                        <td className="p-2 whitespace-nowrap text-xs">{formatEligibilityExpiryLabel(h)}</td>
                                         <td className="p-2">{h.displaySummary}</td>
                                     </tr>
                                 ))

@@ -79,6 +79,8 @@ export type EligibilityCheckStatus = 'active' | 'inactive' | 'error' | 'unknown'
 export type EligibilityRecord = {
     id: string;
     requestedAt: string;
+    /** When present, eligibility is invalid after this instant (ISO-8601). If omitted, client may treat as requestedAt + 24h. */
+    expiresAt?: string | null;
     status: EligibilityCheckStatus;
     displaySummary: string;
     planName: string | null;
@@ -112,6 +114,11 @@ export type DischargeReadinessEncounterContext = {
     admitDate: string;
     locationLabel: string;
     attendingName: string;
+    /**
+     * Authoritative from ADT / encounter when the API provides it. Claim submit must require `true`.
+     * When omitted, the client falls back to `summary.status === 'signed'`.
+     */
+    dischargeSigned?: boolean;
 };
 
 export type DischargeReadinessPayload = {

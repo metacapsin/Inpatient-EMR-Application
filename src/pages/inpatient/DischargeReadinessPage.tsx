@@ -1,6 +1,11 @@
+<<<<<<< Updated upstream
 import { useEffect, useMemo, useState } from 'react';
+=======
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+>>>>>>> Stashed changes
 import { useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { IRootState } from '../../store';
 import NewDropdown from '../../components/ui/NewDropdown';
@@ -14,6 +19,7 @@ import { getPatientsList, type PatientListItem } from '../../services/patient.se
 import { listActiveEncounters, type ActiveEncounterRow } from '../../services/adt.service';
 import {
     addChargeLine,
+    deleteChargeLine,
     fetchDischargeReadiness,
     runEligibilityCheck,
     saveDischargeSummaryDraft,
@@ -24,6 +30,7 @@ import {
     updateClaimPrep,
 } from '../../services/dischargeReadiness.service';
 import type { DischargeReadinessView } from '../../types/dischargeReadiness';
+import { DischargeReadinessProvider } from '../../contexts/DischargeReadinessContext';
 import { DischargeReadinessHeader } from '../../components/ipd/discharge/DischargeReadinessHeader';
 import { DischargeSummaryTab } from '../../components/ipd/discharge/DischargeSummaryTab';
 import { NursingChecklistTab } from '../../components/ipd/discharge/NursingChecklistTab';
@@ -49,10 +56,216 @@ function formatEncounterLabel(enc: ActiveEncounterRow): string {
     return name ? `${name} · …${idTail} · ${ts || bed}` : `…${idTail} · ${ts || bed}`;
 }
 
+function DischargeReadinessLoaded({
+    eid,
+    view,
+    setView,
+    tab,
+    setTab,
+    canPhysician,
+    canSignDischarge,
+    providerSignUserId,
+    dischargeSignDisabledExplanation,
+    rolesNorm,
+    user,
+    canNursing,
+    canBilling,
+}: {
+    eid: string;
+    view: DischargeReadinessView;
+    setView: Dispatch<SetStateAction<DischargeReadinessView | null>>;
+    tab: TabId;
+    setTab: React.Dispatch<React.SetStateAction<TabId>>;
+    canPhysician: boolean;
+    canSignDischarge: boolean;
+    providerSignUserId: string;
+    dischargeSignDisabledExplanation: string | null;
+    rolesNorm: ReturnType<typeof normalizeRoles>;
+    user: User | null;
+    canNursing: boolean;
+    canBilling: boolean;
+}) {
+    const tabButtons: { id: TabId; label: string }[] = [
+        { id: 'summary', label: 'Summary' },
+        { id: 'checklist', label: 'Checklist' },
+        { id: 'charges', label: 'Charges' },
+        { id: 'insurance', label: 'Insurance' },
+        { id: 'billing', label: 'Billing' },
+    ];
+
+    return (
+        <DischargeReadinessProvider encounterId={eid} view={view} setView={setView}>
+            <DischargeReadinessHeader view={view} />
+
+            <div className="panel p-4">
+                <div className="mb-4 flex flex-col gap-3 border-b border-gray-200 pb-2 dark:border-gray-700 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap gap-2">
+                        {tabButtons.map((b) => (
+                            <button
+                                key={b.id}
+                                type="button"
+                                className={`rounded px-3 py-1 text-sm ${
+                                    tab === b.id ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'
+                                }`}
+                                onClick={() => setTab(b.id)}
+                            >
+                                {b.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className={tab === 'summary' ? '' : 'hidden'} aria-hidden={tab !== 'summary'}>
+                    <DischargeSummaryTab
+                        summary={view.summary}
+                        canEdit={canPhysician}
+                        canSign={canSignDischarge}
+                        signDisabledExplanation={dischargeSignDisabledExplanation}
+                        onSaveDraft={async (partial) => {
+                            const res = await saveDischargeSummaryDraft(eid, partial);
+                            if (!res.ok) {
+                                toast.error(res.message);
+                                return false;
+                            }
+                            setView(res.data);
+                            toast.success('Summary saved');
+                            return true;
+                        }}
+                        onSign={async () => {
+                            if (!canSignDischargeSummary(rolesNorm)) {
+                                toast.error('Only a provider can sign the discharge summary.');
+                                return false;
+                            }
+                            const signedBy = providerSignUserId;
+                            if (!signedBy) {
+                                toast.error('Provider identity is missing; cannot sign.');
+                                return false;
+                            }
+                            const signedByName = providerDisplayNameFromUser(user);
+                            const payload = {
+                                encounterId: eid,
+                                signedBy,
+                                signedByName,
+                                signedAt: new Date().toISOString(),
+                            };
+                            const res = await signDischargeSummary(eid, payload);
+                            if (!res.ok) {
+                                toast.error(res.message);
+                                return false;
+                            }
+                            setView(res.data);
+                            const rawName = signedByName.trim() || 'Provider';
+                            const withDr = /^dr\.?\s/i.test(rawName) ? rawName : `Dr. ${rawName}`;
+                            toast.success(`Signed by ${withDr} on ${new Date(payload.signedAt).toLocaleString()}`);
+                            return true;
+                        }}
+                    />
+                </div>
+
+                <div className={tab === 'checklist' ? '' : 'hidden'} aria-hidden={tab !== 'checklist'}>
+                    <NursingChecklistTab
+                        tasks={view.checklist}
+                        canEdit={canNursing}
+                        onUpdateTask={async (taskId, patch) => {
+                            const res = await updateChecklistTask(eid, taskId, patch);
+                            if (!res.ok) {
+                                toast.error(res.message);
+                                return false;
+                            }
+                            setView(res.data);
+                            return true;
+                        }}
+                    />
+                </div>
+
+                <div className={tab === 'charges' ? '' : 'hidden'} aria-hidden={tab !== 'charges'}>
+                    <ChargeCaptureTab
+                        charges={view.charges}
+                        canEdit={canBilling}
+                        onUpdateCharge={async (chargeId, patch) => {
+                            const res = await updateChargeLine(eid, chargeId, patch);
+                            if (!res.ok) {
+                                toast.error(res.message);
+                                return false;
+                            }
+                            setView(res.data);
+                            return true;
+                        }}
+                        onAddCharge={async (line) => {
+                            const res = await addChargeLine(eid, line);
+                            if (!res.ok) {
+                                toast.error(res.message);
+                                return false;
+                            }
+                            setView(res.data);
+                            toast.success('Charge added');
+                            return true;
+                        }}
+                        onDeleteCharge={async (chargeId) => {
+                            const res = await deleteChargeLine(eid, chargeId);
+                            if (!res.ok) {
+                                toast.error(res.message);
+                                return false;
+                            }
+                            setView(res.data);
+                            toast.success('Charge removed');
+                            return true;
+                        }}
+                    />
+                </div>
+
+                <div className={tab === 'insurance' ? '' : 'hidden'} aria-hidden={tab !== 'insurance'}>
+                    <EligibilityTab
+                        history={view.eligibilityHistory}
+                        canRun={canBilling}
+                        onRunCheck={async () => {
+                            const res = await runEligibilityCheck(eid);
+                            if (!res.ok) {
+                                return { ok: false as const, message: res.message };
+                            }
+                            setView(res.data);
+                            toast.success('Eligibility check completed');
+                            return { ok: true as const };
+                        }}
+                    />
+                </div>
+
+                <div className={tab === 'billing' ? '' : 'hidden'} aria-hidden={tab !== 'billing'}>
+                    <BillingTab
+                        claimPrep={view.claimPrep}
+                        canEdit={canBilling}
+                        onSaveClaimPrep={async (patch) => {
+                            const res = await updateClaimPrep(eid, patch);
+                            if (!res.ok) {
+                                toast.error(res.message);
+                                return false;
+                            }
+                            setView(res.data);
+                            toast.success('Claim prep updated');
+                            return true;
+                        }}
+                        onSubmitClaim={async () => {
+                            const res = await submitClaimPrep(eid);
+                            if (!res.ok) {
+                                toast.error(res.message);
+                                return false;
+                            }
+                            setView(res.data);
+                            toast.success('Claim submitted');
+                            return true;
+                        }}
+                    />
+                </div>
+            </div>
+        </DischargeReadinessProvider>
+    );
+}
+
 export default function DischargeReadinessPage() {
     const [searchParams, setSearchParams] = useSearchParams();
     const patientId = searchParams.get('patientId') || '';
     const encounterId = searchParams.get('encounterId') || '';
+    const eid = encounterId.trim();
 
     const authRole = useSelector((s: IRootState) => s.auth.role);
     const user = useSelector((s: IRootState) => s.auth.user);
@@ -119,13 +332,13 @@ export default function DischargeReadinessPage() {
     }, [patientId]);
 
     useEffect(() => {
-        if (!encounterId.trim()) {
+        if (!eid) {
             setView(null);
             return;
         }
         let cancelled = false;
         setLoading(true);
-        void fetchDischargeReadiness(encounterId.trim()).then((res) => {
+        void fetchDischargeReadiness(eid).then((res) => {
             if (cancelled) return;
             setLoading(false);
             if (!res.ok) {
@@ -138,7 +351,7 @@ export default function DischargeReadinessPage() {
         return () => {
             cancelled = true;
         };
-    }, [encounterId]);
+    }, [eid]);
 
     const patientInList = patientId && patients.some((p) => p.id === patientId);
     const encounterInList = encounterId && encounters.some((e) => e.id === encounterId);
@@ -255,7 +468,18 @@ export default function DischargeReadinessPage() {
         );
     }
 
-    if (!encounterId.trim()) {
+    const dischargeSignDisabledExplanation = useMemo(() => {
+        if (!view || view.summary.status === 'signed') return null;
+        if (!canSignDischargeSummary(rolesNorm)) {
+            return 'Only a provider can sign the discharge summary.';
+        }
+        if (!providerSignUserId) {
+            return 'Your account has no provider user id; signing is disabled. Contact your administrator.';
+        }
+        return null;
+    }, [view, rolesNorm, providerSignUserId]);
+
+    if (!eid) {
         return (
             <div className="space-y-4">
                 <div className="panel p-6">
@@ -270,6 +494,7 @@ export default function DischargeReadinessPage() {
         );
     }
 
+<<<<<<< Updated upstream
     const eid = encounterId.trim();
 
     const tabButtons: { id: TabId; label: string }[] = [
@@ -280,13 +505,19 @@ export default function DischargeReadinessPage() {
         { id: 'billing', label: 'Billing' },
     ];
 
+=======
+>>>>>>> Stashed changes
     return (
         <div className="space-y-4">
             {loading && !view ? (
-                <div className="panel p-6 text-sm text-gray-500">Loading readiness…</div>
+                <div className="panel flex items-center gap-2 p-6 text-sm text-gray-600 dark:text-gray-400">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" aria-hidden />
+                    Loading readiness…
+                </div>
             ) : null}
 
             {view ? (
+<<<<<<< Updated upstream
                 <>
                     <DischargeReadinessHeader view={view} />
 
@@ -422,6 +653,23 @@ export default function DischargeReadinessPage() {
                         )}
                     </div>
                 </>
+=======
+                <DischargeReadinessLoaded
+                    eid={eid}
+                    view={view}
+                    setView={setView}
+                    tab={tab}
+                    setTab={setTab}
+                    canPhysician={canPhysician}
+                    canSignDischarge={canSignDischarge}
+                    providerSignUserId={providerSignUserId}
+                    dischargeSignDisabledExplanation={dischargeSignDisabledExplanation}
+                    rolesNorm={rolesNorm}
+                    user={user}
+                    canNursing={canNursing}
+                    canBilling={canBilling}
+                />
+>>>>>>> Stashed changes
             ) : !loading ? (
                 <div className="panel p-6 text-sm text-red-600">Could not load readiness for this encounter.</div>
             ) : null}

@@ -1,5 +1,7 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import type { DischargeReadinessView, ReadinessGate } from '../../../types/dischargeReadiness';
+import { useDischargeReadinessOptional } from '../../../contexts/DischargeReadinessContext';
+import { computeReadinessSnapshot } from '../../../utils/dischargeReadinessValidation';
 
 type Props = {
     view: DischargeReadinessView;
@@ -40,15 +42,19 @@ function GateRow({ g }: { g: ReadinessGate }) {
 }
 
 function DischargeReadinessHeaderInner({ view }: Props) {
-    const openHard = view.gates.filter((g) => g.severity === 'hard' && !g.resolved);
-    const openSoft = view.gates.filter((g) => g.severity === 'soft' && !g.resolved);
+    const ctx = useDischargeReadinessOptional();
+    const snapshot = useMemo(() => ctx?.snapshot ?? computeReadinessSnapshot(view), [ctx?.snapshot, view]);
+
+    const openHard = snapshot.hardBlockers;
+    const openSoft = snapshot.softBlockers;
 
     return (
         <div className="rounded-xl border border-white-light bg-white shadow-sm dark:border-dark dark:bg-black">
             <div className="border-b border-white-light px-4 py-3 dark:border-dark">
                 <h2 className="text-base font-semibold text-gray-900 dark:text-white">Discharge &amp; billing readiness</h2>
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Clinical and financial tracks are separate; resolve hard blockers before final claim submission.
+                    Clinical readiness requires a signed summary and completed nursing tasks. Billing readiness requires charges, current
+                    eligibility, and valid principal diagnosis. Blockers update as you work.
                 </p>
             </div>
             <div className="grid gap-4 p-4 md:grid-cols-2">
@@ -65,8 +71,8 @@ function DischargeReadinessHeaderInner({ view }: Props) {
                 <div className="flex flex-col gap-2">
                     <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Status</p>
                     <div className="flex flex-wrap gap-2">
-                        {statusPill(view.clinicalReady, 'Clinical discharge')}
-                        {statusPill(view.billingReady, 'Bill / claim')}
+                        {statusPill(snapshot.isClinicalReady, 'Clinical discharge')}
+                        {statusPill(snapshot.isBillingReady, 'Bill / claim')}
                     </div>
                     {openHard.length > 0 ? (
                         <p className="text-sm text-red-700 dark:text-red-300">
@@ -82,7 +88,7 @@ function DischargeReadinessHeaderInner({ view }: Props) {
             <div className="border-t border-white-light px-4 py-3 dark:border-dark">
                 <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Blockers &amp; checks</p>
                 <ul className="max-h-48 overflow-y-auto rounded-md border border-gray-200 bg-gray-50/80 px-3 dark:border-gray-700 dark:bg-gray-900/40">
-                    {view.gates.map((g) => (
+                    {snapshot.gates.map((g) => (
                         <GateRow key={g.id} g={g} />
                     ))}
                 </ul>

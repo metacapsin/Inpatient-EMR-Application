@@ -815,6 +815,7 @@ const paginatedContacts = filteredContacts.slice(
             </div>
 
             {activeTab === 'visitors' && patientId?.trim() ? (
+<<<<<<< Updated upstream
                 <div>
                        <div className="mb-4 flex items-center justify-between gap-3">
                         <h3 className="text-lg font-semibold">Visitor Log</h3>
@@ -897,6 +898,121 @@ const paginatedContacts = filteredContacts.slice(
     onPageChange={setVisitorPage}
     totalItems={filteredVisitors.length}
     itemsPerPage={itemsPerPage}
+=======
+    <div>
+        <div className="mb-4 flex items-center justify-between gap-3">
+            <h3 className="text-lg font-semibold">Visitor Log</h3>
+
+            {/* Search */}
+            <div className="relative w-full md:max-w-md mr-auto">
+                <input
+                    type="text"
+                    className="form-input pl-10 w-full"
+                    placeholder="Search visitors..."
+                    value={visitorSearch}
+                    onChange={(e) => setVisitorSearch(e.target.value)}
+                />
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <IconSearch className="w-4 h-4" />
+                </span>
+            </div>
+
+            {/* FIXED BUTTON */}
+            <button
+                type="button"
+                className="
+                    inline-flex items-center gap-2 text-sm font-medium
+                    px-4 py-2 rounded-md transition-all duration-200
+                    bg-[#F6F6FA] text-[#8B5E3C]
+                    hover:bg-[#8B5E3C] hover:text-white
+                    border border-transparent"
+                disabled={visitorsQuery.isLoading}
+                onClick={() => setVisitorModal({ open: true })}   // FIXED
+            >
+                <FaPlus className="h-3 w-3" /> Add Visitor   {/*  FIXED */}
+            </button>
+        </div>
+
+        {visitorsQuery.isLoading ? (
+            <div className="h-40 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
+        ) : visitors.length === 0 ? (
+            <p className="py-8 text-center text-gray-500 dark:text-gray-400">
+                No visitors recorded.
+            </p>
+        ) : (
+            <>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="border-b border-white-light dark:border-[#191e3a]">
+                                <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">First name</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Check-in</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Check-out</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Status</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-600 dark:text-gray-400">Restrictions</th>
+                                <th className="px-3 py-2" />
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            {paginatedVisitors.map((v) => (
+                                <tr
+                                    key={v.id}
+                                    className="border-b border-white-light hover:bg-gray-50 dark:border-[#191e3a] dark:hover:bg-white/5"
+                                >
+                                    <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">
+                                        {dashText(v.firstName)}
+                                    </td>
+                                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400">
+                                        {dashFmt(v.checkInAt)}
+                                    </td>
+                                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400">
+                                        {dashFmt(v.checkOutAt)}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        <VisitorStatusPill status={v.status} />
+                                    </td>
+                                    <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
+                                        {dashText(v.restrictions)}
+                                    </td>
+
+                                    <td className="px-3 py-2">
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
+                                                onClick={() =>
+                                                    setVisitorModal({ open: true, editing: v })
+                                                }
+                                                title="Edit"
+                                            >
+                                                <Pencil className="h-4 w-4" />
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                                                disabled={deleteVisitorMut.isPending}
+                                                onClick={() => handleDeleteVisitor(v)}
+                                                title="Delete"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <Pagination
+                    currentPage={visitorPage}
+                    totalPages={visitorTotalPages}
+                    onPageChange={setVisitorPage}
+                    totalItems={filteredVisitors.length}
+                    itemsPerPage={itemsPerPage}
+>>>>>>> Stashed changes
                 />
             </>
         )}
