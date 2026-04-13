@@ -1,41 +1,21 @@
 import React, { memo, useState, useEffect } from 'react';
-import { cn } from '@/lib/utils';
 import type { ChecklistTask } from '../../../types/dischargeReadiness';
 
 type Props = {
     tasks: ChecklistTask[];
     canEdit: boolean;
     onUpdateTask: (taskId: string, patch: Partial<Pick<ChecklistTask, 'completed' | 'notes'>>) => Promise<boolean>;
-    /** When true, incomplete discharge-blocking tasks show a red outline (after “Check errors”). */
-    highlightIncompleteRequired?: boolean;
 };
 
-function TaskRow({
-    t,
-    canEdit,
-    onUpdateTask,
-    highlightIncompleteRequired,
-}: {
-    t: ChecklistTask;
-    canEdit: boolean;
-    onUpdateTask: Props['onUpdateTask'];
-    highlightIncompleteRequired?: boolean;
-}) {
+function TaskRow({ t, canEdit, onUpdateTask }: { t: ChecklistTask; canEdit: boolean; onUpdateTask: Props['onUpdateTask'] }) {
     const [notesLocal, setNotesLocal] = useState(t.notes);
 
     useEffect(() => {
         setNotesLocal(t.notes);
     }, [t.notes]);
 
-    const showErrorOutline = Boolean(highlightIncompleteRequired && t.blocksDischarge && !t.completed);
-
     return (
-        <li
-            className={cn(
-                'rounded-lg border p-3 dark:border-gray-700',
-                showErrorOutline ? 'border-red-500 ring-1 ring-red-500/30 dark:border-red-500' : 'border-gray-200',
-            )}
-        >
+        <li className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
             <div className="flex items-start gap-3">
                 <input
                     type="checkbox"
@@ -50,9 +30,6 @@ function TaskRow({
                         <span className="mt-1 inline-block text-xs font-medium text-amber-800 dark:text-amber-200">
                             Required for discharge
                         </span>
-                    ) : null}
-                    {showErrorOutline ? (
-                        <p className="mt-2 text-xs text-red-600">This required item must be completed.</p>
                     ) : null}
                     <textarea
                         className="mt-2 w-full rounded-md border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
@@ -71,21 +48,15 @@ function TaskRow({
     );
 }
 
-function NursingChecklistTabInner({ tasks, canEdit, onUpdateTask, highlightIncompleteRequired }: Props) {
+function NursingChecklistTabInner({ tasks, canEdit, onUpdateTask }: Props) {
     return (
-        <div className="space-y-4" data-nursing-checklist-tab>
+        <div className="space-y-4">
             <p className="text-sm text-gray-600 dark:text-gray-400">
                 Tasks marked as required for discharge must be completed before the clinical discharge track clears (see readiness header).
             </p>
             <ul className="space-y-3">
                 {tasks.map((t) => (
-                    <TaskRow
-                        key={t.id}
-                        t={t}
-                        canEdit={canEdit}
-                        onUpdateTask={onUpdateTask}
-                        highlightIncompleteRequired={highlightIncompleteRequired}
-                    />
+                    <TaskRow key={t.id} t={t} canEdit={canEdit} onUpdateTask={onUpdateTask} />
                 ))}
             </ul>
             {!canEdit ? <p className="text-sm text-gray-500">Your role cannot update the nursing checklist.</p> : null}

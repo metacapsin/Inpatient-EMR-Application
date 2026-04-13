@@ -48,11 +48,6 @@ export function canSignPhysicianNote(rolesNorm: string[]): boolean {
     return rolesNorm.some((r) => ['provider', 'admin', 'super-admin'].includes(r));
 }
 
-/** Discharge summary legally attributable to a clinician — only normalized `provider` (e.g. doctor/physician aliases). */
-export function canSignDischargeSummary(rolesNorm: string[]): boolean {
-    return rolesNorm.includes('provider');
-}
-
 export function canCreateOrders(rolesNorm: string[]): boolean {
     return canSignPhysicianNote(rolesNorm);
 }
