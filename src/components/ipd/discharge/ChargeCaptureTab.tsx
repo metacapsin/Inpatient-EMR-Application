@@ -34,7 +34,7 @@ function ChargeCaptureTabInner({ charges, canEdit, onUpdateCharge, onAddCharge }
     return (
         <div className="space-y-6">
             <div className="rounded-md border border-gray-200 bg-gray-50/80 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/40">
-                <p className="text-sm text-gray-600 dark:text-gray-400">Encounter charge total (mock)</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Encounter charge total</p>
                 <p className="text-xl font-semibold text-gray-900 dark:text-white">${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
             </div>
 

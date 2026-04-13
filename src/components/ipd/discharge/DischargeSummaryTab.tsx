@@ -1,130 +1,317 @@
-import React, { memo, useState, useEffect } from 'react';
+import React, { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useState } from 'react';
 import { Button } from '../../ui/button';
 import { Textarea } from '../../ui/textarea';
 import { Input } from '../../ui/input';
+import { cn } from '@/lib/utils';
 import type { DischargeSummaryState } from '../../../types/dischargeReadiness';
+import {
+    scrollToFirstDischargeSummaryError,
+    validateDischargeSummaryRequired,
+    type DischargeSummaryRequiredErrors,
+    type DischargeSummaryRequiredKey,
+} from '../../../utils/dischargeReadinessValidation';
+
+export type DischargeSummaryTabHandle = {
+    validate: () => Promise<boolean>;
+};
 
 type Props = {
     summary: DischargeSummaryState;
     canEdit: boolean;
     canSign: boolean;
+    /** Shown when the sign button is disabled because the user is not a provider or has no user id. */
+    signDisabledExplanation?: string | null;
     onSaveDraft: (partial: Partial<DischargeSummaryState>) => Promise<boolean>;
     onSign: () => Promise<boolean>;
 };
 
+function signatureDisplayName(s: DischargeSummaryState): string {
+    return (s.signedByName ?? s.signedBy ?? '').trim();
+}
+
+function withDrPrefix(name: string): string {
+    const t = name.trim();
+    if (!t) return '';
+    if (/^dr\.?\s/i.test(t)) return t;
+    if (/^[a-f\d]{24}$/i.test(t)) return t;
+    return `Dr. ${t}`;
+}
+
 const dispositionOptions = ['Home', 'Skilled Nursing Facility', 'Acute Rehab', 'Hospice', 'Another acute hospital', 'AMA', 'Expired'];
 
-function DischargeSummaryTabInner({ summary, canEdit, canSign, onSaveDraft, onSign }: Props) {
-    const [local, setLocal] = useState(summary);
+function normalizeDispositionForSelect(raw: string | undefined | null): string {
+    const t = (raw ?? '').trim();
+    if (!t) return '';
+    const exact = dispositionOptions.find((o) => o === t);
+    if (exact) return exact;
+    const ci = dispositionOptions.find((o) => o.toLowerCase() === t.toLowerCase());
+    return ci ?? t;
+}
+
+type FormState = {
+    admissionDiagnosis: string;
+    hospitalCourse: string;
+    finalDiagnoses: string;
+    procedures: string;
+    disposition: string;
+    conditionAtDischarge: string;
+    dischargeMedications: string;
+    followUpInstructions: string;
+};
+
+function summaryToFormState(s: DischargeSummaryState): FormState {
+    return {
+        admissionDiagnosis: s.admissionDiagnosis ?? '',
+        hospitalCourse: s.hospitalCourse ?? '',
+        finalDiagnoses: s.finalDiagnoses ?? '',
+        procedures: s.procedures ?? '',
+        disposition: normalizeDispositionForSelect(s.disposition),
+        conditionAtDischarge: s.conditionAtDischarge ?? '',
+        dischargeMedications: s.dischargeMedications ?? '',
+        followUpInstructions: s.followUpInstructions ?? '',
+    };
+}
+
+function formStateToPartial(f: FormState): Partial<DischargeSummaryState> {
+    return {
+        admissionDiagnosis: f.admissionDiagnosis,
+        hospitalCourse: f.hospitalCourse,
+        finalDiagnoses: f.finalDiagnoses,
+        procedures: f.procedures,
+        disposition: f.disposition,
+        conditionAtDischarge: f.conditionAtDischarge,
+        dischargeMedications: f.dischargeMedications,
+        followUpInstructions: f.followUpInstructions,
+    };
+}
+
+function Req() {
+    return (
+        <span className="ml-1 text-red-600" aria-hidden>
+            *
+        </span>
+    );
+}
+
+const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(function DischargeSummaryTabInner(
+    { summary, canEdit, canSign, signDisabledExplanation, onSaveDraft, onSign },
+    ref,
+) {
+    const locked = summary.status === 'signed' || !canEdit;
+
+    const [form, setForm] = useState<FormState>(() => summaryToFormState(summary));
+    const [fieldErrors, setFieldErrors] = useState<DischargeSummaryRequiredErrors>({});
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        setLocal(summary);
-    }, [summary]);
+        setForm(summaryToFormState(summary));
+        setFieldErrors({});
+    }, [
+        summary.admissionDiagnosis,
+        summary.hospitalCourse,
+        summary.finalDiagnoses,
+        summary.procedures,
+        summary.disposition,
+        summary.conditionAtDischarge,
+        summary.dischargeMedications,
+        summary.followUpInstructions,
+        summary.status,
+        summary.signedAt,
+        summary.signedByName,
+    ]);
 
-    const locked = summary.status === 'signed' || !canEdit;
+    const clearError = useCallback((key: DischargeSummaryRequiredKey) => {
+        setFieldErrors((prev) => {
+            if (!prev[key]) return prev;
+            const next = { ...prev };
+            delete next[key];
+            return next;
+        });
+    }, []);
+
+    const validateForm = useCallback((): boolean => {
+        const { ok, errors } = validateDischargeSummaryRequired({
+            admissionDiagnosis: form.admissionDiagnosis,
+            hospitalCourse: form.hospitalCourse,
+            finalDiagnoses: form.finalDiagnoses,
+            disposition: form.disposition,
+            conditionAtDischarge: form.conditionAtDischarge,
+        });
+        setFieldErrors(ok ? {} : errors);
+        if (!ok) scrollToFirstDischargeSummaryError(errors);
+        return ok;
+    }, [form.admissionDiagnosis, form.hospitalCourse, form.finalDiagnoses, form.disposition, form.conditionAtDischarge]);
+
+    useImperativeHandle(ref, () => ({
+        validate: async () => validateForm(),
+    }));
+
+    const selectBase =
+        'mt-1 h-10 w-full rounded-md border bg-white px-2 text-sm dark:bg-gray-900 dark:text-gray-100 focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary';
 
     return (
-        <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
+        <div className="space-y-4" data-discharge-summary-tab>
+            <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
                 <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    className={`inline-flex w-fit rounded-full px-2 py-0.5 text-xs font-semibold ${
                         summary.status === 'signed'
                             ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100'
                             : 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
                     }`}
                 >
-                    {summary.status === 'signed' ? `Signed ${summary.signedAt ? new Date(summary.signedAt).toLocaleString() : ''}` : 'Draft'}
+                    {summary.status === 'signed' ? 'Signed' : 'Draft'}
                 </span>
-                {summary.signedBy ? <span className="text-xs text-gray-500">by {summary.signedBy}</span> : null}
+                {summary.status === 'signed' && summary.signedAt ? (
+                    <span className="text-xs text-gray-600 dark:text-gray-400">
+                        {signatureDisplayName(summary)
+                            ? `Signed by ${withDrPrefix(signatureDisplayName(summary))} on ${new Date(summary.signedAt).toLocaleString()}`
+                            : `Signed on ${new Date(summary.signedAt).toLocaleString()}`}
+                    </span>
+                ) : null}
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                    <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Admission diagnosis / reason</label>
+                <div data-discharge-field="admissionDiagnosis">
+                    <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                        Admission diagnosis / reason
+                        <Req />
+                    </label>
                     <Textarea
-                        className="mt-1"
+                        className={cn('mt-1', fieldErrors.admissionDiagnosis && 'border-destructive')}
                         rows={2}
                         disabled={locked}
-                        value={local.admissionDiagnosis}
-                        onChange={(e) => setLocal((s) => ({ ...s, admissionDiagnosis: e.target.value }))}
+                        aria-invalid={Boolean(fieldErrors.admissionDiagnosis)}
+                        value={form.admissionDiagnosis}
+                        onChange={(e) => {
+                            const v = e.target.value;
+                            setForm((prev) => ({ ...prev, admissionDiagnosis: v }));
+                            clearError('admissionDiagnosis');
+                        }}
                     />
+                    {fieldErrors.admissionDiagnosis ? (
+                        <p className="mt-1 text-xs text-red-600">{fieldErrors.admissionDiagnosis}</p>
+                    ) : null}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                    <div>
-                        <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Disposition</label>
+                    <div data-discharge-field="disposition">
+                        <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                            Disposition
+                            <Req />
+                        </label>
                         <select
-                            className="mt-1 h-10 w-full rounded-md border border-gray-300 bg-white px-2 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                            className={cn(selectBase, 'border-gray-300 dark:border-gray-600', fieldErrors.disposition && 'border-destructive')}
                             disabled={locked}
-                            value={local.disposition}
-                            onChange={(e) => setLocal((s) => ({ ...s, disposition: e.target.value }))}
+                            aria-invalid={Boolean(fieldErrors.disposition)}
+                            value={form.disposition}
+                            onChange={(e) => {
+                                const v = e.target.value;
+                                setForm((prev) => ({ ...prev, disposition: v }));
+                                clearError('disposition');
+                            }}
                         >
+                            <option value="">Select disposition…</option>
                             {dispositionOptions.map((d) => (
                                 <option key={d} value={d}>
                                     {d}
                                 </option>
                             ))}
                         </select>
+                        {fieldErrors.disposition ? <p className="mt-1 text-xs text-red-600">{fieldErrors.disposition}</p> : null}
                     </div>
-                    <div>
-                        <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Condition at discharge</label>
+                    <div data-discharge-field="conditionAtDischarge">
+                        <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                            Condition at discharge
+                            <Req />
+                        </label>
                         <Input
-                            className="mt-1"
+                            className={cn('mt-1', fieldErrors.conditionAtDischarge && 'border-destructive')}
                             disabled={locked}
-                            value={local.conditionAtDischarge}
-                            onChange={(e) => setLocal((s) => ({ ...s, conditionAtDischarge: e.target.value }))}
+                            aria-invalid={Boolean(fieldErrors.conditionAtDischarge)}
+                            value={form.conditionAtDischarge}
+                            onChange={(e) => {
+                                const v = e.target.value;
+                                setForm((prev) => ({ ...prev, conditionAtDischarge: v }));
+                                clearError('conditionAtDischarge');
+                            }}
                         />
+                        {fieldErrors.conditionAtDischarge ? (
+                            <p className="mt-1 text-xs text-red-600">{fieldErrors.conditionAtDischarge}</p>
+                        ) : null}
                     </div>
                 </div>
             </div>
 
-            <div>
-                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Hospital course</label>
+            <div data-discharge-field="hospitalCourse">
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                    Hospital course
+                    <Req />
+                </label>
                 <Textarea
-                    className="mt-1"
+                    className={cn('mt-1', fieldErrors.hospitalCourse && 'border-destructive')}
                     rows={6}
                     disabled={locked}
-                    value={local.hospitalCourse}
-                    onChange={(e) => setLocal((s) => ({ ...s, hospitalCourse: e.target.value }))}
+                    aria-invalid={Boolean(fieldErrors.hospitalCourse)}
+                    value={form.hospitalCourse}
+                    onChange={(e) => {
+                        const v = e.target.value;
+                        setForm((prev) => ({ ...prev, hospitalCourse: v }));
+                        clearError('hospitalCourse');
+                    }}
                 />
+                {fieldErrors.hospitalCourse ? <p className="mt-1 text-xs text-red-600">{fieldErrors.hospitalCourse}</p> : null}
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+                <div className="min-w-0" data-discharge-field="finalDiagnoses">
+                    <label className="text-xs font-medium text-gray-600 dark:text-gray-400" htmlFor="ds-final-dx">
+                        Final diagnoses (ICD-10-CM)
+                        <Req />
+                    </label>
+                    <Textarea
+                        id="ds-final-dx"
+                        className={cn('mt-1 font-mono text-sm', fieldErrors.finalDiagnoses && 'border-destructive')}
+                        rows={4}
+                        disabled={locked}
+                        placeholder='One per line. Mark principal first, e.g. Principal: J18.9 — Pneumonia, unspecified organism'
+                        aria-invalid={Boolean(fieldErrors.finalDiagnoses)}
+                        value={form.finalDiagnoses}
+                        onChange={(e) => {
+                            const v = e.target.value;
+                            setForm((prev) => ({ ...prev, finalDiagnoses: v }));
+                            clearError('finalDiagnoses');
+                        }}
+                    />
+                    {fieldErrors.finalDiagnoses ? <p className="mt-1 text-xs text-red-600">{fieldErrors.finalDiagnoses}</p> : null}
+                </div>
+                <div className="min-w-0">
+                    <label className="text-xs font-medium text-gray-600 dark:text-gray-400" htmlFor="ds-procedures">
+                        Procedures
+                    </label>
+                    <Textarea
+                        id="ds-procedures"
+                        className="mt-1 font-mono text-sm"
+                        rows={4}
+                        disabled={locked}
+                        placeholder="CPT / ICD-10-PCS lines, one procedure per line"
+                        value={form.procedures}
+                        onChange={(e) => setForm((prev) => ({ ...prev, procedures: e.target.value }))}
+                    />
+                </div>
             </div>
 
             <div>
-                <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Final diagnoses (ICD-10-CM)</p>
-                <ul className="mt-2 space-y-2">
-                    {local.finalDiagnoses.map((d) => (
-                        <li key={d.id} className="flex flex-wrap items-center gap-2 text-sm">
-                            <code className="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">{d.code}</code>
-                            <span>{d.description}</span>
-                            {d.isPrincipal ? (
-                                <span className="rounded bg-primary/15 px-1.5 text-xs font-medium text-primary">Principal</span>
-                            ) : null}
-                        </li>
-                    ))}
-                </ul>
-            </div>
-
-            <div>
-                <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Procedures</p>
-                <ul className="mt-2 space-y-1 text-sm">
-                    {local.procedures.map((p) => (
-                        <li key={p.id}>
-                            <code className="rounded bg-gray-100 px-1.5 dark:bg-gray-800">{p.code}</code> {p.description}
-                        </li>
-                    ))}
-                </ul>
-            </div>
-
-            <div>
-                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Discharge medications</label>
-                <ul className="mt-2 space-y-2">
-                    {local.dischargeMedications.map((m) => (
-                        <li key={m.id} className="rounded border border-gray-200 p-2 text-sm dark:border-gray-700">
-                            <span className="font-medium">{m.name}</span>
-                            <div className="text-gray-600 dark:text-gray-400">{m.sig}</div>
-                        </li>
-                    ))}
-                </ul>
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400" htmlFor="ds-dc-meds">
+                    Discharge medications
+                </label>
+                <Textarea
+                    id="ds-dc-meds"
+                    className="mt-1 text-sm"
+                    rows={5}
+                    disabled={locked}
+                    placeholder="Each line: medication, strength, route, frequency, duration (e.g. Amoxicillin-clavulanate 875/125 mg — 1 tablet PO BID × 7 days)"
+                    value={form.dischargeMedications}
+                    onChange={(e) => setForm((prev) => ({ ...prev, dischargeMedications: e.target.value }))}
+                />
             </div>
 
             <div>
@@ -133,26 +320,22 @@ function DischargeSummaryTabInner({ summary, canEdit, canSign, onSaveDraft, onSi
                     className="mt-1"
                     rows={4}
                     disabled={locked}
-                    value={local.followUpInstructions}
-                    onChange={(e) => setLocal((s) => ({ ...s, followUpInstructions: e.target.value }))}
+                    value={form.followUpInstructions}
+                    onChange={(e) => setForm((prev) => ({ ...prev, followUpInstructions: e.target.value }))}
                 />
             </div>
 
             <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" disabled={locked} onClick={() => validateForm()}>
+                    Check errors
+                </Button>
                 <Button
                     type="button"
                     disabled={locked || saving}
                     onClick={async () => {
                         setSaving(true);
-                        const ok = await onSaveDraft({
-                            admissionDiagnosis: local.admissionDiagnosis,
-                            hospitalCourse: local.hospitalCourse,
-                            disposition: local.disposition,
-                            conditionAtDischarge: local.conditionAtDischarge,
-                            followUpInstructions: local.followUpInstructions,
-                        });
+                        await onSaveDraft(formStateToPartial(form));
                         setSaving(false);
-                        return ok;
                     }}
                 >
                     {saving ? 'Saving…' : 'Save draft'}
@@ -161,14 +344,9 @@ function DischargeSummaryTabInner({ summary, canEdit, canSign, onSaveDraft, onSi
                     type="button"
                     disabled={!canSign || summary.status === 'signed' || saving}
                     onClick={async () => {
+                        if (!validateForm()) return;
                         setSaving(true);
-                        const saved = await onSaveDraft({
-                            admissionDiagnosis: local.admissionDiagnosis,
-                            hospitalCourse: local.hospitalCourse,
-                            disposition: local.disposition,
-                            conditionAtDischarge: local.conditionAtDischarge,
-                            followUpInstructions: local.followUpInstructions,
-                        });
+                        const saved = await onSaveDraft(formStateToPartial(form));
                         if (saved) await onSign();
                         setSaving(false);
                     }}
@@ -176,11 +354,16 @@ function DischargeSummaryTabInner({ summary, canEdit, canSign, onSaveDraft, onSi
                     Sign discharge summary
                 </Button>
             </div>
+            {signDisabledExplanation && summary.status !== 'signed' ? (
+                <p className="text-sm text-amber-800 dark:text-amber-200" role="status">
+                    {signDisabledExplanation}
+                </p>
+            ) : null}
             {!canEdit && summary.status !== 'signed' ? (
                 <p className="text-sm text-gray-500">Your role cannot edit the discharge summary.</p>
             ) : null}
         </div>
     );
-}
+});
 
 export const DischargeSummaryTab = memo(DischargeSummaryTabInner);

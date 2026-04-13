@@ -1,7 +1,18 @@
-import React, { memo, useState, useEffect } from 'react';
+import React, { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useState } from 'react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
+import { cn } from '@/lib/utils';
 import type { ClaimPrepState } from '../../../types/dischargeReadiness';
+import {
+    getPrincipalIcdValidationError,
+    isValidPrincipalIcd,
+    normalizePrincipalIcdInput,
+    scrollToPrincipalIcdField,
+} from '../../../utils/dischargeReadinessValidation';
+
+export type BillingTabHandle = {
+    validate: () => Promise<boolean>;
+};
 
 type Props = {
     claimPrep: ClaimPrepState;
@@ -11,17 +22,54 @@ type Props = {
     onSubmitClaim: () => Promise<boolean>;
 };
 
-function BillingTabInner({ claimPrep, billingReady, canEdit, onSaveClaimPrep, onSubmitClaim }: Props) {
-    const [principalCode, setPrincipalCode] = useState(claimPrep.principalDxCode ?? '');
-    const [principalDesc, setPrincipalDesc] = useState(claimPrep.principalDxDescription ?? '');
-    const [procCodes, setProcCodes] = useState(claimPrep.procedureCodes.join(', '));
+type FormState = {
+    principalDxCode: string;
+    principalDxDescription: string;
+    procedureCodesText: string;
+};
+
+function claimPrepToFormState(c: ClaimPrepState): FormState {
+    return {
+        principalDxCode: c.principalDxCode ?? '',
+        principalDxDescription: c.principalDxDescription ?? '',
+        procedureCodesText: c.procedureCodes.join(', '),
+    };
+}
+
+function Req() {
+    return (
+        <span className="ml-1 text-red-600" aria-hidden>
+            *
+        </span>
+    );
+}
+
+const BillingTabInner = forwardRef<BillingTabHandle, Props>(function BillingTabInner(
+    { claimPrep, billingReady, canEdit, onSaveClaimPrep, onSubmitClaim },
+    ref,
+) {
+    const [form, setForm] = useState<FormState>(() => claimPrepToFormState(claimPrep));
+    const [principalError, setPrincipalError] = useState<string | undefined>(undefined);
     const [saving, setSaving] = useState(false);
 
+    const procedureKey = claimPrep.procedureCodes.join('\u0001');
     useEffect(() => {
-        setPrincipalCode(claimPrep.principalDxCode ?? '');
-        setPrincipalDesc(claimPrep.principalDxDescription ?? '');
-        setProcCodes(claimPrep.procedureCodes.join(', '));
-    }, [claimPrep]);
+        setForm(claimPrepToFormState(claimPrep));
+        setPrincipalError(undefined);
+    }, [claimPrep.principalDxCode, claimPrep.principalDxDescription, procedureKey]);
+
+    const principalOkSubmitted = claimPrep.status !== 'submitted' || isValidPrincipalIcd(form.principalDxCode);
+
+    const validateForm = useCallback((): boolean => {
+        const msg = getPrincipalIcdValidationError(form.principalDxCode);
+        setPrincipalError(msg);
+        if (msg) scrollToPrincipalIcdField();
+        return !msg;
+    }, [form.principalDxCode]);
+
+    useImperativeHandle(ref, () => ({
+        validate: async () => validateForm(),
+    }));
 
     const statusLabel: Record<ClaimPrepState['status'], string> = {
         not_ready: 'Not ready',
@@ -32,7 +80,7 @@ function BillingTabInner({ claimPrep, billingReady, canEdit, onSaveClaimPrep, on
     };
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6" data-billing-tab>
             <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold dark:bg-gray-800">
                     Claim status: {statusLabel[claimPrep.status]}
@@ -79,47 +127,61 @@ function BillingTabInner({ claimPrep, billingReady, canEdit, onSaveClaimPrep, on
             <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
                 <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">Coding confirmation</h3>
                 <div className="grid gap-3 md:grid-cols-2">
-                    <div>
-                        <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Principal ICD-10-CM</label>
+                    <div data-billing-field="principalDxCode">
+                        <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                            Principal ICD-10-CM
+                            <Req />
+                        </label>
                         <Input
-                            className="mt-1 font-mono"
-                            disabled={!canEdit || claimPrep.status === 'submitted'}
-                            value={principalCode}
-                            onChange={(e) => setPrincipalCode(e.target.value)}
+                            className={cn('mt-1 font-mono', principalError && 'border-destructive')}
+                            disabled={!canEdit}
+                            aria-invalid={Boolean(principalError)}
+                            value={form.principalDxCode}
+                            onChange={(e) => {
+                                setForm((prev) => ({ ...prev, principalDxCode: e.target.value }));
+                                setPrincipalError(undefined);
+                            }}
+                            onBlur={() => {
+                                setForm((prev) => ({ ...prev, principalDxCode: normalizePrincipalIcdInput(prev.principalDxCode) }));
+                            }}
                         />
+                        {principalError ? <p className="mt-1 text-xs text-red-600">{principalError}</p> : null}
                     </div>
                     <div>
                         <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Description</label>
                         <Input
                             className="mt-1"
-                            disabled={!canEdit || claimPrep.status === 'submitted'}
-                            value={principalDesc}
-                            onChange={(e) => setPrincipalDesc(e.target.value)}
+                            disabled={!canEdit}
+                            value={form.principalDxDescription}
+                            onChange={(e) => setForm((prev) => ({ ...prev, principalDxDescription: e.target.value }))}
                         />
                     </div>
                     <div className="md:col-span-2">
                         <label className="text-xs font-medium text-gray-600 dark:text-gray-400">ICD-10-PCS (comma-separated)</label>
                         <Input
                             className="mt-1 font-mono"
-                            disabled={!canEdit || claimPrep.status === 'submitted'}
-                            value={procCodes}
-                            onChange={(e) => setProcCodes(e.target.value)}
+                            disabled={!canEdit}
+                            value={form.procedureCodesText}
+                            onChange={(e) => setForm((prev) => ({ ...prev, procedureCodesText: e.target.value }))}
                         />
                     </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" onClick={() => validateForm()}>
+                        Check errors
+                    </Button>
                     <Button
                         type="button"
-                        disabled={!canEdit || saving || claimPrep.status === 'submitted'}
+                        disabled={!canEdit || saving || !principalOkSubmitted}
                         onClick={async () => {
                             setSaving(true);
-                            const codes = procCodes
+                            const codes = form.procedureCodesText
                                 .split(',')
                                 .map((s) => s.trim())
                                 .filter(Boolean);
                             await onSaveClaimPrep({
-                                principalDxCode: principalCode.trim() || null,
-                                principalDxDescription: principalDesc.trim() || null,
+                                principalDxCode: normalizePrincipalIcdInput(form.principalDxCode) || null,
+                                principalDxDescription: form.principalDxDescription.trim() || null,
                                 procedureCodes: codes,
                             });
                             setSaving(false);
@@ -144,10 +206,16 @@ function BillingTabInner({ claimPrep, billingReady, canEdit, onSaveClaimPrep, on
                         Hard billing blockers remain — see readiness header before submitting.
                     </p>
                 ) : null}
+                {claimPrep.status === 'submitted' ? (
+                    <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                        Claim was submitted; you can still correct the principal diagnosis and save. A valid ICD-10-CM code (e.g. J18.9) is
+                        required before save.
+                    </p>
+                ) : null}
                 {!canEdit ? <p className="mt-2 text-sm text-gray-500">Your role cannot edit claim preparation.</p> : null}
             </div>
         </div>
     );
-}
+});
 
 export const BillingTab = memo(BillingTabInner);

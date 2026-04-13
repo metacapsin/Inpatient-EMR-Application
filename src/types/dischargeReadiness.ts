@@ -16,37 +16,22 @@ export type ReadinessGate = {
 
 export type DischargeSummaryStatus = 'draft' | 'signed';
 
-export type DischargeProcedureRow = {
-    id: string;
-    code: string;
-    description: string;
-};
-
-export type DischargeDiagnosisRow = {
-    id: string;
-    code: string;
-    description: string;
-    isPrincipal: boolean;
-};
-
-export type DischargeMedicationRow = {
-    id: string;
-    name: string;
-    sig: string;
-};
-
 export type DischargeSummaryState = {
     status: DischargeSummaryStatus;
     admissionDiagnosis: string;
     hospitalCourse: string;
-    procedures: DischargeProcedureRow[];
-    finalDiagnoses: DischargeDiagnosisRow[];
+    /** Free-text ICD-10-CM list; include a line starting with "Principal:" for the principal diagnosis. */
+    finalDiagnoses: string;
+    procedures: string;
     disposition: string;
     conditionAtDischarge: string;
-    dischargeMedications: DischargeMedicationRow[];
+    dischargeMedications: string;
     followUpInstructions: string;
     signedAt: string | null;
+    /** Provider user id when signed (backend may echo this). */
     signedBy: string | null;
+    /** Display name for signature line when backend returns it separately from `signedBy`. */
+    signedByName: string | null;
 };
 
 export type ChecklistTask = {
