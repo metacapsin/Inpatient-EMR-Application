@@ -14,6 +14,8 @@ import {
     type DischargeSummaryRequiredErrors,
     type DischargeSummaryRequiredKey,
 } from '../../../utils/dischargeReadinessValidation';
+import NewDropdown from '@/components/ui/NewDropdown';
+import AppButton from '@/components/ui/AppButton';
 
 export type DischargeSummaryTabHandle = {
     validate: () => Promise<boolean>;
@@ -206,7 +208,7 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
                 <div className="grid grid-cols-2 gap-2">
                     <div data-discharge-field="disposition">
                         <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Disposition</label>
-                        <select
+                        {/* <select
                             className={cn(selectBase, 'border-gray-300 dark:border-gray-600')}
                             disabled={locked}
                             value={form.disposition}
@@ -217,7 +219,20 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
                                     {d}
                                 </option>
                             ))}
-                        </select>
+                        </select> */}
+                        <NewDropdown
+                                    value={form.disposition}
+                                    placeholder="Select disposition"
+                                    options={dispositionOptions.map((d) => ({
+                                        value: d,
+                                        label: d
+                                    }))}
+                                    onChange={(v) =>
+                                        setForm((prev) => ({ ...prev, disposition: String(v) }))
+                                    }
+                                    disabled={locked}
+                                    compact
+                                />
                     </div>
                     <div data-discharge-field="conditionAtDischarge">
                         <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Condition at discharge</label>
@@ -336,7 +351,7 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
             </div>
 
             <div className="flex flex-wrap gap-2">
-                <Button
+                <AppButton
                     type="button"
                     disabled={locked || saving || signing}
                     onClick={async () => {
@@ -360,7 +375,7 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
                     ) : (
                         'Save draft'
                     )}
-                </Button>
+                </AppButton>
                 <span className={cn('inline-flex', signTitle && 'cursor-help')} title={signTitle ?? undefined}>
                     <Button
                         type="button"
