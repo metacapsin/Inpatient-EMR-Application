@@ -96,14 +96,17 @@ export function EncounterHeader({ patient, patientListHref = '/app/patients/list
     return (
         <>
             <header
-                className="sticky top-0 z-30 border-b border-gray-200/90 bg-white/90 shadow-[0_1px_0_rgba(0,0,0,0.04)] backdrop-blur-md dark:border-white/10 dark:bg-[#141210]/92 dark:shadow-[0_1px_0_rgba(255,255,255,0.06)]"
+                className="sticky top-0 z-30 border-b border-gray-200/90 bg-white shadow-[0_1px_0_rgba(0,0,0,0.04)] backdrop-blur-md dark:border-white/10 dark:bg-[#141210] dark:shadow-[0_1px_0_rgba(255,255,255,0.06)] dark:backdrop-blur-none"
                 aria-label="Patient and encounter"
             >
                 <nav
                     className="flex items-center gap-1 border-b border-gray-100/80 px-3 py-1 text-[10px] font-medium text-gray-500 dark:border-white/5 dark:text-gray-400"
                     aria-label="Breadcrumb"
                 >
-                    <Link to={patientListHref} className="transition-colors hover:text-primary">
+                    <Link
+                        to={patientListHref}
+                        className="text-gray-600 transition-colors hover:text-primary dark:text-gray-400 dark:hover:text-primary-200"
+                    >
                         Patients
                     </Link>
                     <ChevronRight className="h-3 w-3 shrink-0 opacity-50" aria-hidden />

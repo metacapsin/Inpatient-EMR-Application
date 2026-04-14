@@ -916,22 +916,21 @@ export default function BookAppointment() {
           <div className="mt-6 flex justify-end gap-2">
             <button
               type="button"
-              className="rounded-lg border border-gray-300 bg-white px-6 py-2 text-gray-700 transition hover:bg-gray-50"
+              className="rounded-lg border border-gray-300 bg-white px-6 py-2 text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
               onClick={() => navigate('/app/appointments')}
             >
               Cancel
             </button>
             <button
               type="submit"
-               className="
+              className="
     inline-flex items-center gap-2 text-sm font-medium
     px-4 py-2 rounded-md transition-all duration-200
-
-    bg-[#8B5E3C] text-[#f5f5f5]   /* Normal state like Quick Add */
-
-
-
     border border-transparent
+    bg-[#8B5E3C] text-[#f5f5f5]
+    hover:opacity-95 active:opacity-90
+    dark:bg-[#9d734f] dark:text-white
+    dark:hover:opacity-95 dark:active:opacity-90
   "
               disabled={submitting}
             >

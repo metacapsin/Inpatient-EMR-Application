@@ -9,6 +9,7 @@ import { authService } from '../../services/auth.service';
 import AuthInputField from '../../components/auth/AuthInputField';
 import loginIllustration from '../../assets/images/login-02.png';
 import mdCareLogo from '../../assets/images/mdcare-logo.png';
+import mdCareLogoDark from '../../assets/images/mdcare-logo_dark.png';
 
 const schema = yup.object({
   email: yup.string().email('Enter a valid email').required('Email is required'),
@@ -70,7 +71,8 @@ const ForgotPasswordPage = () => {
           <div className="rounded-2xl bg-white p-10 shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
             {/* LOGO */}
             <div className="mb-4 flex justify-center">
-              <img src={mdCareLogo} alt="MD Care" className="h-20 object-contain" />
+              <img src={mdCareLogo} alt="MD Care" className="h-20 object-contain dark:hidden" />
+              <img src={mdCareLogoDark} alt="MD Care" className="hidden h-20 object-contain dark:block" />
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">

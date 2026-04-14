@@ -13,6 +13,7 @@ import IconMenuUsers from '../Icon/Menu/IconMenuUsers';
 import IconMenuCalendar from '../Icon/Menu/IconMenuCalendar';
 import IconMenuPages from '../Icon/Menu/IconMenuPages';
 import mdCareLogo from '../../assets/images/mdcare-logo.png';
+import mdCareLogoDark from '../../assets/images/mdcare-logo_dark.png';
 
 const linkClass =
     'text-black dark:text-[#506690] dark:group-hover:text-white-dark';
@@ -60,8 +61,8 @@ const Sidebar = () => {
                 <div className="bg-white dark:bg-black h-full">
                     <div className="flex justify-between items-center px-4 py-3">
                         <NavLink to="/app/dashboard" className="main-logo flex items-center shrink-0">
-                            <img className="h-8 w-auto object-contain hidden dark:block" src={mdCareLogo} alt="MD Care" />
-                            <span className=" text-2xl font-extrabold tracking-wide text-primary align-middle dark:hidden">MD CARE</span>
+                            <img className="h-8 w-auto object-contain dark:hidden" src={mdCareLogo} alt="MD Care" />
+                            <img className="h-8 w-auto object-contain hidden dark:block" src={mdCareLogoDark} alt="MD Care" />
                         </NavLink>
 
                         <button

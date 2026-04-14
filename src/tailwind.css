@@ -33,15 +33,18 @@
     .panel {
         @apply relative rounded-xl bg-white p-5 border-2 border-primary-200 dark:border-primary-800 dark:bg-[#141210] shadow-[0_0_15px_rgba(151,112,79,0.08)] dark:shadow-[0_0_20px_rgba(151,112,79,0.12)];
     }
-    /* Navbar */
-    .navbar-sticky header,
-    .navbar-floating header {
+    /*
+     * Top app bar only: do not target every <header> in the app (e.g. facesheet EncounterHeader,
+     * patient banner cards) — those need their own bg/text and were overridden by these rules.
+     */
+    .navbar-sticky header.app-layout-header,
+    .navbar-floating header.app-layout-header {
         @apply sticky top-0 z-20;
     }
-    .navbar-floating header {
+    .navbar-floating header.app-layout-header {
         @apply bg-[#f8f6f4]/95 px-6 pt-4 dark:bg-[#0f0d0b]/95;
     }
-    .navbar-floating header > div .horizontal-menu {
+    .navbar-floating header.app-layout-header > div .horizontal-menu {
         @apply rounded-b-md shadow;
     }
 
@@ -270,7 +273,7 @@
 
     /* Buttons */
     .btn {
-        @apply relative flex items-center justify-center rounded-md border px-5 py-2 text-sm font-semibold shadow-[0_10px_20px_-10px] outline-none transition duration-300 hover:shadow-none;
+        @apply relative flex items-center justify-center rounded-md border px-5 py-2 text-sm font-semibold shadow-[0_10px_20px_-10px] outline-none transition duration-300 hover:shadow-none dark:border-gray-600;
     }
     .btn-lg {
         @apply px-7 py-2.5 text-base;

@@ -7,9 +7,12 @@ import 'react-perfect-scrollbar/dist/css/styles.css';
 
 // Tailwind css
 import './tailwind.css';
+import { syncDocumentDarkClass } from './theme/persistedDarkSync';
 
 // i18n (needs to be bundled)
 import './i18n';
+
+syncDocumentDarkClass();
 
 // Router
 import { RouterProvider } from 'react-router-dom';

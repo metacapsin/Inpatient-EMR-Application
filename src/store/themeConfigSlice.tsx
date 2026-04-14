@@ -1,6 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit';
 import i18next from 'i18next';
 import themeConfig from '../theme.config';
+import { isEffectiveDarkMode, readPersistedTheme, syncDocumentDarkClass } from '../theme/persistedDarkSync';
 
 const defaultState = {
     isDarkMode: false,
@@ -34,16 +35,17 @@ const defaultState = {
     semidark: false,
 };
 
+const persistedTheme = readPersistedTheme();
+
 const initialState = {
-    /** Default light when no preference is stored */
-    theme: localStorage.getItem('theme') || themeConfig.theme || 'light',
+    theme: persistedTheme,
     menu: localStorage.getItem('menu') || themeConfig.menu,
     layout: localStorage.getItem('layout') || themeConfig.layout,
     rtlClass: localStorage.getItem('rtlClass') || themeConfig.rtlClass,
     animation: localStorage.getItem('animation') || themeConfig.animation,
     navbar: localStorage.getItem('navbar') || themeConfig.navbar,
     locale: localStorage.getItem('i18nextLng') || themeConfig.locale,
-    isDarkMode: false,
+    isDarkMode: isEffectiveDarkMode(persistedTheme),
     sidebar: localStorage.getItem('sidebar') || defaultState.sidebar,
     semidark: localStorage.getItem('semidark') || themeConfig.semidark,
     languageList: [
@@ -74,23 +76,8 @@ const themeConfigSlice = createSlice({
             payload = payload || state.theme; // light | dark | system
             localStorage.setItem('theme', payload);
             state.theme = payload;
-            if (payload === 'light') {
-                state.isDarkMode = false;
-            } else if (payload === 'dark') {
-                state.isDarkMode = true;
-            } else if (payload === 'system') {
-                if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                    state.isDarkMode = true;
-                } else {
-                    state.isDarkMode = false;
-                }
-            }
-
-            if (state.isDarkMode) {
-                document.querySelector('body')?.classList.add('dark');
-            } else {
-                document.querySelector('body')?.classList.remove('dark');
-            }
+            state.isDarkMode = isEffectiveDarkMode(payload);
+            syncDocumentDarkClass(payload);
         },
         toggleMenu(state, { payload }) {
             payload = payload || state.menu; // vertical, collapsible-vertical, horizontal

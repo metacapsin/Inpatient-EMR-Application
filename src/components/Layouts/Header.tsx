@@ -33,6 +33,7 @@ import IconMenuForms from '../Icon/Menu/IconMenuForms';
 import IconMenuPages from '../Icon/Menu/IconMenuPages';
 import IconMenuMore from '../Icon/Menu/IconMenuMore';
 import mdCareLogo from '../../assets/images/mdcare-logo.png';
+import mdCareLogoDark from '../../assets/images/mdcare-logo_dark.png';
 
 const Header = () => {
     const location = useLocation();
@@ -234,17 +235,15 @@ const Header = () => {
         (profilePhoto.startsWith("http") || profilePhoto.startsWith("data:"));
 
     return (
-        <header className={`z-40 ${themeConfig.semidark && themeConfig.menu === 'horizontal' ? 'dark' : ''}`}>
+        <header
+            className={`app-layout-header z-40 ${themeConfig.semidark && themeConfig.menu === 'horizontal' ? 'dark' : ''}`}
+        >
             <div className="shadow-sm">
                 <div className="relative bg-white flex w-full items-center px-5 py-2.5 dark:bg-black">
                     <div className="horizontal-logo flex lg:hidden justify-between items-center ltr:mr-2 rtl:ml-2">
                         <Link to="/" className="main-logo flex items-center shrink-0 space-x-2 rtl:space-x-reverse">
-                            {/* Dark mode: show full MD Care logo image */}
-                            <img className="h-8 w-auto object-contain hidden dark:inline" src={mdCareLogo} alt="MD Care" />
-                            {/* Light mode: show styled MD CARE text */}
-                            <span className=" text-2xl font-extrabold tracking-wide text-primary align-middle dark:hidden">
-                                MD CARE
-                            </span>
+                            <img className="h-8 w-auto object-contain dark:hidden" src={mdCareLogo} alt="MD Care" />
+                            <img className="h-8 w-auto object-contain hidden dark:inline" src={mdCareLogoDark} alt="MD Care" />
                         </Link>
                         <button
                             type="button"

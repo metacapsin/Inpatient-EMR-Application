@@ -13,6 +13,7 @@ import AuthInputField from '../../components/auth/AuthInputField';
 import AuthButton from '../../components/auth/AuthButton';
 import loginIllustration from '../../assets/images/login-02.png';
 import mdCareLogo from '../../assets/images/mdcare-logo.png';
+import mdCareLogoDark from '../../assets/images/mdcare-logo_dark.png';
 
 const schema = yup.object({
   email: yup.string().email('Enter a valid email').required('Email is required'),
@@ -127,11 +128,8 @@ const LoginPage = () => {
 
         {/* LOGO */}
         <div className="mb-4 flex justify-center">
-          <img
-            src={mdCareLogo}
-            alt="MD Care"
-            className="h-20 object-contain"
-          />
+          <img src={mdCareLogo} alt="MD Care" className="h-20 object-contain dark:hidden" />
+          <img src={mdCareLogoDark} alt="MD Care" className="hidden h-20 object-contain dark:block" />
         </div>
 
         {/* FORM */}

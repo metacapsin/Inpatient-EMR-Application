@@ -5,6 +5,7 @@ import { toggleSidebar } from '../../store/themeConfigSlice';
 import { IRootState } from '../../store';
 import IconCaretsDown from '../Icon/IconCaretsDown';
 import mdCareLogo from '../../assets/images/mdcare-logo.png';
+import mdCareLogoDark from '../../assets/images/mdcare-logo_dark.png';
 import { facesheetModulesByGroup } from '../../facesheet/facesheetModules';
 import { LayoutDashboard, ListOrdered, ChevronRight } from 'lucide-react';
 import { useAppLayout } from '../../contexts/AppLayoutContext';
@@ -30,8 +31,8 @@ const FacesheetSidebar = () => {
                 <div className="bg-white dark:bg-black h-full flex flex-col">
                     <div className="flex justify-between items-center px-4 py-3 shrink-0 border-b border-gray-100/80 dark:border-white/10">
                         <NavLink to="/app/dashboard" className="main-logo flex items-center shrink-0 gap-2 min-w-0">
-                            <img className="h-8 w-auto object-contain hidden dark:block shrink-0" src={mdCareLogo} alt="MD Care" />
-                            <span className="text-xl font-extrabold tracking-wide text-primary truncate dark:hidden">MD CARE</span>
+                            <img className="h-8 w-auto object-contain dark:hidden shrink-0" src={mdCareLogo} alt="MD Care" />
+                            <img className="h-8 w-auto object-contain hidden dark:block shrink-0" src={mdCareLogoDark} alt="MD Care" />
                         </NavLink>
                         <button
                             type="button"
