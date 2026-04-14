@@ -88,10 +88,16 @@ module.exports = {
                     '0%': { opacity: '0', transform: 'translateY(-10px)' },
                     '100%': { opacity: '1', transform: 'translateY(0)' },
                 },
+                'form-shake': {
+                    '0%, 100%': { transform: 'translateX(0)' },
+                    '15%, 45%, 75%': { transform: 'translateX(-5px)' },
+                    '30%, 60%, 90%': { transform: 'translateX(5px)' },
+                },
             },
             animation: {
                 'fade-in-up': 'fade-in-up 0.5s ease-out forwards',
                 'fade-in-down': 'fade-in-down 0.4s ease-out forwards',
+                'form-shake': 'form-shake 0.45s ease-in-out 1',
             },
             typography: ({ theme }) => ({
                 DEFAULT: {
