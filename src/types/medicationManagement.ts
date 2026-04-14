@@ -95,6 +95,8 @@ export interface DischargeMedLine {
 
 export interface DischargeMedPayload {
     patientId: string;
+    /** Present when loaded from encounter-scoped discharge meds API */
+    encounterId?: string;
     medications: DischargeMedLine[];
     preparedBy?: string;
     reviewedBy?: string;
@@ -108,3 +110,12 @@ export interface PostDischargeRequest {
     reviewedBy: string;
     counsellingDone: boolean;
 }
+
+/** POST /api/discharges/:encounterId/medications */
+export type PostDischargeEncounterMedicationsRequest = {
+    patientId?: string;
+    medications: DischargeMedLine[];
+    preparedBy: string;
+    reviewedBy: string;
+    counsellingDone: boolean;
+};

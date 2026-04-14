@@ -46,7 +46,7 @@ function asAdtErrorPayload(data: unknown): AdtApiError | null {
 }
 
 async function adtPost<TBody extends object, TData>(
-    path: '/api/admissions' | '/api/transfers' | '/api/discharges',
+    path: '/api/admissions' | '/api/transfers' | '/api/discharges' | '/api/discharges/confirm',
     body: TBody
 ): Promise<AdtPostResult<TData>> {
     try {
@@ -258,6 +258,18 @@ export const adtApi = {
             disposition,
             dischargeSummary,
         }),
-    dischargeConfirm: (encounterId: string) =>
-        adtPost<DischargeRequest, DischargeConfirmData>('/api/discharges', { phase: 'confirm', encounterId }),
+    /**
+     * Finalize inpatient discharge — POST /api/discharges/confirm.
+     * Falls back to legacy POST /api/discharges { phase: 'confirm' } when the dedicated route is not deployed.
+     */
+    dischargeConfirm: async (encounterId: string): Promise<AdtPostResult<DischargeConfirmData>> => {
+        const primary = await adtPost<{ encounterId: string }, DischargeConfirmData>('/api/discharges/confirm', {
+            encounterId,
+        });
+        if (primary.ok) return primary;
+        if (primary.status === 404) {
+            return adtPost<DischargeRequest, DischargeConfirmData>('/api/discharges', { phase: 'confirm', encounterId });
+        }
+        return primary;
+    },
 };

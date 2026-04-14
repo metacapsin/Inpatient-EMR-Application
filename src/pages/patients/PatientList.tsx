@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
@@ -12,7 +12,9 @@ import {
     activeEncounterRowsToAdtMergePayload,
     listActiveEncounters,
     patientIdSetFromActiveEncounters,
+    type ActiveEncounterRow,
 } from '../../services/adt.service';
+import { extractIdString, pickString } from '../../lib/apiPayload';
 import { mergeActiveEncountersFromServer } from '../../store/adtEncounterSlice';
 import type { AppDispatch } from '../../store';
 import { getPatientListRowId } from '../../services/patient.service';
@@ -121,6 +123,18 @@ function serializeListQuery(q: ListQueryState): URLSearchParams {
 }
 
 /** True if two query strings have the same keys and values (order-insensitive). Avoids sync churn when only param ordering differs. */
+function encounterIdByPatientFromRows(rows: ActiveEncounterRow[]): Map<string, string> {
+    const m = new Map<string, string>();
+    for (const e of rows) {
+        const rec = e as Record<string, unknown>;
+        const pid = extractIdString(e.patientId ?? rec.patient_id) || pickString(rec, 'patientId', 'patient_id');
+        const enc = String(e.id || '').trim();
+        const p = pid.trim();
+        if (p && enc) m.set(p, enc);
+    }
+    return m;
+}
+
 function patientListQueryStringEqual(a: string, b: string): boolean {
     const pa = new URLSearchParams(a);
     const pb = new URLSearchParams(b);
@@ -162,6 +176,9 @@ const PatientList = () => {
     const [error, setError] = useState<string | null>(null);
     /** Patient ids with an active inpatient encounter from GET /api/admissions/active (aligned with bed board). */
     const [serverActivePatientIds, setServerActivePatientIds] = useState<ReadonlySet<string>>(() => new Set());
+    const [activeEncounterIdByPatientId, setActiveEncounterIdByPatientId] = useState<Map<string, string>>(
+        () => new Map()
+    );
 
     const [adtModal, setAdtModal] = useState<{ patient: PatientListItem; intent: AdtWorkflowIntent } | null>(null);
 
@@ -273,12 +290,15 @@ const PatientList = () => {
             setTotal(res.total);
 
             let nextServerActive = new Set<string>();
+            let nextEncMap = new Map<string, string>();
             if (encOutcome.status === 'fulfilled' && encOutcome.value.ok) {
                 const encRows = encOutcome.value.data;
                 nextServerActive = patientIdSetFromActiveEncounters(encRows);
+                nextEncMap = encounterIdByPatientFromRows(encRows);
                 dispatch(mergeActiveEncountersFromServer(activeEncounterRowsToAdtMergePayload(encRows)));
             }
             setServerActivePatientIds(nextServerActive);
+            setActiveEncounterIdByPatientId(nextEncMap);
         } catch (e: unknown) {
             const msg =
                 e && typeof e === 'object' && 'message' in e ? String((e as Error).message) : 'Failed to load patients';
@@ -286,6 +306,7 @@ const PatientList = () => {
             setItems([]);
             setTotal(0);
             setServerActivePatientIds(new Set());
+            setActiveEncounterIdByPatientId(new Map());
         } finally {
             setLoading(false);
         }
@@ -312,6 +333,11 @@ const PatientList = () => {
         setDateRange({ from: '', to: '' });
         setPage(1);
     };
+
+    const encounterMapForTable = useMemo(
+        () => activeEncounterIdByPatientId as ReadonlyMap<string, string>,
+        [activeEncounterIdByPatientId]
+    );
 
     const totalPages = Math.max(1, Math.ceil(total / limit));
     const from = total === 0 ? 0 : (page - 1) * limit + 1;
@@ -435,6 +461,7 @@ const PatientList = () => {
                             onSort={handleSort}
                             sortDisabled={loading}
                             serverActivePatientIds={serverActivePatientIds}
+                            activeEncounterIdByPatientId={encounterMapForTable}
                             onOpenAdt={(patient, intent) => setAdtModal({ patient, intent })}
                         />
                     </div>

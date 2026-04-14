@@ -5,6 +5,7 @@ import type {
     MarRow,
     PatientMedicationRow,
     PostDispenseRequest,
+    PostDischargeEncounterMedicationsRequest,
     PostDischargeRequest,
     PostMarRequest,
     PostPrnStatRequest,
@@ -30,6 +31,7 @@ const mockMar = new Map<string, MarRow[]>();
 const mockPrnStat = new Map<string, PrnStatRecord[]>();
 const mockPrescriptions = new Map<string, PrescriptionRow[]>();
 const mockDischarge = new Map<string, DischargeMedPayload>();
+const mockDischargeByEncounter = new Map<string, DischargeMedPayload>();
 
 function isoHoursFromNow(hours: number): string {
     const d = new Date();
@@ -293,5 +295,77 @@ export async function postDischarge(body: PostDischargeRequest): Promise<Dischar
         return payload;
     }
     const res = await api.post<unknown>('/api/discharge', body);
+    return unwrapBody<DischargeMedPayload>(res.data);
+}
+
+/** GET /api/discharges/:encounterId/medications — encounter is the billing/clinical anchor for discharge meds */
+export async function getDischargeMedsForEncounter(
+    encounterId: string,
+    fallbackPatientId?: string
+): Promise<DischargeMedPayload> {
+    const eid = encounterId.trim();
+    if (!eid) {
+        return { patientId: fallbackPatientId?.trim() ?? '', encounterId: '', medications: [] };
+    }
+    if (useMock()) {
+        await mockDelay();
+        const hit = mockDischargeByEncounter.get(eid);
+        if (hit) return { ...hit, medications: [...hit.medications] };
+        const pid = fallbackPatientId?.trim() ?? '';
+        if (pid) {
+            seedMockPatient(pid);
+            const fromPatient = mockDischarge.get(pid);
+            if (fromPatient) {
+                const next: DischargeMedPayload = {
+                    ...fromPatient,
+                    encounterId: eid,
+                    patientId: fromPatient.patientId || pid,
+                    medications: [...fromPatient.medications],
+                };
+                mockDischargeByEncounter.set(eid, next);
+                return { ...next, medications: [...next.medications] };
+            }
+        }
+        const empty: DischargeMedPayload = { patientId: pid, encounterId: eid, medications: [] };
+        mockDischargeByEncounter.set(eid, empty);
+        return { ...empty, medications: [] };
+    }
+    try {
+        const res = await api.get<unknown>(`/api/discharges/${encodeURIComponent(eid)}/medications`);
+        return unwrapBody<DischargeMedPayload>(res.data);
+    } catch {
+        const pid = fallbackPatientId?.trim();
+        if (!pid) return { patientId: '', encounterId: eid, medications: [] };
+        const legacy = await getDischargeMeds(pid);
+        return { ...legacy, encounterId: eid };
+    }
+}
+
+/** POST /api/discharges/:encounterId/medications */
+export async function postDischargeMedsForEncounter(
+    encounterId: string,
+    body: PostDischargeEncounterMedicationsRequest
+): Promise<DischargeMedPayload> {
+    const eid = encounterId.trim();
+    if (!eid) {
+        throw new Error('An active encounter is required to save discharge medications.');
+    }
+    if (useMock()) {
+        await mockDelay();
+        const pid = body.patientId?.trim() ?? '';
+        if (pid) seedMockPatient(pid);
+        const payload: DischargeMedPayload = {
+            patientId: pid,
+            encounterId: eid,
+            medications: [...body.medications],
+            preparedBy: body.preparedBy,
+            reviewedBy: body.reviewedBy,
+            counsellingDone: body.counsellingDone,
+        };
+        mockDischargeByEncounter.set(eid, payload);
+        if (pid) mockDischarge.set(pid, { ...payload, patientId: pid });
+        return { ...payload, medications: [...payload.medications] };
+    }
+    const res = await api.post<unknown>(`/api/discharges/${encodeURIComponent(eid)}/medications`, body);
     return unwrapBody<DischargeMedPayload>(res.data);
 }

@@ -4,29 +4,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'sonner';
 import { AppModal } from '../shared/AppModal';
-// import { LabeledDropdown } from '../shared/LabeledDropdown'
-// import {NewDropdown} from '../ui/NewDropdown';
-import {
-    adtApi,
-    formatAdtUserMessage,
-    hasValidAdtBedForDischarge,
-    resolveBedMongoIdAfterAdmit,
-} from '../../services/adt.service';
+import { formatAdtUserMessage } from '../../services/adt.service';
+import { admitPatient, transferPatient } from '../../services/adtWorkflowService';
 import { fetchEmrBedList } from '../../services/emrBeds.service';
 import { bedOptionsForSelect } from '../../lib/adtBedPicker';
 import type { AdmissionType } from '../../types/adt';
 import type { AppDispatch, IRootState } from '../../store';
 import { fetchFacesheetPatient } from '../../store/facesheetSlice';
-import {
-    clearAdtEncounter,
-    selectAdtEncounter,
-    setAdtAfterAdmit,
-    setAdtCurrentBed,
-    setAdtDischargeInitiated,
-} from '../../store/adtEncounterSlice';
+import { selectAdtEncounter } from '../../store/adtEncounterSlice';
 import NewDropdown from '../ui/NewDropdown';
 
-export type AdtWorkflowIntent = 'admit' | 'transfer' | 'discharge';
+export type AdtWorkflowIntent = 'admit' | 'transfer';
 
 const BED_BOARD_PATH = '/app/bed-board';
 
@@ -46,8 +34,6 @@ export interface AdtPatientWorkflowModalProps {
     onCompleted?: () => void;
     /** When true, refetch facesheet patient if IDs match */
     facesheetPatientId?: string | null;
-    /** When intent is discharge, which step to show first */
-    dischargeInitialStep?: 'initiate' | 'confirm';
 }
 
 export function AdtPatientWorkflowModal({
@@ -58,7 +44,6 @@ export function AdtPatientWorkflowModal({
     onClose,
     onCompleted,
     facesheetPatientId,
-    dischargeInitialStep,
 }: AdtPatientWorkflowModalProps) {
     const navigate = useNavigate();
     const dispatch = useDispatch<AppDispatch>();
@@ -70,10 +55,6 @@ export function AdtPatientWorkflowModal({
 
     const [transferBedId, setTransferBedId] = useState('');
     const [transferReason, setTransferReason] = useState('');
-
-    const [disposition, setDisposition] = useState('');
-    const [dischargeSummary, setDischargeSummary] = useState('');
-    const [dischargeStep, setDischargeStep] = useState<'initiate' | 'confirm'>('initiate');
 
     const bedsQuery = useQuery({
         queryKey: ['beds', 'emr-list'],
@@ -104,30 +85,15 @@ export function AdtPatientWorkflowModal({
         setAdmissionType('');
         setTransferBedId('');
         setTransferReason('');
-        setDisposition('');
-        setDischargeSummary('');
-        if (intent !== 'discharge') {
-            setDischargeStep('initiate');
-            return;
-        }
-        if (dischargeInitialStep) {
-            setDischargeStep(dischargeInitialStep);
-            return;
-        }
-        setDischargeStep(session?.dischargeInitiated ? 'confirm' : 'initiate');
-    }, [open, intent, session?.dischargeInitiated, dischargeInitialStep]);
+    }, [open, intent]);
+
+    const ctx = useMemo(() => ({ dispatch, queryClient }), [dispatch, queryClient]);
 
     const refreshChart = () => {
         const pid = patientId.trim();
         if (facesheetPatientId?.trim() === pid) {
             void dispatch(fetchFacesheetPatient(pid));
         }
-        void queryClient.invalidateQueries({ queryKey: ['beds', 'emr-list'] });
-        void queryClient.invalidateQueries({ queryKey: ['patient-placement'] });
-        void queryClient.invalidateQueries({ queryKey: ['settings', 'facility'] });
-        void queryClient.invalidateQueries({ queryKey: ['facility'] });
-        void queryClient.invalidateQueries({ queryKey: ['liveBedBoard'] });
-        void queryClient.invalidateQueries({ queryKey: ['activeEncounters'] });
         onCompleted?.();
     };
 
@@ -146,7 +112,7 @@ export function AdtPatientWorkflowModal({
                 bedId,
                 ...(admissionType ? { admissionType } : {}),
             };
-            return adtApi.admit(body);
+            return admitPatient(ctx, body);
         },
         onSuccess: (result) => {
             const pid = patientId.trim();
@@ -154,20 +120,10 @@ export function AdtPatientWorkflowModal({
                 toast.error(formatAdtUserMessage(result));
                 return;
             }
-            const encId = result.data.encounter?.id;
-            if (!encId) {
+            if (!result.data.encounter?.id) {
                 toast.error('Admission succeeded but no encounter id was returned.');
                 return;
             }
-            const encObj = result.data.encounter as Record<string, unknown> | undefined;
-            const bedMongoId = resolveBedMongoIdAfterAdmit(encObj, admitTargetBedId.trim());
-            dispatch(
-                setAdtAfterAdmit({
-                    patientId: pid,
-                    encounterId: encId,
-                    bedMongoId,
-                })
-            );
             toast.success(result.message || 'Patient admitted');
             refreshChart();
             onClose();
@@ -186,21 +142,17 @@ export function AdtPatientWorkflowModal({
             if (session.currentBedMongoId && newBedId === session.currentBedMongoId.trim()) {
                 throw new Error('Choose a different bed than the current assignment.');
             }
-            return adtApi.transfer({
+            return transferPatient(ctx, {
                 encounterId: session.encounterId,
                 newBedId,
                 ...(transferReason.trim() ? { reason: transferReason.trim() } : {}),
+                patientId: patientId.trim(),
             });
         },
         onSuccess: (result) => {
             if (!result.ok) {
                 toast.error(formatAdtUserMessage(result));
                 return;
-            }
-            const pid = patientId.trim();
-            const nextBed = result.data.currentBedId?.trim() || transferTargetBedId.trim();
-            if (nextBed) {
-                dispatch(setAdtCurrentBed({ patientId: pid, bedMongoId: nextBed, fromTransfer: true }));
             }
             toast.success(result.message || 'Transfer completed');
             refreshChart();
@@ -212,85 +164,15 @@ export function AdtPatientWorkflowModal({
         },
     });
 
-    const dischargeInitMutation = useMutation({
-        mutationFn: async () => {
-            const encounterId = session?.encounterId;
-            if (!encounterId) throw new Error('No active encounter for this patient');
-            if (!hasValidAdtBedForDischarge(session)) {
-                throw new Error(
-                    'No bed is linked to this encounter in the workspace. Refresh the chart or open the patient from the bed board, then try again.'
-                );
-            }
-            const currentBedMongoId = session.currentBedMongoId?.trim() ?? null;
-            console.info('[adt] discharge initiate request', { encounterId, currentBedMongoId });
-            return adtApi.dischargeInitiate(
-                encounterId,
-                disposition.trim() || undefined,
-                dischargeSummary.trim() || undefined
-            );
-        },
-        onSuccess: (result) => {
-            const pid = patientId.trim();
-            const enc = session?.encounterId;
-            if (!result.ok) {
-                toast.error(formatAdtUserMessage(result));
-                return;
-            }
-            if (enc) {
-                dispatch(setAdtDischargeInitiated({ patientId: pid, encounterId: enc }));
-            }
-            toast.success(result.message || 'Discharge initiated');
-            setDischargeStep('confirm');
-            refreshChart();
-        },
-        onError: (e: unknown) => {
-            toast.error(e instanceof Error ? e.message : 'Could not initiate discharge');
-        },
-    });
+    const busy = admitMutation.isPending || transferMutation.isPending;
 
-    const dischargeConfirmMutation = useMutation({
-        mutationFn: async () => {
-            if (!session?.encounterId) throw new Error('No active encounter for this patient');
-            console.info('[adt] discharge confirm request', {
-                encounterId: session.encounterId,
-                currentBedMongoId: session.currentBedMongoId?.trim() ?? null,
-            });
-            return adtApi.dischargeConfirm(session.encounterId);
-        },
-        onSuccess: (result) => {
-            const pid = patientId.trim();
-            if (!result.ok) {
-                toast.error(formatAdtUserMessage(result));
-                return;
-            }
-            dispatch(clearAdtEncounter({ patientId: pid }));
-            toast.success(result.message || 'Discharge confirmed');
-            refreshChart();
-            onClose();
-            goToBedBoard();
-        },
-        onError: (e: unknown) => {
-            toast.error(e instanceof Error ? e.message : 'Could not confirm discharge');
-        },
-    });
-
-    const busy =
-        admitMutation.isPending ||
-        transferMutation.isPending ||
-        dischargeInitMutation.isPending ||
-        dischargeConfirmMutation.isPending;
-
-    const title =
-        intent === 'admit' ? 'Admit patient' : intent === 'transfer' ? 'Transfer patient' : 'Discharge patient';
+    const title = intent === 'admit' ? 'Admit patient' : 'Transfer patient';
 
     const bedsError = bedsQuery.error instanceof Error ? bedsQuery.error.message : null;
 
     const encounterReady = Boolean(session?.encounterId?.trim());
-    const bedReadyForDischarge = hasValidAdtBedForDischarge(session);
     const admitBlocked = encounterReady;
     const transferBlocked = !encounterReady || !!session?.dischargeInitiated;
-    const dischargeBlocked =
-        !encounterReady || (!bedReadyForDischarge && !session?.dischargeInitiated);
 
     return (
         <AppModal
@@ -298,7 +180,7 @@ export function AdtPatientWorkflowModal({
             onClose={() => !busy && onClose()}
             title={title}
             description={patientLabel}
-            size={intent === 'discharge' ? 'md' : 'md'}
+            size="md"
             footer={
                 intent === 'admit' ? (
                     <div className="flex flex-wrap justify-end gap-2">
@@ -319,7 +201,7 @@ export function AdtPatientWorkflowModal({
                             {admitMutation.isPending ? 'Admitting…' : 'Admit'}
                         </button>
                     </div>
-                ) : intent === 'transfer' ? (
+                ) : (
                     <div className="flex flex-wrap justify-end gap-2">
                         <button
                             type="button"
@@ -338,50 +220,6 @@ export function AdtPatientWorkflowModal({
                             {transferMutation.isPending ? 'Transferring…' : 'Transfer'}
                         </button>
                     </div>
-                ) : (
-                    <div className="flex flex-wrap justify-end gap-2">
-                        {dischargeStep === 'confirm' ? (
-                            <>
-                                {!session?.dischargeInitiated ? (
-                                    <button
-                                        type="button"
-                                        disabled={busy}
-                                        onClick={() => setDischargeStep('initiate')}
-                                        className="inline-flex min-h-10 items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-800 dark:border-white/15 dark:bg-[#1a2332] dark:text-gray-100"
-                                    >
-                                        Back
-                                    </button>
-                                ) : null}
-                                <button
-                                    type="button"
-                                    disabled={busy || dischargeBlocked}
-                                    onClick={() => dischargeConfirmMutation.mutate()}
-                                    className="inline-flex min-h-10 items-center justify-center rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-95 disabled:pointer-events-none disabled:opacity-50"
-                                >
-                                    {dischargeConfirmMutation.isPending ? 'Confirming…' : 'Confirm discharge'}
-                                </button>
-                            </>
-                        ) : (
-                            <>
-                                <button
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={onClose}
-                                    className="inline-flex min-h-10 items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-800 dark:border-white/15 dark:bg-[#1a2332] dark:text-gray-100"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={busy || dischargeBlocked || !!session?.dischargeInitiated}
-                                    onClick={() => dischargeInitMutation.mutate()}
-                                    className="inline-flex min-h-10 items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-md shadow-primary/25 disabled:pointer-events-none disabled:opacity-50"
-                                >
-                                    {dischargeInitMutation.isPending ? 'Working…' : 'Begin discharge'}
-                                </button>
-                            </>
-                        )}
-                    </div>
                 )
             }
         >
@@ -394,28 +232,15 @@ export function AdtPatientWorkflowModal({
 
                 {intent === 'admit' && admitBlocked ? (
                     <p className="text-sm text-amber-800 dark:text-amber-200">
-                        This patient already has an active encounter in this workspace. Transfer or discharge before admitting
-                        again.
+                        This patient already has an active encounter in this workspace. Transfer or discharge before admitting again.
                     </p>
                 ) : null}
 
                 {intent === 'transfer' && transferBlocked ? (
                     <p className="text-sm text-amber-800 dark:text-amber-200">
                         {session?.dischargeInitiated
-                            ? 'Discharge is in progress — complete or cancel discharge before transferring.'
+                            ? 'Discharge is in progress — complete discharge readiness before transferring.'
                             : 'Admit the patient or link an encounter before transferring.'}
-                    </p>
-                ) : null}
-
-                {intent === 'discharge' && !encounterReady ? (
-                    <p className="text-sm text-amber-800 dark:text-amber-200">
-                        No active encounter for this patient. Admit from the patient list or ADT module first.
-                    </p>
-                ) : null}
-                {intent === 'discharge' && encounterReady && !bedReadyForDischarge && !session?.dischargeInitiated ? (
-                    <p className="text-sm text-amber-800 dark:text-amber-200">
-                        Discharge is blocked until a bed is linked to this encounter. Refresh the chart or use the bed board so the
-                        workspace picks up the current assignment, then try again.
                     </p>
                 ) : null}
 
@@ -425,11 +250,14 @@ export function AdtPatientWorkflowModal({
 
                 {intent === 'admit' ? (
                     <div className="grid gap-4 sm:grid-cols-2">
-                        {/* <div className="sm:col-span-2">
-                            <LabeledDropdown
+                        <div className="sm:col-span-2">
+                            <label htmlFor="modal-adt-admit-bed" className="block text-sm font-medium text-gray-700 mb-1">
+                                Bed (available)
+                            </label>
+
+                            <NewDropdown
                                 id="modal-adt-admit-bed"
-                                label="Bed (available)"
-                                value={admitBedId || undefined}
+                                value={admitBedId || ''}
                                 placeholder={
                                     bedsQuery.isLoading
                                         ? 'Loading beds…'
@@ -437,41 +265,18 @@ export function AdtPatientWorkflowModal({
                                           ? 'Select bed'
                                           : 'No available beds'
                                 }
-                                options={admitOptions.map((o) => ({ value: o.value, label: o.label }))}
-                                onChange={setAdmitBedId}
+                                options={admitOptions.map((o) => ({
+                                    value: o.value,
+                                    label: o.label,
+                                }))}
+                                onChange={(v) => setAdmitBedId(String(v))}
                                 disabled={busy || bedsQuery.isLoading || admitBlocked}
                             />
-                        </div> */}
-                        <div className="sm:col-span-2">
-                    <label
-                        htmlFor="modal-adt-admit-bed"
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                    >
-                        Bed (available)
-                    </label>
-
-                    <NewDropdown
-                        id="modal-adt-admit-bed"
-                        value={admitBedId || ""}
-                        placeholder={
-                        bedsQuery.isLoading
-                            ? "Loading beds…"
-                            : admitOptions.length
-                            ? "Select bed"
-                            : "No available beds"
-                        }
-                        options={admitOptions.map((o) => ({
-                        value: o.value,
-                        label: o.label,
-                        }))}
-                        onChange={(v) => setAdmitBedId(String(v))}
-                        disabled={busy || bedsQuery.isLoading || admitBlocked}
-                    />
-                    </div>
+                        </div>
                         <NewDropdown
                             id="modal-adt-admission-type"
                             label="Admission type (optional)"
-                            value={admissionType }
+                            value={admissionType}
                             placeholder="Any"
                             options={ADMISSION_TYPES.map((t) => ({ value: t.value, label: t.label }))}
                             onChange={(v) => setAdmissionType(v as AdmissionType)}
@@ -511,57 +316,6 @@ export function AdtPatientWorkflowModal({
                                 className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm shadow-sm dark:border-white/15 dark:bg-[#1a2332]"
                             />
                         </div>
-                    </div>
-                ) : null}
-
-                {intent === 'discharge' ? (
-                    <div className="space-y-3">
-                        {dischargeStep === 'confirm' ? (
-                            <div className="rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm text-red-900 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-100">
-                                <p className="font-semibold">Step 2 — Confirm discharge</p>
-                                <p className="mt-1 text-red-800/90 dark:text-red-200">
-                                    This completes the encounter and releases the bed on the server. This cannot be undone from this
-                                    screen.
-                                </p>
-                                {session?.encounterId ? (
-                                    <p className="mt-2 font-mono text-xs opacity-80">Encounter {session.encounterId}</p>
-                                ) : null}
-                            </div>
-                        ) : (
-                            <>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                                    Step 1 — Initiate
-                                </p>
-                                <div className="grid gap-4 sm:grid-cols-2">
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-800 dark:text-gray-200" htmlFor="modal-disp">
-                                            Disposition (optional)
-                                        </label>
-                                        <input
-                                            id="modal-disp"
-                                            value={disposition}
-                                            onChange={(e) => setDisposition(e.target.value)}
-                                            disabled={busy || !!session?.dischargeInitiated || dischargeBlocked}
-                                            className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm shadow-sm dark:border-white/15 dark:bg-[#1a2332]"
-                                            placeholder="e.g. home"
-                                        />
-                                    </div>
-                                    <div className="space-y-2 sm:col-span-2">
-                                        <label className="text-sm font-medium text-gray-800 dark:text-gray-200" htmlFor="modal-sum">
-                                            Discharge summary (optional)
-                                        </label>
-                                        <textarea
-                                            id="modal-sum"
-                                            value={dischargeSummary}
-                                            onChange={(e) => setDischargeSummary(e.target.value)}
-                                            disabled={busy || !!session?.dischargeInitiated || dischargeBlocked}
-                                            rows={3}
-                                            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-white/15 dark:bg-[#1a2332]"
-                                        />
-                                    </div>
-                                </div>
-                            </>
-                        )}
                     </div>
                 ) : null}
             </div>

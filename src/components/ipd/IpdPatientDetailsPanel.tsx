@@ -4,9 +4,9 @@ import type { IpdBedRow } from '../../types/ipdDashboard';
 
 type Props = {
     row: IpdBedRow | null;
-    actionBusy: 'transfer' | 'discharge' | null;
+    transferBusy: boolean;
     onTransferClick: () => void;
-    onDischargeClick: () => void;
+    onStartDischargeClick: () => void;
 };
 
 function formatAdmitDate(raw: string | null): string {
@@ -20,9 +20,10 @@ function formatAdmitDate(raw: string | null): string {
     }
 }
 
-function IpdPatientDetailsPanelInner({ row, actionBusy, onTransferClick, onDischargeClick }: Props) {
+function IpdPatientDetailsPanelInner({ row, transferBusy, onTransferClick, onStartDischargeClick }: Props) {
     const isOccupied = row?.status.toLowerCase() === 'occupied' && Boolean(row?.patientName);
     const canAct = isOccupied && row?.encounterId;
+    const busy = transferBusy;
 
     return (
         <div className="panel rounded-xl border border-white-light dark:border-dark shadow-sm flex flex-col min-h-0 h-full overflow-hidden">
@@ -63,19 +64,19 @@ function IpdPatientDetailsPanelInner({ row, actionBusy, onTransferClick, onDisch
                         <div className="mt-6 pt-4 border-t border-white-light dark:border-dark space-y-2 shrink-0">
                             <button
                                 type="button"
-                                disabled={!canAct || actionBusy !== null}
+                                disabled={!canAct || busy}
                                 onClick={onTransferClick}
                                 className="btn btn-outline-primary w-full justify-center text-sm py-2 disabled:opacity-50"
                             >
-                                {actionBusy === 'transfer' ? 'Working…' : 'Transfer Patient'}
+                                {busy ? 'Working…' : 'Transfer Patient'}
                             </button>
                             <button
                                 type="button"
-                                disabled={!canAct || actionBusy !== null}
-                                onClick={onDischargeClick}
+                                disabled={!canAct || busy}
+                                onClick={onStartDischargeClick}
                                 className="btn btn-primary w-full justify-center text-sm py-2 disabled:opacity-50"
                             >
-                                {actionBusy === 'discharge' ? 'Working…' : 'Discharge Patient'}
+                                Start discharge
                             </button>
                             {isOccupied && !row.encounterId ? (
                                 <p className="text-xs text-warning mt-1">Encounter ID missing — actions unavailable</p>

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { Activity, ArrowRightLeft, BedDouble, DoorOpen, Stethoscope, UserPlus } from 'lucide-react';
 import type { FacesheetPatient } from '../../services/patient.service';
@@ -32,12 +32,10 @@ interface EncounterBannerProps {
     moduleBase: string;
 }
 
-type AdtBannerModal =
-    | { intent: 'admit' }
-    | { intent: 'transfer' }
-    | { intent: 'discharge'; dischargeInitialStep: 'initiate' | 'confirm' };
+type AdtBannerModal = { intent: 'admit' } | { intent: 'transfer' };
 
 export function EncounterBanner({ patient, moduleBase }: EncounterBannerProps) {
+    const navigate = useNavigate();
     const [adtModal, setAdtModal] = useState<AdtBannerModal | null>(null);
     const session = useSelector((s: IRootState) => selectAdtEncounter(s, patient.id));
     const encounterReady = Boolean(session?.encounterId?.trim());
@@ -47,6 +45,13 @@ export function EncounterBanner({ patient, moduleBase }: EncounterBannerProps) {
     const bedDisplay = locationLine.trim() ? locationLine : 'No bed on file';
     const doctor = pickAttendingLabel(patient.raw);
     const adtHref = `${moduleBase.replace(/\/$/, '')}/adt`;
+
+    const goDischargeReadiness = useCallback(() => {
+        const qs = new URLSearchParams();
+        qs.set('patientId', patient.id);
+        if (session?.encounterId?.trim()) qs.set('encounterId', session.encounterId.trim());
+        navigate(`/app/inpatient/discharge-readiness?${qs.toString()}`);
+    }, [navigate, patient.id, session?.encounterId]);
 
     const statusLabel = !encounterReady
         ? 'No active encounter'
@@ -132,22 +137,16 @@ export function EncounterBanner({ patient, moduleBase }: EncounterBannerProps) {
                             title={
                                 encounterReady && !bedReadyForDischarge && !session?.dischargeInitiated
                                     ? 'No bed linked to this encounter — refresh the chart'
-                                    : undefined
+                                    : session?.dischargeInitiated
+                                      ? 'Continue discharge readiness and finalization'
+                                      : undefined
                             }
-                            disabled={!encounterReady || !!session?.dischargeInitiated || !bedReadyForDischarge}
-                            onClick={() => setAdtModal({ intent: 'discharge', dischargeInitialStep: 'initiate' })}
+                            disabled={!encounterReady || !bedReadyForDischarge}
+                            onClick={goDischargeReadiness}
                             className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100 disabled:pointer-events-none disabled:opacity-45 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-950/60"
                         >
                             <DoorOpen className="h-4 w-4 shrink-0" aria-hidden />
-                            Begin discharge
-                        </button>
-                        <button
-                            type="button"
-                            disabled={!session?.dischargeInitiated}
-                            onClick={() => setAdtModal({ intent: 'discharge', dischargeInitialStep: 'confirm' })}
-                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:pointer-events-none disabled:opacity-45"
-                        >
-                            Confirm discharge
+                            {session?.dischargeInitiated ? 'Continue discharge' : 'Start discharge'}
                         </button>
                         <Link
                             to={adtHref}
@@ -165,7 +164,6 @@ export function EncounterBanner({ patient, moduleBase }: EncounterBannerProps) {
                     patientId={patient.id}
                     patientLabel={patient.fullName}
                     intent={adtModal.intent}
-                    dischargeInitialStep={adtModal.intent === 'discharge' ? adtModal.dischargeInitialStep : undefined}
                     onClose={() => setAdtModal(null)}
                     facesheetPatientId={patient.id}
                 />

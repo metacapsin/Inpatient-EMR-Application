@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import type { DischargeReadinessView, ReadinessGate } from '../../../types/dischargeReadiness';
+import type { DischargeReadinessView } from '../../../types/dischargeReadiness';
 import { useDischargeReadinessOptional } from '../../../contexts/DischargeReadinessContext';
 import { computeReadinessSnapshot } from '../../../utils/dischargeReadinessValidation';
 
@@ -7,7 +7,7 @@ type Props = {
     view: DischargeReadinessView;
 };
 
-function statusPill(ok: boolean, label: string) {
+function pill(ok: boolean, label: string) {
     return (
         <span
             className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
@@ -21,77 +21,28 @@ function statusPill(ok: boolean, label: string) {
     );
 }
 
-function GateRow({ g }: { g: ReadinessGate }) {
-    const hard = g.severity === 'hard';
-    return (
-        <li
-            className={`flex flex-wrap items-start gap-2 border-b border-gray-100 py-2 text-sm last:border-0 dark:border-gray-700/80 ${
-                g.resolved ? 'text-gray-500 dark:text-gray-400' : hard ? 'text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'
-            }`}
-        >
-            <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${g.resolved ? 'bg-emerald-500' : hard ? 'bg-red-500' : 'bg-amber-400'}`} />
-            <div className="min-w-0 flex-1">
-                <span className="font-medium">{g.message}</span>
-                <span className="ml-2 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                    {g.ownerRole} · {g.category}
-                    {hard ? ' · hard' : ' · soft'}
-                </span>
-            </div>
-        </li>
-    );
-}
-
 function DischargeReadinessHeaderInner({ view }: Props) {
     const ctx = useDischargeReadinessOptional();
     const snapshot = useMemo(() => ctx?.snapshot ?? computeReadinessSnapshot(view), [ctx?.snapshot, view]);
 
-    const openHard = snapshot.hardBlockers;
-    const openSoft = snapshot.softBlockers;
-
     return (
-        <div className="rounded-xl border border-white-light bg-white shadow-sm dark:border-dark dark:bg-black">
-            <div className="border-b border-white-light px-4 py-3 dark:border-dark">
-                <h2 className="text-base font-semibold text-gray-900 dark:text-white">Discharge &amp; billing readiness</h2>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Clinical readiness requires a signed summary and completed nursing tasks. Billing readiness requires charges, current
-                    eligibility, and valid principal diagnosis. Blockers update as you work.
-                </p>
-            </div>
-            <div className="grid gap-4 p-4 md:grid-cols-2">
-                <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Encounter</p>
-                    <p className="mt-1 font-semibold text-gray-900 dark:text-white">{view.context.patientName}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">
-                        MRN {view.context.mrn} · {view.context.locationLabel}
+        <div className="rounded-2xl border border-gray-200/90 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900/40">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Encounter context</h2>
+            <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0 space-y-1 text-sm">
+                    <p className="text-gray-600 dark:text-gray-300">
+                        <span className="font-semibold text-gray-800 dark:text-gray-100">Admitted</span>{' '}
+                        {new Date(view.context.admitDate).toLocaleString()}
                     </p>
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        Admit {new Date(view.context.admitDate).toLocaleString()} · Attending {view.context.attendingName}
+                    <p className="text-gray-600 dark:text-gray-300">
+                        <span className="font-semibold text-gray-800 dark:text-gray-100">Attending</span>{' '}
+                        {view.context.attendingName}
                     </p>
                 </div>
-                <div className="flex flex-col gap-2">
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Status</p>
-                    <div className="flex flex-wrap gap-2">
-                        {statusPill(snapshot.isClinicalReady, 'Clinical discharge')}
-                        {statusPill(snapshot.isBillingReady, 'Bill / claim')}
-                    </div>
-                    {openHard.length > 0 ? (
-                        <p className="text-sm text-red-700 dark:text-red-300">
-                            {openHard.length} hard blocker{openHard.length === 1 ? '' : 's'} remaining
-                        </p>
-                    ) : openSoft.length > 0 ? (
-                        <p className="text-sm text-amber-800 dark:text-amber-200">{openSoft.length} soft warning(s)</p>
-                    ) : (
-                        <p className="text-sm text-emerald-800 dark:text-emerald-200">No open readiness issues</p>
-                    )}
+                <div className="flex flex-wrap gap-2">
+                    {pill(snapshot.isClinicalReady, 'Clinical discharge')}
+                    {pill(snapshot.isBillingReady, 'Bill / claim')}
                 </div>
-            </div>
-            <div className="border-t border-white-light px-4 py-3 dark:border-dark">
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Blockers &amp; checks</p>
-                <ul className="max-h-48 overflow-y-auto rounded-md border border-gray-200 bg-gray-50/80 px-3 dark:border-gray-700 dark:bg-gray-900/40">
-                    {snapshot.gates.map((g) => (
-                        <GateRow key={g.id} g={g} />
-                    ))}
-                </ul>
             </div>
         </div>
     );

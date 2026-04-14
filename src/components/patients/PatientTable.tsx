@@ -12,6 +12,8 @@ interface PatientTableProps {
     sortDisabled?: boolean;
     /** From GET /api/admissions/active; same source as the bed board active encounters list. */
     serverActivePatientIds?: ReadonlySet<string>;
+    /** patientId → encounterId for discharge readiness deep-linking */
+    activeEncounterIdByPatientId?: ReadonlyMap<string, string>;
     onOpenAdt?: (patient: PatientListItem, intent: AdtWorkflowIntent) => void;
 }
 
@@ -64,6 +66,7 @@ const PatientTable = ({
     onSort,
     sortDisabled,
     serverActivePatientIds,
+    activeEncounterIdByPatientId,
     onOpenAdt,
 }: PatientTableProps) => {
     const handleSort = (field: PatientListSortField) => sortHandler(sortDisabled, onSort, field);
@@ -158,6 +161,7 @@ const PatientTable = ({
                                     key={p.id}
                                     patient={p}
                                     serverActivePatientIds={serverActivePatientIds}
+                                    activeEncounterIdByPatientId={activeEncounterIdByPatientId}
                                     onOpenAdt={onOpenAdt}
                                 />
                             ))}
@@ -172,6 +176,7 @@ const PatientTable = ({
                         key={p.id}
                         patient={p}
                         serverActivePatientIds={serverActivePatientIds}
+                        activeEncounterIdByPatientId={activeEncounterIdByPatientId}
                         onOpenAdt={onOpenAdt}
                     />
                 ))}

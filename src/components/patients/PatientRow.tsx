@@ -10,6 +10,7 @@ import { hasValidAdtBedForDischarge } from '../../services/adt.service';
 interface PatientRowProps {
     patient: PatientListItem;
     serverActivePatientIds?: ReadonlySet<string>;
+    activeEncounterIdByPatientId?: ReadonlyMap<string, string>;
     onOpenAdt?: (patient: PatientListItem, intent: AdtWorkflowIntent) => void;
 }
 
@@ -49,15 +50,18 @@ function InpatientAdtCell({
     patient,
     chartId,
     serverActivePatientIds,
+    activeEncounterIdByPatientId,
     onOpenAdt,
     layout = 'stacked',
 }: {
     patient: PatientListItem;
     chartId: string;
     serverActivePatientIds?: ReadonlySet<string>;
+    activeEncounterIdByPatientId?: ReadonlyMap<string, string>;
     onOpenAdt?: (patient: PatientListItem, intent: AdtWorkflowIntent) => void;
     layout?: 'stacked' | 'inline';
 }) {
+    const navigate = useNavigate();
     const session = useSelector((s: IRootState) => selectAdtEncounter(s, chartId));
     const pid = chartId.trim();
     const serverAdmitted = Boolean(pid && serverActivePatientIds?.has(pid));
@@ -72,6 +76,18 @@ function InpatientAdtCell({
     const open = (intent: AdtWorkflowIntent) => (e: React.MouseEvent) => {
         e.stopPropagation();
         onOpenAdt?.(patient, intent);
+    };
+
+    const startDischarge = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const pid = chartId.trim();
+        const encFromServer = activeEncounterIdByPatientId?.get(pid)?.trim();
+        const encFromSession = session?.encounterId?.trim();
+        const encounterId = encFromServer || encFromSession || '';
+        const qs = new URLSearchParams();
+        qs.set('patientId', pid);
+        if (encounterId) qs.set('encounterId', encounterId);
+        navigate(`/app/inpatient/discharge-readiness?${qs.toString()}`);
     };
 
     const btnClass =
@@ -129,10 +145,12 @@ function InpatientAdtCell({
                 title={
                     !bedReadyForDischarge && encounterReady && !dischargePending
                         ? 'No bed linked to this encounter — refresh the chart'
-                        : 'Discharge'
+                        : dischargePending
+                          ? 'Continue discharge readiness'
+                          : 'Start discharge'
                 }
                 disabled={!encounterReady || (!bedReadyForDischarge && !dischargePending)}
-                onClick={open('discharge')}
+                onClick={startDischarge}
                 className={btnClass}
             >
                 <DoorOpen className="h-3.5 w-3.5" aria-hidden />
@@ -157,7 +175,12 @@ function InpatientAdtCell({
     );
 }
 
-export function PatientTableRow({ patient, serverActivePatientIds, onOpenAdt }: PatientRowProps) {
+export function PatientTableRow({
+    patient,
+    serverActivePatientIds,
+    activeEncounterIdByPatientId,
+    onOpenAdt,
+}: PatientRowProps) {
     const navigate = useNavigate();
     const chartId = getPatientListRowId(patient);
 
@@ -224,6 +247,7 @@ export function PatientTableRow({ patient, serverActivePatientIds, onOpenAdt }: 
                     patient={patient}
                     chartId={chartId}
                     serverActivePatientIds={serverActivePatientIds}
+                    activeEncounterIdByPatientId={activeEncounterIdByPatientId}
                     onOpenAdt={onOpenAdt}
                 />
             </td>
@@ -257,7 +281,12 @@ export function PatientTableRow({ patient, serverActivePatientIds, onOpenAdt }: 
     );
 }
 
-export function PatientMobileCard({ patient, serverActivePatientIds, onOpenAdt }: PatientRowProps) {
+export function PatientMobileCard({
+    patient,
+    serverActivePatientIds,
+    activeEncounterIdByPatientId,
+    onOpenAdt,
+}: PatientRowProps) {
     const navigate = useNavigate();
     const chartId = getPatientListRowId(patient);
 
@@ -322,6 +351,7 @@ export function PatientMobileCard({ patient, serverActivePatientIds, onOpenAdt }
                                 patient={patient}
                                 chartId={chartId}
                                 serverActivePatientIds={serverActivePatientIds}
+                                activeEncounterIdByPatientId={activeEncounterIdByPatientId}
                                 onOpenAdt={onOpenAdt}
                                 layout="inline"
                             />

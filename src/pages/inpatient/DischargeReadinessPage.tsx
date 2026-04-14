@@ -29,14 +29,18 @@ import {
 import type { DischargeReadinessView } from '../../types/dischargeReadiness';
 import { DischargeReadinessProvider } from '../../contexts/DischargeReadinessContext';
 import { DischargeReadinessHeader } from '../../components/ipd/discharge/DischargeReadinessHeader';
+import { DischargeReadinessCommandStrip } from '../../components/ipd/discharge/DischargeReadinessCommandStrip';
+import { DischargeReadinessBlockingAlert } from '../../components/ipd/discharge/DischargeReadinessBlockingAlert';
+import {
+    DischargeReadinessTabStrip,
+    type DischargeWorkspaceTabId,
+} from '../../components/ipd/discharge/DischargeReadinessTabStrip';
 import { DischargeSummaryTab } from '../../components/ipd/discharge/DischargeSummaryTab';
 import { NursingChecklistTab } from '../../components/ipd/discharge/NursingChecklistTab';
 import { ChargeCaptureTab } from '../../components/ipd/discharge/ChargeCaptureTab';
 import { EligibilityTab } from '../../components/ipd/discharge/EligibilityTab';
 import { BillingTab } from '../../components/ipd/discharge/BillingTab';
 import { providerDisplayNameFromUser, providerSignUserIdFromUser } from '../../utils/dischargeReadinessUser';
-
-type TabId = 'summary' | 'checklist' | 'charges' | 'insurance' | 'billing';
 
 function encounterSearchKeywords(enc: ActiveEncounterRow): string {
     const bed = enc.currentBedId != null ? String(enc.currentBedId) : '';
@@ -75,8 +79,8 @@ function DischargeReadinessLoaded({
     eid: string;
     view: DischargeReadinessView;
     setView: Dispatch<SetStateAction<DischargeReadinessView | null>>;
-    tab: TabId;
-    setTab: React.Dispatch<React.SetStateAction<TabId>>;
+    tab: DischargeWorkspaceTabId;
+    setTab: React.Dispatch<React.SetStateAction<DischargeWorkspaceTabId>>;
     canPhysician: boolean;
     providerSignUserId: string;
     dischargeSignDisabledExplanation: string | null;
@@ -85,183 +89,179 @@ function DischargeReadinessLoaded({
     canNursing: boolean;
     canBilling: boolean;
 }) {
-    const tabButtons: { id: TabId; label: string }[] = [
-        { id: 'summary', label: 'Summary' },
-        { id: 'checklist', label: 'Checklist' },
-        { id: 'charges', label: 'Charges' },
-        { id: 'insurance', label: 'Insurance' },
-        { id: 'billing', label: 'Billing' },
-    ];
-
     return (
         <DischargeReadinessProvider encounterId={eid} view={view} setView={setView}>
-            <DischargeReadinessHeader view={view} />
+            <div className="space-y-4">
+                <div className="panel p-6">
+                    <DischargeReadinessCommandStrip />
+                </div>
 
-            <div className="panel p-4">
-                <div className="mb-4 flex flex-col gap-3 border-b border-gray-200 pb-2 dark:border-gray-700 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                    <div className="flex flex-wrap gap-2">
-                        {tabButtons.map((b) => (
-                            <button
-                                key={b.id}
-                                type="button"
-                                className={`rounded px-3 py-1 text-sm ${
-                                    tab === b.id ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'
-                                }`}
-                                onClick={() => setTab(b.id)}
-                            >
-                                {b.label}
-                            </button>
-                        ))}
+                <div className="panel space-y-4 p-4 sm:p-6">
+                    <DischargeReadinessBlockingAlert />
+                    <DischargeReadinessHeader view={view} />
+
+                    <div className="rounded-2xl border border-gray-200/90 bg-white p-6 shadow-md dark:border-gray-700 dark:bg-gray-900/50 sm:p-8">
+                    <div className="mb-2">
+                        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Discharge workspace</h2>
+                        <p className="mt-1 max-w-3xl text-sm text-gray-600 dark:text-gray-400">
+                            Review documentation, operational tasks, charges, eligibility, and billing. Finalize only when all gates are
+                            satisfied.
+                        </p>
+                    </div>
+
+                    <DischargeReadinessTabStrip tab={tab} setTab={setTab} />
+
+                    <div className="mt-8 space-y-8">
+                        <div className={tab === 'summary' ? '' : 'hidden'} aria-hidden={tab !== 'summary'}>
+                            <DischargeSummaryTab
+                                summary={view.summary}
+                                canEdit={canPhysician}
+                                canSign={canPhysician}
+                                signDisabledExplanation={dischargeSignDisabledExplanation}
+                                onSaveDraft={async (partial) => {
+                                    const res = await saveDischargeSummaryDraft(eid, partial);
+                                    if (!res.ok) {
+                                        toast.error(res.message);
+                                        return false;
+                                    }
+                                    setView(res.data);
+                                    toast.success('Summary saved');
+                                    return true;
+                                }}
+                                onSign={async () => {
+                                    if (!canSignPhysicianNote(rolesNorm)) {
+                                        toast.error('Only a provider can sign the discharge summary.');
+                                        return false;
+                                    }
+                                    const signedBy = providerSignUserId;
+                                    if (!signedBy) {
+                                        toast.error('Provider identity is missing; cannot sign.');
+                                        return false;
+                                    }
+                                    const signedByName = providerDisplayNameFromUser(user);
+                                    const payload = {
+                                        encounterId: eid,
+                                        signedBy,
+                                        signedByName,
+                                        signedAt: new Date().toISOString(),
+                                    };
+                                    const res = await signDischargeSummary(eid, payload);
+                                    if (!res.ok) {
+                                        toast.error(res.message);
+                                        return false;
+                                    }
+                                    setView(res.data);
+                                    const rawName = signedByName.trim() || 'Provider';
+                                    const withDr = /^dr\.?\s/i.test(rawName) ? rawName : `Dr. ${rawName}`;
+                                    toast.success(`Signed by ${withDr} on ${new Date(payload.signedAt).toLocaleString()}`);
+                                    return true;
+                                }}
+                            />
+                        </div>
+
+                        <div className={tab === 'checklist' ? '' : 'hidden'} aria-hidden={tab !== 'checklist'}>
+                            <NursingChecklistTab
+                                tasks={view.checklist}
+                                canEdit={canNursing}
+                                onUpdateTask={async (taskId, patch) => {
+                                    const res = await updateChecklistTask(eid, taskId, patch);
+                                    if (!res.ok) {
+                                        toast.error(res.message);
+                                        return false;
+                                    }
+                                    setView(res.data);
+                                    return true;
+                                }}
+                            />
+                        </div>
+
+                        <div className={tab === 'charges' ? '' : 'hidden'} aria-hidden={tab !== 'charges'}>
+                            <ChargeCaptureTab
+                                charges={view.charges}
+                                canEdit={canBilling}
+                                onUpdateCharge={async (chargeId, patch) => {
+                                    const res = await updateChargeLine(eid, chargeId, patch);
+                                    if (!res.ok) {
+                                        toast.error(res.message);
+                                        return false;
+                                    }
+                                    setView(res.data);
+                                    return true;
+                                }}
+                                onAddCharge={async (line) => {
+                                    const res = await addChargeLine(eid, line);
+                                    if (!res.ok) {
+                                        toast.error(res.message);
+                                        return false;
+                                    }
+                                    setView(res.data);
+                                    toast.success('Charge added');
+                                    return true;
+                                }}
+                                onDeleteCharge={async (chargeId) => {
+                                    const res = await deleteChargeLine(eid, chargeId);
+                                    if (!res.ok) {
+                                        toast.error(res.message);
+                                        return false;
+                                    }
+                                    setView(res.data);
+                                    toast.success('Charge removed');
+                                    return true;
+                                }}
+                            />
+                        </div>
+
+                        <div className={tab === 'insurance' ? '' : 'hidden'} aria-hidden={tab !== 'insurance'}>
+                            <EligibilityTab
+                                history={view.eligibilityHistory}
+                                canRun={canBilling}
+                                onRunCheck={async () => {
+                                    const res = await runEligibilityCheck(eid);
+                                    if (!res.ok) {
+                                        return { ok: false as const, message: res.message };
+                                    }
+                                    setView(res.data);
+                                    toast.success('Eligibility check completed');
+                                    return { ok: true as const };
+                                }}
+                            />
+                        </div>
+
+                        <div className={tab === 'billing' ? '' : 'hidden'} aria-hidden={tab !== 'billing'}>
+                            <BillingTab
+                                claimPrep={view.claimPrep}
+                                billingReady={view.billingReady}
+                                canEdit={canBilling}
+                                onSaveClaimPrep={async (patch) => {
+                                    const res = await updateClaimPrep(eid, patch);
+                                    if (!res.ok) {
+                                        toast.error(res.message);
+                                        return false;
+                                    }
+                                    setView(res.data);
+                                    toast.success('Claim prep updated');
+                                    return true;
+                                }}
+                                onSubmitClaim={async () => {
+                                    try {
+                                        const res = await submitClaimPrep(eid);
+                                        if (!res.ok) {
+                                            toast.error(res.message);
+                                            return false;
+                                        }
+                                        setView(res.data);
+                                        toast.success('Claim submitted');
+                                        return true;
+                                    } catch {
+                                        toast.error('Could not submit claim. Please try again.');
+                                        return false;
+                                    }
+                                }}
+                            />
+                        </div>
                     </div>
                 </div>
-
-                <div className={tab === 'summary' ? '' : 'hidden'} aria-hidden={tab !== 'summary'}>
-                    <DischargeSummaryTab
-                        summary={view.summary}
-                        canEdit={canPhysician}
-                        canSign={canPhysician}
-                        signDisabledExplanation={dischargeSignDisabledExplanation}
-                        onSaveDraft={async (partial) => {
-                            const res = await saveDischargeSummaryDraft(eid, partial);
-                            if (!res.ok) {
-                                toast.error(res.message);
-                                return false;
-                            }
-                            setView(res.data);
-                            toast.success('Summary saved');
-                            return true;
-                        }}
-                        onSign={async () => {
-                            if (!canSignPhysicianNote(rolesNorm)) {
-                                toast.error('Only a provider can sign the discharge summary.');
-                                return false;
-                            }
-                            const signedBy = providerSignUserId;
-                            if (!signedBy) {
-                                toast.error('Provider identity is missing; cannot sign.');
-                                return false;
-                            }
-                            const signedByName = providerDisplayNameFromUser(user);
-                            const payload = {
-                                encounterId: eid,
-                                signedBy,
-                                signedByName,
-                                signedAt: new Date().toISOString(),
-                            };
-                            const res = await signDischargeSummary(eid, payload);
-                            if (!res.ok) {
-                                toast.error(res.message);
-                                return false;
-                            }
-                            setView(res.data);
-                            const rawName = signedByName.trim() || 'Provider';
-                            const withDr = /^dr\.?\s/i.test(rawName) ? rawName : `Dr. ${rawName}`;
-                            toast.success(`Signed by ${withDr} on ${new Date(payload.signedAt).toLocaleString()}`);
-                            return true;
-                        }}
-                    />
-                </div>
-
-                <div className={tab === 'checklist' ? '' : 'hidden'} aria-hidden={tab !== 'checklist'}>
-                    <NursingChecklistTab
-                        tasks={view.checklist}
-                        canEdit={canNursing}
-                        onUpdateTask={async (taskId, patch) => {
-                            const res = await updateChecklistTask(eid, taskId, patch);
-                            if (!res.ok) {
-                                toast.error(res.message);
-                                return false;
-                            }
-                            setView(res.data);
-                            return true;
-                        }}
-                    />
-                </div>
-
-                <div className={tab === 'charges' ? '' : 'hidden'} aria-hidden={tab !== 'charges'}>
-                    <ChargeCaptureTab
-                        charges={view.charges}
-                        canEdit={canBilling}
-                        onUpdateCharge={async (chargeId, patch) => {
-                            const res = await updateChargeLine(eid, chargeId, patch);
-                            if (!res.ok) {
-                                toast.error(res.message);
-                                return false;
-                            }
-                            setView(res.data);
-                            return true;
-                        }}
-                        onAddCharge={async (line) => {
-                            const res = await addChargeLine(eid, line);
-                            if (!res.ok) {
-                                toast.error(res.message);
-                                return false;
-                            }
-                            setView(res.data);
-                            toast.success('Charge added');
-                            return true;
-                        }}
-                        onDeleteCharge={async (chargeId) => {
-                            const res = await deleteChargeLine(eid, chargeId);
-                            if (!res.ok) {
-                                toast.error(res.message);
-                                return false;
-                            }
-                            setView(res.data);
-                            toast.success('Charge removed');
-                            return true;
-                        }}
-                    />
-                </div>
-
-                <div className={tab === 'insurance' ? '' : 'hidden'} aria-hidden={tab !== 'insurance'}>
-                    <EligibilityTab
-                        history={view.eligibilityHistory}
-                        canRun={canBilling}
-                        onRunCheck={async () => {
-                            const res = await runEligibilityCheck(eid);
-                            if (!res.ok) {
-                                return { ok: false as const, message: res.message };
-                            }
-                            setView(res.data);
-                            toast.success('Eligibility check completed');
-                            return { ok: true as const };
-                        }}
-                    />
-                </div>
-
-                <div className={tab === 'billing' ? '' : 'hidden'} aria-hidden={tab !== 'billing'}>
-                    <BillingTab
-                        claimPrep={view.claimPrep}
-                        billingReady={view.billingReady}
-                        canEdit={canBilling}
-                        onSaveClaimPrep={async (patch) => {
-                            const res = await updateClaimPrep(eid, patch);
-                            if (!res.ok) {
-                                toast.error(res.message);
-                                return false;
-                            }
-                            setView(res.data);
-                            toast.success('Claim prep updated');
-                            return true;
-                        }}
-                        onSubmitClaim={async () => {
-                            try {
-                                const res = await submitClaimPrep(eid);
-                                if (!res.ok) {
-                                    toast.error(res.message);
-                                    return false;
-                                }
-                                setView(res.data);
-                                toast.success('Claim submitted');
-                                return true;
-                            } catch {
-                                toast.error('Could not submit claim. Please try again.');
-                                return false;
-                            }
-                        }}
-                    />
-                </div>
+            </div>
             </div>
         </DischargeReadinessProvider>
     );
@@ -281,7 +281,7 @@ export default function DischargeReadinessPage() {
     const canBilling = canBillingFinancialActions(rolesNorm);
     const providerSignUserId = useMemo(() => providerSignUserIdFromUser(user), [user]);
 
-    const [tab, setTab] = useState<TabId>('summary');
+    const [tab, setTab] = useState<DischargeWorkspaceTabId>('summary');
     const [view, setView] = useState<DischargeReadinessView | null>(null);
     const [loading, setLoading] = useState(false);
 
@@ -390,23 +390,6 @@ export default function DischargeReadinessPage() {
             <div className="grid gap-4 md:grid-cols-2">
                 <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Patient</label>
-                    {/* <select
-                        className="h-10 w-full max-w-md rounded-md border border-gray-300 bg-white px-3 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-900"
-                        value={patientId}
-                        disabled={patientsLoading}
-                        onChange={(e) => setPatientSelection(e.target.value)}
-                    >
-                        <option value="">{patientsLoading ? 'Loading patients…' : 'Select patient…'}</option>
-                        {patientId && !patientInList ? (
-                            <option value={patientId}>Current selection (not in list) · {patientId.slice(-10)}…</option>
-                        ) : null}
-                        {patients.map((p) => (
-                            <option key={p.id} value={p.id}>
-                                {p.name}
-                                {p.mrn ? ` · MRN ${p.mrn}` : ''}
-                            </option>
-                        ))}
-                    </select> */}
                     <div className="w-full">
                         <SearchableSelect
                             allowEmpty
@@ -436,7 +419,7 @@ export default function DischargeReadinessPage() {
                 </div>
                 <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Encounter</label>
-                 
+
                     <div className="w-full">
                         <SearchableSelect
                             allowEmpty
@@ -494,13 +477,15 @@ export default function DischargeReadinessPage() {
     if (!eid) {
         return (
             <div className="space-y-4">
-                <div className="panel p-6">
-                    <h1 className="mb-2 text-xl font-semibold text-gray-900 dark:text-white">Discharge &amp; billing readiness</h1>
-                    <p className="mb-4 max-w-3xl text-sm text-gray-600 dark:text-gray-400">
-                        Choose a patient and an <strong>active</strong> inpatient encounter, or pass <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">encounterId</code> in the query string (mock data seeds for any id). This hub covers discharge summary, nursing checklist, charges,
-                        insurance eligibility, and claim preparation — without changing the separate ADT discharge action on the dashboard.
+                <div className="panel p-8">
+                    <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Discharge &amp; billing readiness</h1>
+                    <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+                        Choose a patient and an <strong>active</strong> inpatient encounter, or pass{' '}
+                        <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs dark:bg-gray-800">encounterId</code> in the query string.
+                        This hub covers discharge summary, nursing checklist, charges, insurance eligibility, claim preparation, and the{' '}
+                        <strong>only</strong> authorized ADT discharge finalization for the encounter.
                     </p>
-                    {renderPatientEncounterForm()}
+                    <div className="mt-8">{renderPatientEncounterForm()}</div>
                 </div>
             </div>
         );
@@ -509,8 +494,8 @@ export default function DischargeReadinessPage() {
     return (
         <div className="space-y-4">
             {loading && !view ? (
-                <div className="panel flex items-center gap-2 p-6 text-sm text-gray-600 dark:text-gray-400">
-                    <Loader2 className="h-5 w-5 animate-spin text-primary" aria-hidden />
+                <div className="flex items-center gap-3 py-8 text-sm text-gray-600 dark:text-gray-400">
+                    <Loader2 className="h-5 w-5 shrink-0 animate-spin text-primary" aria-hidden />
                     Loading readiness…
                 </div>
             ) : null}
@@ -531,7 +516,11 @@ export default function DischargeReadinessPage() {
                     canBilling={canBilling}
                 />
             ) : !loading ? (
-                <div className="panel p-6 text-sm text-red-600">Could not load readiness for this encounter.</div>
+                <div className="panel p-4">
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+                        Could not load readiness for this encounter.
+                    </div>
+                </div>
             ) : null}
         </div>
     );

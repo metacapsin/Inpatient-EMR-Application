@@ -1,22 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDispatch, useSelector } from 'react-redux';
-import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Hospital } from 'lucide-react';
 import { usePatientId } from '../../../hooks/usePatientId';
 import type { AdmissionType } from '../../../types/adt';
 import {
     activeEncounterRowsToAdtMergePayload,
-    adtApi,
     formatAdtUserMessage,
-    hasValidAdtBedForDischarge,
     listActiveEncounters,
-    resolveBedMongoIdAfterAdmit,
 } from '../../../services/adt.service';
+import { admitPatient, transferPatient } from '../../../services/adtWorkflowService';
+import { invalidateAdtSurfaces } from '../../../lib/adtInvalidate';
 import { fetchEmrBedList, filterAvailableBeds, type EmrBedListItem } from '../../../services/emrBeds.service';
 import { LabeledDropdown } from '../../../components/shared/LabeledDropdown';
-import { AppModal } from '../../../components/shared/AppModal';
 import { bedOptionsForSelect, bedStatusIndicatorClass } from '../../../lib/adtBedPicker';
 import { AdtPatientQuickSearch } from '../../../components/adt/AdtPatientQuickSearch';
 import type { AppDispatch, IRootState } from '../../../store';
@@ -25,9 +23,6 @@ import {
     clearAdtEncounter,
     mergeActiveEncountersFromServer,
     selectAdtEncounter,
-    setAdtAfterAdmit,
-    setAdtCurrentBed,
-    setAdtDischargeInitiated,
     setAdtEncounter,
 } from '../../../store/adtEncounterSlice';
 
@@ -87,6 +82,8 @@ const AdtModulePage = () => {
     const session = useSelector((s: IRootState) => selectAdtEncounter(s, patientId));
     const adtSession = session?.encounterId?.trim() ? session : null;
 
+    const ctx = useMemo(() => ({ dispatch, queryClient }), [dispatch, queryClient]);
+
     useEffect(() => {
         if (isFacesheetAdt) return;
         const pid = patientId?.trim();
@@ -111,10 +108,6 @@ const AdtModulePage = () => {
     const [transferBedId, setTransferBedId] = useState('');
     const [transferReason, setTransferReason] = useState('');
 
-    const [disposition, setDisposition] = useState('');
-    const [dischargeSummary, setDischargeSummary] = useState('');
-    const [confirmDischargeOpen, setConfirmDischargeOpen] = useState(false);
-
     const [manualEncounterId, setManualEncounterId] = useState('');
     const [showManualEncounter, setShowManualEncounter] = useState(false);
 
@@ -137,12 +130,7 @@ const AdtModulePage = () => {
     const refreshPatient = () => {
         const pid = patientId?.trim();
         if (pid) void dispatch(fetchFacesheetPatient(pid));
-        void queryClient.invalidateQueries({ queryKey: ['beds', 'emr-list'] });
-        void queryClient.invalidateQueries({ queryKey: ['patient-placement'] });
-        void queryClient.invalidateQueries({ queryKey: ['settings', 'facility'] });
-        void queryClient.invalidateQueries({ queryKey: ['facility'] });
-        void queryClient.invalidateQueries({ queryKey: ['liveBedBoard'] });
-        void queryClient.invalidateQueries({ queryKey: ['activeEncounters'] });
+        invalidateAdtSurfaces(queryClient);
     };
 
     const admitMutation = useMutation({
@@ -158,7 +146,7 @@ const AdtModulePage = () => {
                 ...(attendingPhysicianId.trim() ? { attendingPhysicianId: attendingPhysicianId.trim() } : {}),
                 ...(diagnosis.trim() ? { diagnosis: diagnosis.trim() } : {}),
             };
-            return adtApi.admit(body);
+            return admitPatient(ctx, body);
         },
         onSuccess: (result) => {
             if (!patientId?.trim()) return;
@@ -166,20 +154,10 @@ const AdtModulePage = () => {
                 toast.error(formatAdtUserMessage(result));
                 return;
             }
-            const encId = result.data.encounter?.id;
-            if (!encId) {
+            if (!result.data.encounter?.id) {
                 toast.error('Admission succeeded but no encounter id was returned.');
                 return;
             }
-            const encObj = result.data.encounter as Record<string, unknown> | undefined;
-            const bedMongoId = resolveBedMongoIdAfterAdmit(encObj, admitTargetBedId.trim());
-            dispatch(
-                setAdtAfterAdmit({
-                    patientId: patientId.trim(),
-                    encounterId: encId,
-                    bedMongoId,
-                })
-            );
             toast.success(result.message || 'Patient admitted');
             refreshPatient();
             navigate(BED_BOARD_PATH);
@@ -191,16 +169,19 @@ const AdtModulePage = () => {
 
     const transferMutation = useMutation({
         mutationFn: async () => {
+            const pid = patientId?.trim();
+            if (!pid) throw new Error('No patient in context');
             if (!adtSession?.encounterId) throw new Error('No active encounter in this workspace');
             const newBedId = transferTargetBedId.trim();
             if (!newBedId) throw new Error('Select an available destination bed.');
             if (adtSession.currentBedMongoId && newBedId === adtSession.currentBedMongoId.trim()) {
                 throw new Error('Choose a different bed than the current assignment.');
             }
-            return adtApi.transfer({
+            return transferPatient(ctx, {
                 encounterId: adtSession.encounterId,
                 newBedId,
                 ...(transferReason.trim() ? { reason: transferReason.trim() } : {}),
+                patientId: pid,
             });
         },
         onSuccess: (result) => {
@@ -208,16 +189,6 @@ const AdtModulePage = () => {
             if (!result.ok) {
                 toast.error(formatAdtUserMessage(result));
                 return;
-            }
-            const nextBed = result.data.currentBedId?.trim() || transferTargetBedId.trim();
-            if (nextBed) {
-                dispatch(
-                    setAdtCurrentBed({
-                        patientId: patientId.trim(),
-                        bedMongoId: nextBed,
-                        fromTransfer: true,
-                    })
-                );
             }
             toast.success(result.message || 'Transfer completed');
             setTransferBedId('');
@@ -227,69 +198,6 @@ const AdtModulePage = () => {
         },
         onError: (e: unknown) => {
             toast.error(e instanceof Error ? e.message : 'Transfer failed');
-        },
-    });
-
-    const dischargeInitMutation = useMutation({
-        mutationFn: async () => {
-            const encounterId = adtSession?.encounterId;
-            if (!encounterId) throw new Error('No active encounter in this workspace');
-            if (!hasValidAdtBedForDischarge(adtSession)) {
-                throw new Error(
-                    'No bed is linked to this encounter in the workspace. Refresh the chart or open the patient from the bed board, then try again.'
-                );
-            }
-            console.info('[adt] discharge initiate request', {
-                encounterId,
-                currentBedMongoId: adtSession.currentBedMongoId?.trim() ?? null,
-            });
-            const result = await adtApi.dischargeInitiate(
-                encounterId,
-                disposition.trim() || undefined,
-                dischargeSummary.trim() || undefined
-            );
-            return { result, encounterId };
-        },
-        onSuccess: ({ result, encounterId }) => {
-            if (!patientId?.trim()) return;
-            if (!result.ok) {
-                toast.error(formatAdtUserMessage(result));
-                return;
-            }
-            dispatch(setAdtDischargeInitiated({ patientId: patientId.trim(), encounterId }));
-            toast.success(result.message || 'Discharge initiated');
-            refreshPatient();
-        },
-        onError: (e: unknown) => {
-            toast.error(e instanceof Error ? e.message : 'Could not initiate discharge');
-        },
-    });
-
-    const dischargeConfirmMutation = useMutation({
-        mutationFn: async () => {
-            if (!adtSession?.encounterId) throw new Error('No active encounter in this workspace');
-            console.info('[adt] discharge confirm request', {
-                encounterId: adtSession.encounterId,
-                currentBedMongoId: adtSession.currentBedMongoId?.trim() ?? null,
-            });
-            return adtApi.dischargeConfirm(adtSession.encounterId);
-        },
-        onSuccess: (result) => {
-            if (!patientId?.trim()) return;
-            if (!result.ok) {
-                toast.error(formatAdtUserMessage(result));
-                return;
-            }
-            dispatch(clearAdtEncounter({ patientId: patientId.trim() }));
-            setConfirmDischargeOpen(false);
-            setDisposition('');
-            setDischargeSummary('');
-            toast.success(result.message || 'Discharge confirmed');
-            refreshPatient();
-            navigate(BED_BOARD_PATH);
-        },
-        onError: (e: unknown) => {
-            toast.error(e instanceof Error ? e.message : 'Could not confirm discharge');
         },
     });
 
@@ -334,13 +242,12 @@ const AdtModulePage = () => {
     const admitOptions = bedOptionsForSelect(beds, { onlyAvailable: true });
     const transferOptions = bedOptionsForSelect(beds, { onlyAvailable: true, excludeId: currentBedId || undefined });
 
-    const bedReadyForDischarge = hasValidAdtBedForDischarge(adtSession);
+    const busy = admitMutation.isPending || transferMutation.isPending;
 
-    const busy =
-        admitMutation.isPending ||
-        transferMutation.isPending ||
-        dischargeInitMutation.isPending ||
-        dischargeConfirmMutation.isPending;
+    const dischargeQs = new URLSearchParams();
+    dischargeQs.set('patientId', patientId.trim());
+    if (adtSession?.encounterId) dischargeQs.set('encounterId', adtSession.encounterId);
+    const dischargeReadinessHref = `/app/inpatient/discharge-readiness?${dischargeQs.toString()}`;
 
     const sectionClass =
         'space-y-3 border-b border-gray-100 pb-6 last:border-b-0 last:pb-0 dark:border-white/[0.08]';
@@ -355,7 +262,8 @@ const AdtModulePage = () => {
                     <div className="min-w-0">
                         <h2 className="text-base font-semibold text-gray-900 dark:text-white">ADT workspace</h2>
                         <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                            Encounter state is stored in this browser (Redux). Use the chart header for quick admit / transfer / discharge.
+                            Admit and transfer here. Discharge is finalized only from Discharge &amp; billing readiness after clinical
+                            gates pass. Encounter context syncs from the server when you open this page.
                         </p>
                     </div>
                 </div>
@@ -383,7 +291,7 @@ const AdtModulePage = () => {
                                 <span className="font-mono text-[11px]">{adtSession.encounterId}</span>
                                 {adtSession.dischargeInitiated ? (
                                     <span className="ml-2 inline-flex rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-100">
-                                        Discharge pending confirm
+                                        Discharge initiated
                                     </span>
                                 ) : adtSession.lastPlacementAction === 'transfer' ? (
                                     <span className="ml-2 inline-flex rounded-md bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-900 dark:text-sky-100">
@@ -533,7 +441,9 @@ const AdtModulePage = () => {
                             Destination must be available. Occupied beds are excluded when the current bed is known.
                         </p>
                         {adtSession.dischargeInitiated ? (
-                            <p className="text-sm text-amber-800 dark:text-amber-200">Complete or confirm discharge before transferring.</p>
+                            <p className="text-sm text-amber-800 dark:text-amber-200">
+                                Discharge is in progress — complete readiness and finalization before transferring.
+                            </p>
                         ) : null}
                         {transferSameBed ? (
                             <p className="text-sm text-red-700 dark:text-red-300">Select a bed different from the current assignment.</p>
@@ -582,95 +492,18 @@ const AdtModulePage = () => {
                     <section className={sectionClass}>
                         <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Discharge</h3>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                            Initiate discharge, then confirm to complete. Confirm stays disabled until initiate succeeds.
+                            Hospital discharge is a controlled workflow: clinical readiness, billing clearance, then a single ADT finalize
+                            action. Use the dedicated hub below (same route as chart &quot;Start discharge&quot;).
                         </p>
-                        {!adtSession.dischargeInitiated && !bedReadyForDischarge ? (
-                            <p className="text-sm text-amber-800 dark:text-amber-200">
-                                A bed must be linked to this encounter before discharge (sync from the chart header, patient list, or bed
-                                board). Manual encounter links do not include a bed until the server reports one.
-                            </p>
-                        ) : null}
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-800 dark:text-gray-200" htmlFor="adt-disposition">
-                                    Disposition (optional)
-                                </label>
-                                <input
-                                    id="adt-disposition"
-                                    value={disposition}
-                                    onChange={(e) => setDisposition(e.target.value)}
-                                    disabled={adtSession.dischargeInitiated || busy}
-                                    className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm disabled:opacity-60 dark:border-white/12 dark:bg-[#1a1816]"
-                                    placeholder="e.g. home"
-                                />
-                            </div>
-                            <div className="space-y-2 sm:col-span-2">
-                                <label className="text-sm font-medium text-gray-800 dark:text-gray-200" htmlFor="adt-summary">
-                                    Discharge summary (optional)
-                                </label>
-                                <textarea
-                                    id="adt-summary"
-                                    value={dischargeSummary}
-                                    onChange={(e) => setDischargeSummary(e.target.value)}
-                                    disabled={adtSession.dischargeInitiated || busy}
-                                    rows={3}
-                                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-white/12 dark:bg-[#1a1816]"
-                                />
-                            </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            <button
-                                type="button"
-                                disabled={busy || adtSession.dischargeInitiated || !bedReadyForDischarge}
-                                onClick={() => dischargeInitMutation.mutate()}
-                                className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:pointer-events-none disabled:opacity-50"
-                            >
-                                {dischargeInitMutation.isPending ? 'Working…' : 'Initiate discharge'}
-                            </button>
-                            <button
-                                type="button"
-                                disabled={busy || !adtSession.dischargeInitiated}
-                                onClick={() => setConfirmDischargeOpen(true)}
-                                className="inline-flex h-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-900 transition hover:bg-red-100 disabled:pointer-events-none disabled:opacity-50 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100 dark:hover:bg-red-950/60"
-                            >
-                                Confirm discharge
-                            </button>
-                        </div>
+                        <Link
+                            to={dischargeReadinessHref}
+                            className="inline-flex h-9 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 px-4 text-sm font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100 dark:border-amber-900/45 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-950/60"
+                        >
+                            Open discharge &amp; billing readiness
+                        </Link>
                     </section>
                 </>
             )}
-
-            <AppModal
-                open={confirmDischargeOpen}
-                onClose={() => !dischargeConfirmMutation.isPending && setConfirmDischargeOpen(false)}
-                title="Confirm discharge"
-                description="This releases the bed and completes the encounter on the server. This action cannot be undone from this screen."
-                size="sm"
-                footer={
-                    <div className="flex flex-wrap justify-end gap-2">
-                        <button
-                            type="button"
-                            disabled={dischargeConfirmMutation.isPending}
-                            onClick={() => setConfirmDischargeOpen(false)}
-                            className="inline-flex min-h-[40px] items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-800 dark:border-white/15 dark:bg-[#1a2332] dark:text-gray-100"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="button"
-                            disabled={dischargeConfirmMutation.isPending}
-                            onClick={() => dischargeConfirmMutation.mutate()}
-                            className="inline-flex min-h-[40px] items-center justify-center rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-95"
-                        >
-                            {dischargeConfirmMutation.isPending ? 'Confirming…' : 'Confirm discharge'}
-                        </button>
-                    </div>
-                }
-            >
-                <p className="text-sm text-gray-600 dark:text-gray-300">
-                    Encounter <span className="font-mono text-xs">{session?.encounterId}</span>
-                </p>
-            </AppModal>
         </div>
     );
 };

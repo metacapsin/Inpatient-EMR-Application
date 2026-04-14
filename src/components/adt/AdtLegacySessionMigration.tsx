@@ -45,6 +45,11 @@ export function AdtLegacySessionMigration() {
         if (Object.keys(merge).length) {
             dispatch(hydrateAdtEncounters(merge));
         }
+        try {
+            localStorage.removeItem('emr.adt.encounters.v1');
+        } catch {
+            /* ignore */
+        }
     }, [dispatch]);
 
     return null;

@@ -4,8 +4,6 @@ import { extractIdString } from '../lib/apiPayload';
 import api from './api';
 
 const IPD_PATH = '/dashboard/ipd';
-const TRANSFER_PATH = '/encounters/transfer';
-const DISCHARGE_PATH = '/encounters/discharge';
 
 function num(v: unknown, fallback = 0): number {
     if (typeof v === 'number' && !Number.isNaN(v)) return v;
@@ -154,30 +152,3 @@ export async function fetchIpdDashboard(): Promise<FetchIpdDashboardResult> {
     }
 }
 
-export type EncounterActionResult = { ok: true; message?: string } | { ok: false; message: string };
-
-export async function postEncounterTransfer(body: {
-    encounterId: string;
-    newBedId: string;
-    reason?: string;
-}): Promise<EncounterActionResult> {
-    try {
-        await api.post(TRANSFER_PATH, body);
-        return { ok: true };
-    } catch (e) {
-        const ax = e as AxiosError<{ message?: string }>;
-        const message = ax.response?.data?.message || ax.message || 'Transfer failed';
-        return { ok: false, message };
-    }
-}
-
-export async function postEncounterDischarge(body: { encounterId: string }): Promise<EncounterActionResult> {
-    try {
-        await api.post(DISCHARGE_PATH, body);
-        return { ok: true };
-    } catch (e) {
-        const ax = e as AxiosError<{ message?: string }>;
-        const message = ax.response?.data?.message || ax.message || 'Discharge failed';
-        return { ok: false, message };
-    }
-}

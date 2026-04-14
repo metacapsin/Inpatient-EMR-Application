@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
 import { ChevronRight } from 'lucide-react';
@@ -50,6 +50,7 @@ function resolveStatus(session: ReturnType<typeof selectAdtEncounter>): {
 }
 
 export function EncounterHeader({ patient, patientListHref = '/app/patients/list' }: EncounterHeaderProps) {
+    const navigate = useNavigate();
     const [adtModal, setAdtModal] = useState<EncounterHeaderAdtModalState | null>(null);
     const session = useSelector((s: IRootState) => selectAdtEncounter(s, patient.id));
 
@@ -83,6 +84,14 @@ export function EncounterHeader({ patient, patientListHref = '/app/patients/list
     const bedReadyForDischarge = hasValidAdtBedForDischarge(session);
 
     const transferBlockedNoBeds = admitted && bedsQuery.isSuccess && availableBeds.length === 0;
+
+    const goDischargeReadiness = useCallback(() => {
+        const qs = new URLSearchParams();
+        qs.set('patientId', patient.id);
+        const eid = session?.encounterId?.trim();
+        if (eid) qs.set('encounterId', eid);
+        navigate(`/app/inpatient/discharge-readiness?${qs.toString()}`);
+    }, [navigate, patient.id, session?.encounterId]);
 
     return (
         <>
@@ -138,6 +147,7 @@ export function EncounterHeader({ patient, patientListHref = '/app/patients/list
                         transferBlockedNoBeds={transferBlockedNoBeds}
                         bedsFetchError={bedsQuery.isError}
                         onOpenAdt={setAdtModal}
+                        onStartDischarge={goDischargeReadiness}
                     />
                 </div>
             </header>
@@ -148,9 +158,6 @@ export function EncounterHeader({ patient, patientListHref = '/app/patients/list
                     patientId={patient.id}
                     patientLabel={patient.fullName}
                     intent={adtModal.intent}
-                    dischargeInitialStep={
-                        adtModal.intent === 'discharge' ? adtModal.dischargeInitialStep : undefined
-                    }
                     onClose={() => setAdtModal(null)}
                     facesheetPatientId={patient.id}
                 />
