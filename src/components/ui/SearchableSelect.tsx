@@ -1,148 +1,328 @@
-import * as React from "react";
-import * as SelectPrimitive from "@radix-ui/react-select";
-import { Search, X, ChevronDownIcon } from "lucide-react";
-import { Select, SelectItem, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 
-export interface SearchableSelectOption {
-  label: string;
-  value: string;
+export type SearchableSelectOption = {
+    value: string | number;
+    label: string;
+    /** Extra text used when filtering (MRN, id, bed, etc.) */
+    keywords?: string;
+};
+
+type ListRow =
+    | { kind: 'empty' }
+    | { kind: 'option'; option: SearchableSelectOption }
+    | { kind: 'noResults' };
+
+const DEFAULT_DEBOUNCE_MS = 300;
+
+function norm(s: string): string {
+    return s.trim().toLowerCase();
 }
 
-interface SearchableSelectProps {
-  value: string;
-  onValueChange: (value: string) => void;
-  options: SearchableSelectOption[];
-  placeholder?: string;
-  triggerClassName?: string;
-  searchPlaceholder?: string;
-  disabled?: boolean;
-  /** When "top", dropdown opens above the trigger. Default "bottom". */
-  side?: "top" | "bottom";
+function matchesQuery(option: SearchableSelectOption, query: string): boolean {
+    const q = norm(query);
+    if (!q) return true;
+    const hay = norm(`${option.label} ${option.keywords ?? ''}`);
+    return hay.includes(q);
 }
 
-const triggerBaseClasses =
-  "border-input data-[placeholder]:text-muted-foreground [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive bg-white dark:bg-[#1a2332] hover:bg-gray-50 dark:hover:bg-[#1f2a3a] flex items-center justify-between gap-2 rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm whitespace-nowrap shadow-sm transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:h-9 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
+export type SearchableSelectProps = {
+    id?: string;
+    options: SearchableSelectOption[];
+    /** Shown when URL (or similar) has a value not in `options` */
+    pinnedOptions?: SearchableSelectOption[];
+    value: string | number;
+    placeholder?: string;
+    onChange: (value: string | number) => void;
+    disabled?: boolean;
+    className?: string;
+    /** First row clears to empty string when chosen */
+    allowEmpty?: boolean;
+    /** Label for the clear row (e.g. "Select patient…") */
+    emptyRowLabel?: string;
+    /** Debounce applied to the filter string before matching (local or remote search) */
+    debounceMs?: number;
+    'aria-busy'?: boolean;
+};
 
-export function SearchableSelect({
-  value,
-  onValueChange,
-  options,
-  placeholder = "Select",
-  triggerClassName,
-  searchPlaceholder = "Search...",
-  disabled = false,
-  side = "bottom",
+export default function SearchableSelect({
+    id: idProp,
+    options,
+    pinnedOptions = [],
+    value,
+    placeholder = 'Select option',
+    onChange,
+    disabled = false,
+    className = '',
+    allowEmpty = true,
+    emptyRowLabel,
+    debounceMs = DEFAULT_DEBOUNCE_MS,
+    'aria-busy': ariaBusy,
 }: SearchableSelectProps) {
-  const [searchQuery, setSearchQuery] = React.useState("");
-  const [open, setOpen] = React.useState(false);
+    const reactId = useId();
+    const listboxId = idProp ?? `searchable-select-${reactId}`;
+    const inputId = `${listboxId}-input`;
 
-  const filteredOptions = React.useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return options;
-    const filtered = options.filter((o) => o.label.toLowerCase().includes(q));
-    const selectedOpt = value ? options.find((o) => o.value === value) : null;
-    if (selectedOpt && !filtered.some((o) => o.value === value)) {
-      return [selectedOpt, ...filtered];
-    }
-    return filtered;
-  }, [options, searchQuery, value]);
+    const [open, setOpen] = useState(false);
+    const [filter, setFilter] = useState('');
+    const [debouncedFilter, setDebouncedFilter] = useState('');
+    const [highlightedIndex, setHighlightedIndex] = useState(0);
 
-  const handleClearClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    onValueChange("");
-    setOpen(false);
-  };
+    const rootRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
 
-  const handleOpenChange = (o: boolean) => {
-    setOpen(o);
-    if (!o) setSearchQuery("");
-  };
+    useEffect(() => {
+        const t = window.setTimeout(() => setDebouncedFilter(filter), debounceMs);
+        return () => window.clearTimeout(t);
+    }, [filter, debounceMs]);
 
-  const selectValue = value === "" || value == null ? undefined : value;
-  const hasValue = Boolean(value);
+    const selectedInOptions = useMemo(() => {
+        const all = [...pinnedOptions, ...options];
+        return all.find((o) => o.value === value);
+    }, [pinnedOptions, options, value]);
 
-  return (
-    <div className="relative">
-      <Select
-        key={hasValue ? "has-value" : "empty"}
-        value={selectValue}
-        onValueChange={(v) => onValueChange(v ?? "")}
-        onOpenChange={handleOpenChange}
-        open={open}
-        disabled={disabled}
-      >
-        <SelectPrimitive.Trigger
-          className={cn(
-            triggerBaseClasses,
-            "w-full",
-            hasValue && "pr-8",
-            triggerClassName
-          )}
-          data-slot="select-trigger"
-          data-size="default"
-        >
-          <span className="min-w-0 flex-1 flex items-center">
-            <SelectValue placeholder={placeholder} />
-          </span>
-          <ChevronDownIcon className="size-4 opacity-50 shrink-0" aria-hidden />
-        </SelectPrimitive.Trigger>
-        <SelectPrimitive.Portal>
-        <SelectPrimitive.Content
-          className={cn(
-            "bg-white dark:bg-[#1a2332] text-gray-900 dark:text-gray-100 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 relative z-[200] w-[var(--radix-select-trigger-width)] min-w-[var(--radix-select-trigger-width)] max-w-[var(--radix-select-trigger-width)] origin-[var(--radix-select-content-transform-origin)] overflow-hidden rounded-md border border-gray-300 dark:border-gray-600 shadow-lg",
-            "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1"
-          )}
-          position="popper"
-          side={side}
-          sideOffset={4}
-        >
-          {/* Search field at top - border and icon match project primary theme */}
-          <div className="p-2 border-b border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-[#1f2a3a] sticky top-0">
-            <div className="relative">
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.stopPropagation()}
-                placeholder={searchPlaceholder}
-                className="h-9 pr-9 border-gray-300 dark:border-gray-600 bg-white dark:bg-[#1a2332] text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus-visible:ring-primary/50 focus-visible:border-primary/50"
-              />
-              <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 size-4 text-gray-500 dark:text-gray-400 pointer-events-none" />
-            </div>
-          </div>
-          <SelectPrimitive.Viewport
-            className={cn(
-              "p-1 max-h-60 overflow-y-auto overflow-x-hidden",
-              "w-full min-w-0 max-w-[var(--radix-select-trigger-width)]"
+    const emptyLabel = emptyRowLabel ?? placeholder;
+
+    const rows: ListRow[] = useMemo(() => {
+        const q = debouncedFilter;
+        const out: ListRow[] = [];
+        const qTrim = norm(q);
+
+        if (allowEmpty && !qTrim) {
+            out.push({ kind: 'empty' });
+        }
+
+        const pinFiltered = pinnedOptions.filter((o) => matchesQuery(o, q));
+        for (const o of pinFiltered) {
+            out.push({ kind: 'option', option: o });
+        }
+
+        const optFiltered = options.filter((o) => matchesQuery(o, q));
+        for (const o of optFiltered) {
+            out.push({ kind: 'option', option: o });
+        }
+
+        if (qTrim && !out.some((r) => r.kind === 'option')) {
+            out.push({ kind: 'noResults' });
+        }
+
+        return out;
+    }, [allowEmpty, debouncedFilter, options, pinnedOptions]);
+
+    useEffect(() => {
+        if (highlightedIndex >= rows.length) {
+            setHighlightedIndex(rows.length > 0 ? rows.length - 1 : 0);
+        }
+    }, [rows.length, highlightedIndex]);
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+                setOpen(false);
+                setFilter('');
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    useEffect(() => {
+        if (disabled) {
+            setOpen(false);
+            setFilter('');
+        }
+    }, [disabled]);
+
+    useEffect(() => {
+        if (open) {
+            setFilter('');
+            setDebouncedFilter('');
+            setHighlightedIndex(0);
+            window.requestAnimationFrame(() => inputRef.current?.focus());
+        } else {
+            setFilter('');
+        }
+    }, [open]);
+
+    const selectRow = useCallback(
+        (row: ListRow) => {
+            if (row.kind === 'empty') {
+                onChange('');
+            } else if (row.kind === 'option') {
+                onChange(row.option.value);
+            }
+            setOpen(false);
+            setFilter('');
+            triggerRef.current?.focus();
+        },
+        [onChange]
+    );
+
+    const moveHighlight = useCallback(
+        (delta: number) => {
+            if (rows.length === 0) return;
+            setHighlightedIndex((i) => {
+                const next = i + delta;
+                if (next < 0) return rows.length - 1;
+                if (next >= rows.length) return 0;
+                return next;
+            });
+        },
+        [rows.length]
+    );
+
+    const onTriggerKeyDown = (e: React.KeyboardEvent) => {
+        if (disabled) return;
+        if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setOpen(true);
+        }
+    };
+
+    const onInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            setOpen(false);
+            setFilter('');
+            triggerRef.current?.focus();
+            return;
+        }
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            moveHighlight(1);
+            return;
+        }
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            moveHighlight(-1);
+            return;
+        }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const row = rows[highlightedIndex];
+            if (row && row.kind !== 'noResults') selectRow(row);
+        }
+    };
+
+    const triggerLabel = selectedInOptions ? selectedInOptions.label : placeholder;
+
+    const triggerClasses = `
+  h-9 w-full
+  border border-gray-300 rounded-md dark:border-gray-600
+  px-2
+  bg-[#F6F6FA] dark:bg-gray-900
+  flex justify-between items-center text-left
+  text-sm text-[#8B5E3C] dark:text-amber-100/90
+  transition-all duration-200
+  ${disabled ? 'cursor-not-allowed opacity-50 pointer-events-none' : 'cursor-pointer hover:border-[#8B5E3C] dark:hover:border-amber-700'}
+`.trim();
+
+    return (
+        <div id={listboxId} className={`relative w-full ${className}`.trim()} ref={rootRef}>
+            <button
+                ref={triggerRef}
+                type="button"
+                className={triggerClasses}
+                aria-haspopup="listbox"
+                aria-expanded={open}
+                aria-controls={`${listboxId}-panel`}
+                aria-busy={ariaBusy}
+                disabled={disabled}
+                onClick={() => !disabled && setOpen((o) => !o)}
+                onKeyDown={onTriggerKeyDown}
+            >
+                <span className={!selectedInOptions ? 'truncate text-gray-400 dark:text-gray-500' : 'truncate'}>
+                    {triggerLabel}
+                </span>
+                <ChevronDown
+                    className={`h-4 w-4 shrink-0 text-[#8B5E3C] transition-transform duration-200 dark:text-amber-200/80 ${
+                        open ? 'rotate-180' : ''
+                    }`}
+                    aria-hidden
+                />
+            </button>
+
+            {open && !disabled && (
+                <div
+                    id={`${listboxId}-panel`}
+                    className="absolute top-full left-0 right-0 z-30 mt-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-950"
+                    role="listbox"
+                    aria-label="Options"
+                >
+                    <div className="border-b border-gray-100 p-2 dark:border-gray-800">
+                        <input
+                            id={inputId}
+                            ref={inputRef}
+                            type="search"
+                            autoComplete="off"
+                            spellCheck={false}
+                            value={filter}
+                            onChange={(e) => setFilter(e.target.value)}
+                            onKeyDown={onInputKeyDown}
+                            placeholder="Type to filter…"
+                            className="h-8 w-full rounded-md border border-gray-200 bg-white px-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
+                            aria-controls={`${listboxId}-list`}
+                        />
+                    </div>
+                    <div id={`${listboxId}-list`} className="max-h-60 overflow-y-auto py-1">
+                        {rows.map((row, idx) => {
+                            if (row.kind === 'noResults') {
+                                return (
+                                    <div
+                                        key="no-results"
+                                        className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"
+                                        role="presentation"
+                                    >
+                                        No results found
+                                    </div>
+                                );
+                            }
+                            if (row.kind === 'empty') {
+                                const selected = value === '' || value === undefined;
+                                const active = idx === highlightedIndex;
+                                return (
+                                    <div
+                                        key="empty-row"
+                                        role="option"
+                                        aria-selected={selected}
+                                        onMouseEnter={() => setHighlightedIndex(idx)}
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => selectRow(row)}
+                                        className={`cursor-pointer px-4 py-3 text-sm transition-colors ${
+                                            active ? 'bg-[#E9E3DC] dark:bg-gray-800' : ''
+                                        } ${selected ? 'font-medium text-[#6B3F1F] dark:text-amber-100' : 'text-gray-600 dark:text-gray-300'}`}
+                                    >
+                                        {emptyLabel}
+                                    </div>
+                                );
+                            }
+                            const opt = row.option;
+                            const selected = opt.value === value;
+                            const active = idx === highlightedIndex;
+                            return (
+                                <div
+                                    key={`${String(opt.value)}-${idx}`}
+                                    role="option"
+                                    aria-selected={selected}
+                                    onMouseEnter={() => setHighlightedIndex(idx)}
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => selectRow(row)}
+                                    className={`cursor-pointer px-4 py-3 text-sm transition-colors ${
+                                        active ? 'bg-[#E9E3DC] dark:bg-gray-800' : ''
+                                    } ${
+                                        selected
+                                            ? 'font-medium text-[#6B3F1F] dark:text-amber-100'
+                                            : 'text-gray-700 hover:bg-[#F3F1EE] dark:text-gray-200 dark:hover:bg-gray-800/80'
+                                    }`}
+                                >
+                                    {opt.label}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
             )}
-          >
-            {filteredOptions.length > 0 ? (
-              filteredOptions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))
-            ) : (
-              <div className="py-6 px-3 text-center text-sm text-muted-foreground pointer-events-none">
-                No results found.
-              </div>
-            )}
-          </SelectPrimitive.Viewport>
-        </SelectPrimitive.Content>
-      </SelectPrimitive.Portal>
-    </Select>
-    {hasValue && !disabled && (
-      <button
-        type="button"
-        onClick={handleClearClick}
-        className="absolute right-2 top-1/2 -translate-y-1/2 z-10 shrink-0 rounded p-0.5 text-gray-500 hover:text-primary hover:bg-primary/10 transition-colors"
-        aria-label="Clear selection"
-      >
-        <X className="size-4" />
-      </button>
-    )}
-  </div>
-  );
+        </div>
+    );
 }

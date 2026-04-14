@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { IRootState } from '../../store';
 import type { User } from '../../store/authSlice';
-import NewDropdown from '../../components/ui/NewDropdown';
+import SearchableSelect from '../../components/ui/SearchableSelect';
 import {
     canBillingFinancialActions,
     canNursingActions,
@@ -37,6 +37,13 @@ import { BillingTab } from '../../components/ipd/discharge/BillingTab';
 import { providerDisplayNameFromUser, providerSignUserIdFromUser } from '../../utils/dischargeReadinessUser';
 
 type TabId = 'summary' | 'checklist' | 'charges' | 'insurance' | 'billing';
+
+function encounterSearchKeywords(enc: ActiveEncounterRow): string {
+    const bed = enc.currentBedId != null ? String(enc.currentBedId) : '';
+    const name = enc.patientName != null ? String(enc.patientName) : '';
+    const ts = enc.admissionTimestamp != null ? String(enc.admissionTimestamp) : '';
+    return [enc.id, name, bed, ts].filter(Boolean).join(' ');
+}
 
 function formatEncounterLabel(enc: ActiveEncounterRow): string {
     const idTail = enc.id.length > 8 ? enc.id.slice(-8) : enc.id;
@@ -401,69 +408,67 @@ export default function DischargeReadinessPage() {
                         ))}
                     </select> */}
                     <div className="w-full">
-  <NewDropdown
-    options={[
-      {
-        value: "",
-        label: patientsLoading ? "Loading patients…" : "Select patient…",
-      },
-
-      ...(patientId && !patientInList
-        ? [
-            {
-              value: patientId,
-              label: `Current selection (not in list) · ${patientId.slice(-10)}…`,
-            },
-          ]
-        : []),
-
-      ...patients.map((p) => ({
-        value: p.id,
-        label: p.mrn ? `${p.name} · MRN ${p.mrn}` : p.name,
-      })),
-    ]}
-    value={patientId || ""}
-    placeholder="Select patient…"
-    onChange={(value) => setPatientSelection(String(value))}
-    disabled={patientsLoading}
-  />
-</div>
+                        <SearchableSelect
+                            allowEmpty
+                            emptyRowLabel={patientsLoading ? 'Loading patients…' : 'Select patient…'}
+                            placeholder="Select patient…"
+                            disabled={patientsLoading}
+                            value={patientId || ''}
+                            pinnedOptions={
+                                patientId && !patientInList
+                                    ? [
+                                          {
+                                              value: patientId,
+                                              label: `Current selection (not in list) · ${patientId.slice(-10)}…`,
+                                              keywords: patientId,
+                                          },
+                                      ]
+                                    : []
+                            }
+                            options={patients.map((p) => ({
+                                value: p.id,
+                                label: p.mrn ? `${p.name} · MRN ${p.mrn}` : p.name,
+                                keywords: `${p.name} ${p.mrn || ''} ${p.id}`,
+                            }))}
+                            onChange={(v) => setPatientSelection(String(v))}
+                        />
+                    </div>
                 </div>
                 <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Encounter</label>
                  
                     <div className="w-full">
-  <NewDropdown
-    options={[
-      {
-        value: "",
-        label: !patientId
-          ? "Select a patient first…"
-          : encountersLoading
-          ? "Loading encounters…"
-          : "Select active encounter…",
-      },
-
-      ...(encounterId && !encounterInList && patientId
-        ? [
-            {
-              value: encounterId,
-              label: `Current selection · …${encounterId.slice(-8)}`,
-            },
-          ]
-        : []),
-
-      ...encounters.map((enc) => ({
-        value: enc.id,
-        label: formatEncounterLabel(enc),
-      })),
-    ]}
-    value={encounterId || ""}
-    placeholder="Select active encounter…"
-    onChange={(value) => setEncounterSelection(String(value))}
-    disabled={!patientId || encountersLoading}
-  />
-</div>
+                        <SearchableSelect
+                            allowEmpty
+                            emptyRowLabel={
+                                !patientId
+                                    ? 'Select a patient first…'
+                                    : encountersLoading
+                                      ? 'Loading encounters…'
+                                      : 'Select active encounter…'
+                            }
+                            placeholder="Select active encounter…"
+                            disabled={!patientId || encountersLoading}
+                            value={encounterId || ''}
+                            pinnedOptions={
+                                encounterId && !encounterInList && patientId
+                                    ? [
+                                          {
+                                              value: encounterId,
+                                              label: `Current selection · …${encounterId.slice(-8)}`,
+                                              keywords: encounterId,
+                                          },
+                                      ]
+                                    : []
+                            }
+                            options={encounters.map((enc) => ({
+                                value: enc.id,
+                                label: formatEncounterLabel(enc),
+                                keywords: encounterSearchKeywords(enc),
+                            }))}
+                            onChange={(v) => setEncounterSelection(String(v))}
+                        />
+                    </div>
                     {patientId && !encountersLoading && encounters.length === 0 ? (
                         <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
                             No active encounter for this patient. You can still open this page with an encounter id in the URL for demo mock
