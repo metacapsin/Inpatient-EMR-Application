@@ -215,7 +215,7 @@ export function PatientTableRow({
                     )}
                     <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-gray-900">{patient.name}</p>
-                        <p className="truncate text-[11px] text-gray-500">{patient.email || '—'}</p>
+                        {/* <p className="truncate text-[11px] text-gray-500">{patient.email || '—'}</p> */}
                     </div>
                 </div>
             </td>

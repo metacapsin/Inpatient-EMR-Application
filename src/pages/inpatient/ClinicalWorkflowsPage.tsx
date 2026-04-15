@@ -120,7 +120,7 @@ function ClinicalWorkflowsPage() {
 
     const [orderTab, setOrderTab] = useState<'medication' | 'lab' | 'imaging'>('medication');
     const [orderPriority, setOrderPriority] = useState<'routine' | 'urgent' | 'stat'>('routine');
-    const [orderJson, setOrderJson] = useState('{}');
+    const [orderJson, setOrderJson] = useState('');
     const [orders, setOrders] = useState<CpoeOrderRow[]>([]);
 
     const [alerts, setAlerts] = useState<ClinicalAlertRow[]>([]);
@@ -615,7 +615,7 @@ function ClinicalWorkflowsPage() {
                                     </option>
                                 ))}
                             </select> */}
-                             <div className="w-34 mt-1 ">
+                             <div className="w-36 mt-1 ">
                             <NewDropdown
                             options={NOTE_TEMPLATES.map((n) => ({
                                 value: n.value,
@@ -646,13 +646,13 @@ function ClinicalWorkflowsPage() {
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                            <Button type="button" onClick={() => void saveDraft()}>
+                            <AppButton type="button" onClick={() => void saveDraft()}>
                                 Save draft
-                            </Button>
+                            </AppButton>
                             {showSign && (
-                                <Button type="button" variant="default" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => void signNote()}>
+                                <AppButton type="button"  onClick={() => void signNote()}>
                                     Sign note
-                                </Button>
+                                </AppButton>
                             )}
                         </div>
                         {showSign && (
@@ -718,9 +718,9 @@ function ClinicalWorkflowsPage() {
                                 />
                                 </div>
                                 <Textarea className="mt-2" rows={6} value={nursingText} onChange={(e) => setNursingText(e.target.value)} />
-                                <Button type="button" className="mt-2" onClick={() => void submitNursing()}>
+                                <AppButton type="button" className="mt-2" onClick={() => void submitNursing()}>
                                     Save nursing note
-                                </Button>
+                                </AppButton>
                             </div>
                             <div>
                                 <h3 className="font-medium">SBAR handover</h3>
@@ -733,9 +733,9 @@ function ClinicalWorkflowsPage() {
                                 <Textarea rows={2} value={sbarA} onChange={(e) => setSbarA(e.target.value)} />
                                 <label className="mt-2 block text-xs text-gray-500">Recommendation</label>
                                 <Textarea rows={2} value={sbarR} onChange={(e) => setSbarR(e.target.value)} />
-                                <Button type="button" className="mt-2" onClick={() => void submitHandover()}>
+                                <AppButton type="button" className="mt-2" onClick={() => void submitHandover()}>
                                     Submit handover
-                                </Button>
+                                </AppButton>
                             </div>
                         </div>
                         <div>
@@ -900,11 +900,11 @@ function ClinicalWorkflowsPage() {
                                     rows={4}
                                     value={orderJson}
                                     onChange={(e) => setOrderJson(e.target.value)}
-                                    placeholder='{"drugName":"...","dose":"..."} or lab/imaging fields'
+                                    placeholder='{"drugName":"...","dose":"..."} '
                                 />
-                                <Button type="button" className="mt-2" onClick={() => void submitOrder()}>
+                                <AppButton type="button" className="mt-2" onClick={() => void submitOrder()}>
                                     Place order
-                                </Button>
+                                </AppButton>
                             </>
                         ) : (
                             <p className="text-sm text-gray-500">Only ordering providers can create new orders. You may still track status if your role allows.</p>
