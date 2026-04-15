@@ -91,6 +91,15 @@ const Sidebar = () => {
                                         </NavLink>
                                     </li>
 
+                                      <li className="nav-item">
+                                        <NavLink to="/app/appointments" className="group">
+                                            <div className="flex items-center">
+                                                <IconMenuCalendar className="group-hover:!text-primary shrink-0" />
+                                                <span className={`ltr:pl-3 rtl:pr-3 ${linkClass}`}>Appointments</span>
+                                            </div>
+                                        </NavLink>
+                                    </li>
+
                                     <li className="menu nav-item">
                                         <button
                                             type="button"
@@ -143,14 +152,7 @@ const Sidebar = () => {
                                         )}
                                     </li>
 
-                                    <li className="nav-item">
-                                        <NavLink to="/app/appointments" className="group">
-                                            <div className="flex items-center">
-                                                <IconMenuCalendar className="group-hover:!text-primary shrink-0" />
-                                                <span className={`ltr:pl-3 rtl:pr-3 ${linkClass}`}>Appointments</span>
-                                            </div>
-                                        </NavLink>
-                                    </li>
+                                  
 
                                     <li className="nav-item">
                                         <NavLink to="/app/settings" className="group">

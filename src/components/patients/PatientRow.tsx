@@ -136,7 +136,7 @@ function InpatientAdtCell({
                 title="Transfer"
                 disabled={!encounterReady || dischargePending}
                 onClick={open('transfer')}
-                className={btnClass}
+                className={btnClass} 
             >
                 <ArrowRightLeft className="h-3.5 w-3.5" aria-hidden />
             </button>
@@ -258,7 +258,7 @@ export function PatientTableRow({
                 {patient.createdDate}
             </td>
             <td className="whitespace-nowrap px-1 py-2">
-                <div className="flex items-center justify-end gap-0.5">
+                {/* <div className="flex items-center justify-end gap-0.5">
                     <button
                         type="button"
                         title="Book appointment"
@@ -275,7 +275,49 @@ export function PatientTableRow({
                     >
                         <Eye className="h-3.5 w-3.5" />
                     </button>
-                </div>
+                </div> */}
+                <div className="flex items-center justify-end gap-0.5">
+    
+  {/* Book Appointment */}
+  <div className="relative group">
+    <button
+      type="button"
+      title=""   // title empty so default tooltip off
+      onClick={handleBookAppointment}
+      className="flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary"
+    >
+      <CalendarPlus className="h-3.5 w-3.5" />
+    </button>
+
+    {/* Custom Tooltip */}
+    <span className="absolute -top-8 left-1/2 -translate-x-1/2 
+                     hidden group-hover:block 
+                     bg-black text-white text-xs rounded px-2 py-1 
+                     whitespace-nowrap z-50">
+      Book appointment
+    </span>
+  </div>
+
+  {/* View Button */}
+  <div className="relative group">
+    <button
+      type="button"
+      title=""
+      onClick={handleView}
+      className="flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary"
+    >
+      <Eye className="h-3.5 w-3.5" />
+    </button>
+
+    <span className="absolute -top-8 left-1/2 -translate-x-1/2 
+                     hidden group-hover:block 
+                     bg-black text-white text-xs rounded px-2 py-1 
+                     whitespace-nowrap z-50">
+      View
+    </span>
+  </div>
+
+</div>
             </td>
         </tr>
     );
