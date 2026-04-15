@@ -14,7 +14,7 @@ import {
   startOfMonth,
   subMonths,
 } from 'date-fns';
-import { Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { appointmentAPI } from '../../services/api';
 import { cn } from '../../lib/utils';
 import NewDropdown from '../ui/NewDropdown';
@@ -87,6 +87,22 @@ function parseSlots(payload: unknown): string[] {
     })
     .filter(Boolean);
 }
+
+const FORM_FLOAT_LABEL =
+  'pointer-events-none absolute left-3 top-0 z-10 -translate-y-1/2 bg-white px-1 text-[12px] font-medium text-gray-500 dark:bg-[#141210] dark:text-gray-400';
+
+const FORM_FIELD_FRAME =
+  'relative rounded-lg border border-gray-200/70 bg-white shadow-sm transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 dark:border-gray-600 dark:bg-[#141210]';
+
+const FORM_FIELD_INPUT =
+  'h-10 w-full border-0 bg-transparent px-3 pb-2 pt-[1.125rem] text-[14px] font-medium text-gray-900 outline-none ring-0 placeholder:text-gray-400 dark:text-gray-100';
+
+const FORM_TEXTAREA =
+  'min-h-[120px] w-full resize-y border-0 bg-transparent px-3 pb-3 pt-7 text-[14px] font-medium text-gray-900 outline-none ring-0 placeholder:text-gray-400 dark:text-gray-100';
+
+/** Matched schedule panels: calendar + time slots (fixed height, equal width via grid). */
+const SCHEDULE_PANEL =
+  'h-[256px] w-full min-h-0 shrink-0 rounded-lg border border-gray-200/70 bg-white dark:border-gray-600 dark:bg-[#141210]';
 
 export default function BookAppointment() {
   const navigate = useNavigate();
@@ -446,8 +462,8 @@ export default function BookAppointment() {
   if (loading) {
     return (
       <div className="panel">
-        <div className="flex items-center justify-center gap-3 py-10 text-sm text-gray-500">
-          <Loader2 className="h-5 w-5 animate-spin" />
+        <div className="flex items-center justify-center gap-3 py-10 text-[14px] font-medium text-gray-500">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
           <span>Loading appointment form...</span>
         </div>
       </div>
@@ -457,209 +473,115 @@ export default function BookAppointment() {
   return (
     <div className="panel">
       {topErrorMessage && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-6 rounded-lg border border-red-200/80 bg-red-50/90 px-4 py-3 text-[14px] font-medium text-red-800 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
           {topErrorMessage}
         </div>
       )}
 
-      <form onSubmit={submit} className="space-y-4 animate-in slide-in-from-right-4 duration-300 fade-in">
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h3 className="mb-4 border-b border-gray-200 pb-3 text-lg font-semibold text-gray-800">
-            {isEditMode ? 'Edit Appointment' : 'Book Your Appointment'}
-          </h3>
-          <p className="mb-6 text-sm text-gray-500">
+      <form onSubmit={submit} className="pb-2">
+        <div className="mb-8">
+          <h1 className="text-[20px] font-semibold text-gray-900 dark:text-gray-100">
+            {isEditMode ? 'Edit Appointment' : 'Create Appointment'}
+          </h1>
+          <p className="mt-1 max-w-2xl text-[12px] text-gray-400 dark:text-gray-500">
             Select your patient, provider, visit type, date and time for the appointment.
           </p>
+        </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-4">
-            <div className="flex flex-col space-y-1">
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Patient <span className="text-primary-600">*</span>
-              </label>
-              {/* <select
-                className={cn(
-                  'w-full rounded-lg border-2 bg-gray-50 px-4 py-2.5 transition-colors',
-                  errors.patientId ? 'border-primary-600' : 'border-gray-200 focus:border-primary'
-                )}
-                value={form.patientId}
-                onChange={(event) => {
-                  setForm((prev) => ({
-                    ...prev,
-                    patientId: event.target.value,
-                    patientEmail: '',
-                    patientPhone: '',
-                  }));
-                  clearError('patientId');
-                }}
-              >
-               
-                
-                <option value="">Select Patient</option>
-                {patients.map((patient) => (
-                  <option key={patient.id} value={patient.id}>
-                    {patient.label}
-                  </option>
-                ))} 
-                
-            
-              </select> */}
-              {/* <label className="block text-gray-700">Patient *</label> */}
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 md:gap-6">
+          <div className="min-w-0">
+            <NewDropdown
+              fieldSize="md"
+              hasError={!!errors.patientId}
+              label="Patient *"
+              options={[
+                { value: '', label: 'Select Patient' },
+                ...patients.map((p) => ({
+                  value: p.id,
+                  label: p.label,
+                })),
+              ]}
+              value={form.patientId}
+              placeholder="Select Patient"
+              onChange={(value) => {
+                setForm((prev) => ({
+                  ...prev,
+                  patientId: String(value),
+                  patientEmail: '',
+                  patientPhone: '',
+                }));
+                clearError('patientId');
+              }}
+            />
+            {errors.patientId ? <p className="mt-1.5 text-[12px] font-medium text-primary-600">{errors.patientId}</p> : null}
+          </div>
 
-<div className="w-full mt-1">
-  <NewDropdown
-    options={[
-      { value: "", label: "Select Patient" },
-      ...patients.map((p) => ({
-        value: p.id,
-        label: p.label,
-      })),
-    ]}
-    value={form.patientId}
-    placeholder="Select Patient"
-    onChange={(value) =>
-      setForm((prev) => ({ ...prev, patientId: String(value) }))
-    }
-  />
-</div>
-              {errors.patientId && <p className="mt-1 text-xs text-primary-600">{errors.patientId}</p>}
-            </div>
-
-            <div className="flex flex-col space-y-1">
-              <label className="mb-1 block text-sm font-medium text-gray-700">Phone</label>
+          <div className="min-w-0">
+            <div className={FORM_FIELD_FRAME}>
+              <span className={FORM_FLOAT_LABEL}>Phone</span>
               <input
                 type="tel"
-                className="w-full rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-2.5 focus:border-primary"
+                className={FORM_FIELD_INPUT}
                 value={form.patientPhone}
                 onChange={(event) => setForm((prev) => ({ ...prev, patientPhone: event.target.value }))}
                 placeholder={selectedPatient ? 'Auto-filled if available, or type phone' : 'Select patient first'}
               />
             </div>
+          </div>
 
-            <div className="flex flex-col space-y-1">
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Provider <span className="text-primary-600">*</span>
-              </label>
-              {/* <select
-                className={cn(
-                  'w-full rounded-lg border-2 bg-gray-50 px-4 py-2.5 transition-colors',
-                  errors.providerId ? 'border-primary-600' : 'border-gray-200 focus:border-primary'
-                )}
-                value={form.providerId}
-                onChange={(event) => {
-                  setForm((prev) => ({
-                    ...prev,
-                    providerId: event.target.value,
-                    serviceLocationId: '',
-                    timeSlot: '',
-                  }));
-                  clearError('providerId');
-                  clearError('serviceLocationId');
-                  clearError('timeSlot');
-                }}
-              >
-                <option value="">Select Provider</option>
-                {providers.map((provider) => (
-                  <option key={provider.id} value={provider.id}>
-                    {provider.label}
-                  </option>
-                ))}
-              </select> */}
-              <div className="w-full mt-1">
-  <NewDropdown
-    options={providers.map((provider) => ({
-      value: provider.id,
-      label: provider.label,
-    }))}
-    value={form.providerId}
-    placeholder="Select Provider"
-    onChange={(value) => {
-      setForm((prev) => ({
-        ...prev,
-        providerId: String(value),
-        serviceLocationId: '',
-        timeSlot: '',
-      }));
-      clearError('providerId');
-      clearError('serviceLocationId');
-      clearError('timeSlot');
-    }}
-  />
-</div>
-              {errors.providerId && <p className="mt-1 text-xs text-primary-600">{errors.providerId}</p>}
-            </div>
-
-            <div className="flex flex-col space-y-1">
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Visit Type <span className="text-primary-600">*</span>
-              </label>
-              {/* <select
-                className={cn(
-                  'w-full rounded-lg border-2 bg-gray-50 px-4 py-2.5 transition-colors',
-                  errors.visitTypeId ? 'border-primary-600' : 'border-gray-200 focus:border-primary'
-                )}
-                value={form.visitTypeId}
-                onChange={(event) => {
-                  setForm((prev) => ({ ...prev, visitTypeId: event.target.value }));
-                  clearError('visitTypeId');
-                }}
-              >
-                <option value="">Select Visit Type</option>
-                {visitTypes.map((visitType) => (
-                  <option key={visitType.id} value={visitType.id}>
-                    {visitType.label}
-                  </option>
-                ))}
-              </select> */}
-              <div className="w-full mt-1">
-                <NewDropdown
-                  options={visitTypes.map((visitType) => ({
-                    value: visitType.id,
-                    label: visitType.label,
-                  }))}
-                  value={form.visitTypeId}
-                  placeholder="Select Visit Type"
-                  onChange={(value) => {
-                    setForm((prev) => ({
-                      ...prev,
-                      visitTypeId: String(value),
-                    }));
-                    clearError('visitTypeId');
-                  }}
-                />
-              </div>
-              {errors.visitTypeId && <p className="mt-1 text-xs text-primary-600">{errors.visitTypeId}</p>}
-            </div>
-
-            <div className="flex flex-col space-y-1">
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Visit Reason <span className="text-primary-600">*</span>
-              </label>
-              {/* <select
-                className={cn(
-                  'w-full rounded-lg border-2 bg-gray-50 px-4 py-2.5 transition-colors',
-                  errors.visitReason ? 'border-primary-600' : 'border-gray-200 focus:border-primary'
-                )}
-                value={form.visitReason}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setForm((prev) => ({
-                    ...prev,
-                    visitReason: value,
-                    otherReason: value === 'Other' ? prev.otherReason : '',
-                  }));
-                  clearError('visitReason');
-                  clearError('otherReason');
-                }}
-              >
-                <option value="">Select Visit Reason</option>
-                {visitReasons.map((reason) => (
-                  <option key={reason.id} value={reason.label}>
-                    {reason.label}
-                  </option>
-                ))}
-              </select> */}
-              <div className="w-full mt-1">
+          <div className="min-w-0">
             <NewDropdown
+              fieldSize="md"
+              hasError={!!errors.providerId}
+              label="Provider *"
+              options={providers.map((provider) => ({
+                value: provider.id,
+                label: provider.label,
+              }))}
+              value={form.providerId}
+              placeholder="Select Provider"
+              onChange={(value) => {
+                setForm((prev) => ({
+                  ...prev,
+                  providerId: String(value),
+                  serviceLocationId: '',
+                  timeSlot: '',
+                }));
+                clearError('providerId');
+                clearError('serviceLocationId');
+                clearError('timeSlot');
+              }}
+            />
+            {errors.providerId ? <p className="mt-1.5 text-[12px] font-medium text-primary-600">{errors.providerId}</p> : null}
+          </div>
+
+          <div className="min-w-0">
+            <NewDropdown
+              fieldSize="md"
+              hasError={!!errors.visitTypeId}
+              label="Visit Type *"
+              options={visitTypes.map((visitType) => ({
+                value: visitType.id,
+                label: visitType.label,
+              }))}
+              value={form.visitTypeId}
+              placeholder="Select Visit Type"
+              onChange={(value) => {
+                setForm((prev) => ({
+                  ...prev,
+                  visitTypeId: String(value),
+                }));
+                clearError('visitTypeId');
+              }}
+            />
+            {errors.visitTypeId ? <p className="mt-1.5 text-[12px] font-medium text-primary-600">{errors.visitTypeId}</p> : null}
+          </div>
+
+          <div className="min-w-0">
+            <NewDropdown
+              fieldSize="md"
+              hasError={!!errors.visitReason}
+              label="Visit Reason *"
               options={visitReasons.map((reason) => ({
                 value: reason.label,
                 label: reason.label,
@@ -670,78 +592,57 @@ export default function BookAppointment() {
                 setForm((prev) => ({
                   ...prev,
                   visitReason: String(value),
-                  otherReason: value === "Other" ? prev.otherReason : "",
+                  otherReason: value === 'Other' ? prev.otherReason : '',
                 }));
-                clearError("visitReason");
-                clearError("otherReason");
+                clearError('visitReason');
+                clearError('otherReason');
               }}
             />
-          </div>
-              {errors.visitReason && <p className="mt-1 text-xs text-primary-600">{errors.visitReason}</p>}
-            </div>
-
-            <div className="flex flex-col space-y-1">
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Service Location <span className="text-primary-600">*</span>
-              </label>
-              {/* <select
-                disabled={!form.providerId}
-                className={cn(
-                  'w-full rounded-lg border-2 bg-gray-50 px-4 py-2.5 transition-colors disabled:opacity-60',
-                  errors.serviceLocationId ? 'border-primary-600' : 'border-gray-200 focus:border-primary'
-                )}
-                value={form.serviceLocationId}
-                onChange={(event) => {
-                  setForm((prev) => ({
-                    ...prev,
-                    serviceLocationId: event.target.value,
-                    timeSlot: '',
-                  }));
-                  clearError('serviceLocationId');
-                  clearError('timeSlot');
-                }}
-              >
-                <option value="">{form.providerId ? 'Select Location' : 'Select Provider first'}</option>
-                {serviceLocations.map((location) => (
-                  <option key={location.id} value={location.id}>
-                    {location.label}
-                  </option>
-                ))}
-              </select> */}
-              <div className={`w-full mt-1 ${!form.providerId ? "opacity-60 pointer-events-none" : ""}`}>
-                <NewDropdown
-                  options={serviceLocations.map((loc) => ({
-                    value: loc.id,
-                    label: loc.label,
-                  }))}
-                  value={form.serviceLocationId}
-                  placeholder={form.providerId ? "Select Location" : "Select Provider first"}
-                  onChange={(value) => {
-                    setForm((prev) => ({
-                      ...prev,
-                      serviceLocationId: String(value),
-                      timeSlot: "",
-                    }));
-                    clearError("serviceLocationId");
-                    clearError("timeSlot");
-                  }}
-                />
-</div>
-              {errors.serviceLocationId && <p className="mt-1 text-xs text-primary-600">{errors.serviceLocationId}</p>}
-            </div>
+            {errors.visitReason ? <p className="mt-1.5 text-[12px] font-medium text-primary-600">{errors.visitReason}</p> : null}
           </div>
 
-          {showOtherReasonInput && (
-            <div className="mt-5 max-w-md">
-              <label className="mb-1 block text-sm font-medium text-gray-700">
+          <div className="min-w-0">
+            <NewDropdown
+              fieldSize="md"
+              hasError={!!errors.serviceLocationId}
+              label="Service Location *"
+              disabled={!form.providerId}
+              options={serviceLocations.map((loc) => ({
+                value: loc.id,
+                label: loc.label,
+              }))}
+              value={form.serviceLocationId}
+              placeholder={form.providerId ? 'Select Location' : 'Select Provider first'}
+              onChange={(value) => {
+                setForm((prev) => ({
+                  ...prev,
+                  serviceLocationId: String(value),
+                  timeSlot: '',
+                }));
+                clearError('serviceLocationId');
+                clearError('timeSlot');
+              }}
+            />
+            {errors.serviceLocationId ? (
+              <p className="mt-1.5 text-[12px] font-medium text-primary-600">{errors.serviceLocationId}</p>
+            ) : null}
+          </div>
+        </div>
+
+        {showOtherReasonInput ? (
+          <div className="mt-8 max-w-full md:max-w-xl">
+            <div
+              className={cn(
+                FORM_FIELD_FRAME,
+                errors.otherReason && 'border-primary-600 focus-within:border-primary-600 focus-within:ring-primary/20'
+              )}
+            >
+              <span className={FORM_FLOAT_LABEL}>
                 Other Reason <span className="text-primary-600">*</span>
-              </label>
+              </span>
               <input
                 type="text"
-                className={cn(
-                  'w-full rounded-lg border-2 bg-gray-50 px-4 py-2.5',
-                  errors.otherReason ? 'border-primary-600' : 'border-gray-200 focus:border-primary'
-                )}
+                className={FORM_FIELD_INPUT}
                 value={form.otherReason}
                 onChange={(event) => {
                   setForm((prev) => ({ ...prev, otherReason: event.target.value }));
@@ -750,193 +651,205 @@ export default function BookAppointment() {
                 placeholder="Specify reason"
                 maxLength={100}
               />
-              {errors.otherReason && <p className="mt-1 text-xs text-primary-600">{errors.otherReason}</p>}
             </div>
-          )}
+            {errors.otherReason ? (
+              <p className="mt-1.5 text-[12px] font-medium text-primary-600">{errors.otherReason}</p>
+            ) : null}
+          </div>
+        ) : null}
 
-          <div className="mt-6">
-            <label className="mb-3 block text-sm font-medium text-gray-700">Visit Mode</label>
-            <div className="flex flex-wrap gap-6">
-              <label className="flex cursor-pointer items-center gap-2.5">
-                <input
-                  type="radio"
-                  name="visitMode"
-                  checked={form.visitMode === 'Office Visit'}
-                  onChange={() => setForm((prev) => ({ ...prev, visitMode: 'Office Visit' }))}
-                  className="h-4 w-4 rounded-full border-gray-300 text-primary focus:ring-primary"
-                />
-                <span className="text-sm font-medium text-gray-700">Office Visit</span>
-              </label>
-              <label className="flex cursor-pointer items-center gap-2.5">
-                <input
-                  type="radio"
-                  name="visitMode"
-                  checked={form.visitMode === 'Telehealth'}
-                  onChange={() => setForm((prev) => ({ ...prev, visitMode: 'Telehealth' }))}
-                  className="h-4 w-4 rounded-full border-gray-300 text-primary focus:ring-primary"
-                />
-                <span className="text-sm font-medium text-gray-700">Telehealth</span>
-              </label>
+        <div className="mt-10">
+          <div className="mb-3 text-[16px] font-semibold text-gray-900 dark:text-gray-100">Visit Mode</div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              aria-pressed={form.visitMode === 'Office Visit'}
+              onClick={() => setForm((prev) => ({ ...prev, visitMode: 'Office Visit' }))}
+              className={cn(
+                'h-10 min-w-[9.5rem] rounded-full border px-5 text-[14px] font-medium transition-colors',
+                form.visitMode === 'Office Visit'
+                  ? 'border-primary/35 bg-primary/15 text-gray-900 shadow-sm dark:text-gray-100'
+                  : 'border-gray-200/70 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:bg-[#141210] dark:text-gray-300 dark:hover:border-gray-500'
+              )}
+            >
+              Office Visit
+            </button>
+            <button
+              type="button"
+              aria-pressed={form.visitMode === 'Telehealth'}
+              onClick={() => setForm((prev) => ({ ...prev, visitMode: 'Telehealth' }))}
+              className={cn(
+                'h-10 min-w-[9.5rem] rounded-full border px-5 text-[14px] font-medium transition-colors',
+                form.visitMode === 'Telehealth'
+                  ? 'border-primary/35 bg-primary/15 text-gray-900 shadow-sm dark:text-gray-100'
+                  : 'border-gray-200/70 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:bg-[#141210] dark:text-gray-300 dark:hover:border-gray-500'
+              )}
+            >
+              Telehealth
+            </button>
+          </div>
+        </div>
+
+        {form.providerId && form.serviceLocationId ? (
+          <div className="mt-10 grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
+            <div className="flex min-h-0 min-w-0 flex-col">
+              <div className="mb-3 shrink-0 text-[16px] font-semibold text-gray-900 dark:text-gray-100">Appointment Date</div>
+              <div className={cn(SCHEDULE_PANEL, 'flex flex-col overflow-hidden p-2.5')}>
+                <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCalendarMonth((month) => subMonths(month, 1))}
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                    aria-label="Previous month"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <span className="min-w-0 truncate text-center text-[12px] font-semibold text-gray-900 dark:text-gray-100">
+                    {format(calendarMonth, 'MMMM yyyy')}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCalendarMonth((month) => addMonths(month, 1))}
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                    aria-label="Next month"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                <div className="mb-1.5 grid shrink-0 grid-cols-7 gap-0.5 text-center text-[12px] font-medium text-gray-500 dark:text-gray-400">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                    <div key={day} className="py-0.5">
+                      {day}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-0.5">
+                  {paddingDays.map((_, index) => (
+                    <div key={`pad-${index}`} className="flex items-center justify-center rounded-md text-[12px] text-gray-300" />
+                  ))}
+                  {days.map((day) => {
+                    const isSelected = !!selectedDate && isSameDay(day, selectedDate);
+                    const isCurrentMonth = isSameMonth(day, calendarMonth);
+                    const isDisabled = !!((minDate && day < minDate) || (maxDate && day > maxDate));
+
+                    return (
+                      <button
+                        key={day.toISOString()}
+                        type="button"
+                        onClick={() => !isDisabled && handleDateSelect(day)}
+                        disabled={isDisabled}
+                        className={cn(
+                          'flex h-full min-h-0 w-full items-center justify-center rounded-md text-[12px] font-medium transition-colors',
+                          isDisabled && 'cursor-not-allowed text-gray-300',
+                          !isDisabled &&
+                            isSelected &&
+                            'bg-primary/15 text-gray-900 ring-1 ring-inset ring-primary/25 dark:text-gray-100',
+                          !isDisabled &&
+                            !isSelected &&
+                            isCurrentMonth &&
+                            'text-gray-700 hover:bg-primary/10 dark:text-gray-200 dark:hover:bg-primary/20',
+                          !isDisabled && !isSelected && !isCurrentMonth && 'text-gray-400 dark:text-gray-500'
+                        )}
+                      >
+                        {format(day, 'd')}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p className="mt-1.5 shrink-0 truncate text-[12px] text-gray-400 dark:text-gray-500">{availableTodayLabel}</p>
+              </div>
+              {errors.appointmentDate ? (
+                <p className="mt-1.5 text-[12px] font-medium text-primary-600">{errors.appointmentDate}</p>
+              ) : null}
+            </div>
+
+            <div className="flex min-h-0 min-w-0 flex-col">
+              <div className="mb-3 shrink-0">
+                <div className="text-[16px] font-semibold text-gray-900 dark:text-gray-100">Available Time Slots</div>
+                {selectedDate ? (
+                  <p className="mt-1 text-[12px] text-gray-400 dark:text-gray-500">
+                    {format(selectedDate, 'EEEE, MMM d, yyyy')}
+                  </p>
+                ) : null}
+              </div>
+              <div className={cn(SCHEDULE_PANEL, 'overflow-y-auto overscroll-contain p-3')}>
+                {loadingSlots ? (
+                  <div className="flex min-h-full flex-col items-center justify-center gap-2 px-2 py-4">
+                    <Loader2 className="h-7 w-7 shrink-0 animate-spin text-primary" />
+                    <p className="text-[14px] font-medium text-gray-500">Loading available times...</p>
+                  </div>
+                ) : appointmentSlots.length === 0 ? (
+                  <div className="flex min-h-full items-center justify-center px-2 py-4">
+                    <p className="text-center text-[14px] font-medium text-gray-500 dark:text-gray-400">
+                      {selectedDate ? 'No available times for this date' : 'Select a date to see available times'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {appointmentSlots.map((slot) => {
+                      const isSelected = form.timeSlot === slot;
+                      return (
+                        <button
+                          key={slot}
+                          type="button"
+                          onClick={() => {
+                            setForm((prev) => ({ ...prev, timeSlot: slot }));
+                            clearError('timeSlot');
+                          }}
+                          className={cn(
+                            'inline-flex h-9 w-full shrink-0 items-center justify-center rounded-lg border text-[14px] font-medium transition-colors',
+                            isSelected
+                              ? 'border-primary/30 bg-primary/15 text-gray-900 ring-1 ring-inset ring-primary/20 dark:text-gray-100'
+                              : 'border-gray-200/70 bg-white text-gray-700 hover:border-primary/40 hover:bg-primary/5 dark:border-gray-600 dark:bg-[#141210] dark:text-gray-200 dark:hover:bg-primary/15'
+                          )}
+                        >
+                          {slot}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              {errors.timeSlot ? <p className="mt-1.5 text-[12px] font-medium text-primary-600">{errors.timeSlot}</p> : null}
             </div>
           </div>
+        ) : null}
 
-          {form.providerId && form.serviceLocationId && (
-            <>
-              <hr className="my-6 border-gray-200" />
-              <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
-                <div className="flex min-h-0 flex-col">
-                  <h4 className="mb-2 text-base font-semibold text-gray-800">Appointment Date</h4>
-                  <div className="h-[220px] rounded-lg border-2 border-gray-200 bg-gray-50 p-4">
-                    <div className="mb-2 flex items-center justify-between">
-                      <button
-                        type="button"
-                        onClick={() => setCalendarMonth((month) => subMonths(month, 1))}
-                        className="rounded-lg p-1 hover:bg-gray-200"
-                        aria-label="Previous month"
-                      >
-                        ←
-                      </button>
-                      <span className="font-semibold text-gray-800">{format(calendarMonth, 'MMMM yyyy')}</span>
-                      <button
-                        type="button"
-                        onClick={() => setCalendarMonth((month) => addMonths(month, 1))}
-                        className="rounded-lg p-1 hover:bg-gray-200"
-                        aria-label="Next month"
-                      >
-                        →
-                      </button>
-                    </div>
-
-                    <div className="mb-1 grid grid-cols-7 gap-0.5 text-center text-[10px] font-medium text-gray-500">
-                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                        <div key={day}>{day}</div>
-                      ))}
-                    </div>
-
-                    <div className="grid flex-1 grid-cols-7 gap-0.5">
-                      {paddingDays.map((_, index) => (
-                        <div key={`pad-${index}`} className="min-h-0 rounded-md text-xs text-gray-400" />
-                      ))}
-                      {days.map((day) => {
-                        const isSelected = !!selectedDate && isSameDay(day, selectedDate);
-                        const isCurrentMonth = isSameMonth(day, calendarMonth);
-                        const isDisabled = !!((minDate && day < minDate) || (maxDate && day > maxDate));
-
-                        return (
-                          <button
-                            key={day.toISOString()}
-                            type="button"
-                            onClick={() => !isDisabled && handleDateSelect(day)}
-                            disabled={isDisabled}
-                            className={cn(
-                              'min-h-0 rounded-lg text-xs font-medium',
-                              isDisabled && 'cursor-not-allowed text-gray-300',
-                              !isDisabled && isSelected && 'bg-primary text-white',
-                              !isDisabled && !isSelected && isCurrentMonth && 'text-gray-700 hover:bg-primary/10',
-                              !isDisabled && !isSelected && !isCurrentMonth && 'text-gray-400'
-                            )}
-                          >
-                            {format(day, 'd')}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <p className="mt-1.5 text-xs text-gray-500">{availableTodayLabel}</p>
-                    {errors.appointmentDate && <p className="mt-1 text-xs text-primary-600">{errors.appointmentDate}</p>}
-                  </div>
-                </div>
-
-                <div className="flex min-h-0 flex-col">
-                  <h4 className="mb-2 text-base font-semibold text-gray-800">
-                    Available Time Slots
-                    {selectedDate && (
-                      <span className="mt-0.5 block text-xs font-normal text-gray-500">
-                        {format(selectedDate, 'EEEE, MMM d, yyyy')}
-                      </span>
-                    )}
-                  </h4>
-                  <div className="h-[220px] overflow-y-auto rounded-lg border-2 border-gray-200 bg-gray-50 p-4">
-                    {loadingSlots ? (
-                      <div className="flex h-full flex-col items-center justify-center gap-2">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        <p className="text-sm text-gray-500">Loading available times...</p>
-                      </div>
-                    ) : appointmentSlots.length === 0 ? (
-                      selectedDate ? (
-                        <p className="flex h-full items-center text-sm text-gray-500">No available times for this date</p>
-                      ) : (
-                        <p className="flex h-full items-center text-sm text-gray-500">Select a date to see available times</p>
-                      )
-                    ) : (
-                      <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
-                        {appointmentSlots.map((slot) => {
-                          const isSelected = form.timeSlot === slot;
-                          return (
-                            <button
-                              key={slot}
-                              type="button"
-                              onClick={() => {
-                                setForm((prev) => ({ ...prev, timeSlot: slot }));
-                                clearError('timeSlot');
-                              }}
-                              className={cn(
-                                'rounded-lg px-2 py-1.5 text-sm font-medium',
-                                isSelected
-                                  ? 'bg-primary text-white'
-                                  : 'border border-gray-200 bg-white hover:border-primary hover:bg-primary/5'
-                              )}
-                            >
-                              {slot}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                  {errors.timeSlot && <p className="mt-1 text-xs text-primary-600">{errors.timeSlot}</p>}
-                </div>
-              </div>
-            </>
-          )}
-
-          <div className="mt-6">
-            <label className="mb-2 block text-sm font-medium text-gray-700">Notes (Optional)</label>
+        <div className="mt-10">
+          <div className={FORM_FIELD_FRAME}>
+            <span className={FORM_FLOAT_LABEL}>Notes (Optional)</span>
             <textarea
-              className="min-h-0 w-full resize-y rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-2 focus:border-primary"
+              className={FORM_TEXTAREA}
               placeholder="Add any notes for the doctor (optional)"
               value={form.notes}
               onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
               maxLength={500}
-              rows={2}
+              rows={4}
             />
-            <p className="mt-1 text-xs text-gray-500">{500 - (form.notes?.length || 0)} characters remaining</p>
           </div>
+          <p className="mt-1.5 text-[12px] text-gray-400 dark:text-gray-500">
+            {500 - (form.notes?.length || 0)} characters remaining
+          </p>
+        </div>
 
-          <div className="mt-6 flex justify-end gap-2">
-            <button
-              type="button"
-              className="rounded-lg border border-gray-300 bg-white px-6 py-2 text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-              onClick={() => navigate('/app/appointments')}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="
-    inline-flex items-center gap-2 text-sm font-medium
-    px-4 py-2 rounded-md transition-all duration-200
-    border border-transparent
-    bg-[#8B5E3C] text-[#f5f5f5]
-    hover:opacity-95 active:opacity-90
-    dark:bg-[#9d734f] dark:text-white
-    dark:hover:opacity-95 dark:active:opacity-90
-  "
-              disabled={submitting}
-            >
-              {submitting ? 'Saving...' : isEditMode ? 'Update Appointment' : 'Create Appointment'}
-            </button>
-          </div>
+        <div className="mt-8 flex flex-wrap justify-end gap-3">
+          <button
+            type="button"
+            className="inline-flex min-h-10 items-center justify-center rounded-xl px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100/90 dark:text-gray-200 dark:hover:bg-gray-800/80"
+            onClick={() => navigate('/app/appointments')}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="inline-flex min-h-10 items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-md shadow-primary/25 transition-opacity hover:opacity-95 disabled:pointer-events-none disabled:opacity-50 dark:shadow-primary/20"
+            disabled={submitting}
+          >
+            {submitting ? 'Saving...' : isEditMode ? 'Update Appointment' : 'Create Appointment'}
+          </button>
         </div>
       </form>
     </div>

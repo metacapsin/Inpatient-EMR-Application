@@ -22,6 +22,7 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
     const isFullViewportPage = ['/app/health-trends', '/app/daily-log'].includes(location.pathname);
     const isPatientListPage = location.pathname === '/app/patients/list';
     const isBedBoardPage = location.pathname === '/app/bed-board';
+    const isAppointmentsListPage = location.pathname === '/app/appointments';
     const isIpdDashboardPage = location.pathname === '/app/dashboard';
 
     const [showTopButton, setShowTopButton] = useState(false);
@@ -103,7 +104,7 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
                                         ? 'min-h-0 h-full overflow-hidden'
                                         : isFacesheet
                                           ? 'min-h-0 overflow-x-hidden overflow-y-hidden'
-                                          : isPatientListPage || isBedBoardPage || isIpdDashboardPage
+                                          : isPatientListPage || isBedBoardPage || isAppointmentsListPage || isIpdDashboardPage
                                             ? 'min-h-0 overflow-x-hidden overflow-y-hidden'
                                             : 'min-h-0 overflow-y-auto overflow-x-hidden'
                                 } ${
@@ -111,12 +112,12 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
                                         ? 'py-4 sm:py-6 ltr:pl-4 ltr:pr-6 rtl:pr-4 rtl:pl-6'
                                         : isFacesheet
                                           ? 'p-2 sm:p-3 lg:p-4'
-                                          : isBedBoardPage || isIpdDashboardPage
+                                          : isBedBoardPage || isAppointmentsListPage || isIpdDashboardPage
                                             ? 'p-4 sm:p-5'
                                             : 'p-6'
                                 }`}
                             >
-                                {isFacesheet || isPatientListPage || isBedBoardPage || isIpdDashboardPage ? (
+                                {isFacesheet || isPatientListPage || isBedBoardPage || isAppointmentsListPage || isIpdDashboardPage ? (
                                     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
                                 ) : (
                                     children

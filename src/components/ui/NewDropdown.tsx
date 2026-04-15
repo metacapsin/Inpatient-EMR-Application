@@ -14,6 +14,13 @@ interface NewDropdownProps {
   label?: string;
   /** `outlined`: white field, border, notched label, 32px height (patient list filters). */
   variant?: NewDropdownVariant;
+  /**
+   * `sm` (default): 32px outlined fields (Patient List filters).
+   * `md`: 40px outlined fields (appointment form) with neutral borders/typography.
+   */
+  fieldSize?: "sm" | "md";
+  /** Highlights the trigger border when the field failed validation. */
+  hasError?: boolean;
   options: DropdownOption[];
   value: string | number;
   placeholder?: string;
@@ -28,6 +35,8 @@ export default function NewDropdown({
   id,
   label,
   variant = "outlined",
+  fieldSize = "sm",
+  hasError = false,
   options,
   value,
   placeholder = "Select option",
@@ -38,6 +47,7 @@ export default function NewDropdown({
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const isOutlined = variant === "outlined";
+  const isMdOutlined = isOutlined && fieldSize === "md";
 
   const selectedOption = options.find((opt) => opt.value === value);
 
@@ -68,35 +78,76 @@ export default function NewDropdown({
   ${!disabled ? "hover:border-[#8B5E3C] dark:hover:border-amber-700" : ""}
 `;
 
-  const triggerOutlined = `
+  const triggerOutlinedSm = `
   h-8 max-h-[32px]
-  rounded-lg border border-primary-200 bg-white shadow-sm
-  dark:border-primary-700 dark:bg-[#141210]
+  rounded-lg border bg-white shadow-sm
+  dark:bg-[#141210]
   px-2
-  ${!disabled ? "hover:border-primary-300 dark:hover:border-primary-600" : ""}
+  ${
+    hasError
+      ? "border-primary-600 dark:border-primary-500"
+      : "border-primary-200 dark:border-primary-700"
+  }
+  ${!disabled && !hasError ? "hover:border-primary-300 dark:hover:border-primary-600" : ""}
 `;
+
+  const triggerOutlinedMd = `
+  h-10 max-h-10
+  rounded-lg border bg-white px-3
+  outline-none transition-all duration-200
+  focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/15
+  dark:bg-[#141210]
+  ${
+    hasError
+      ? "border-primary-600 dark:border-primary-500"
+      : "border-gray-200/70 dark:border-gray-600"
+  }
+  ${
+    !disabled && !hasError
+      ? "hover:border-gray-300/90 dark:hover:border-gray-500"
+      : ""
+  }
+`;
+
+  const triggerOutlined = isMdOutlined ? triggerOutlinedMd : triggerOutlinedSm;
+
+  const triggerToneClass = isMdOutlined
+    ? "text-gray-700 dark:text-gray-200"
+    : "text-[#8B5E3C] dark:text-amber-100/90";
 
   const triggerClass = `
   w-full flex justify-between items-center gap-1 min-w-0
-  text-[#8B5E3C] dark:text-amber-100/90
+  ${triggerToneClass}
   transition-all duration-200
   ${triggerBase}
   ${isOutlined ? triggerOutlined : triggerDefault}
 `.trim();
 
-  const valueTextClass = !selectedOption
-    ? isOutlined
-      ? "text-slate-400 dark:text-gray-500"
-      : "text-gray-400 dark:text-gray-500"
-    : isOutlined
-      ? "text-slate-700 dark:text-gray-200"
-      : "text-[#8B5E3C] dark:text-amber-100/90";
+  const valueTextClass = isMdOutlined
+    ? !selectedOption
+      ? "text-gray-400 dark:text-gray-500"
+      : "text-gray-900 dark:text-gray-100"
+    : !selectedOption
+      ? isOutlined
+        ? "text-slate-400 dark:text-gray-500"
+        : "text-gray-400 dark:text-gray-500"
+      : isOutlined
+        ? "text-slate-700 dark:text-gray-200"
+        : "text-[#8B5E3C] dark:text-amber-100/90";
 
-  const chevronClass = `shrink-0 text-[#8B5E3C] transition-transform duration-200 dark:text-amber-200/80 ${
-    open ? "rotate-180" : ""
-  } ${isOutlined ? "h-3.5 w-3.5" : "h-4 w-4"}`;
+  const chevronClass = `shrink-0 transition-transform duration-200 ${
+    isMdOutlined
+      ? `text-gray-400 dark:text-gray-500 ${open ? "rotate-180" : ""} h-4 w-4`
+      : `text-[#8B5E3C] dark:text-amber-200/80 ${open ? "rotate-180" : ""} ${
+          isOutlined ? "h-3.5 w-3.5" : "h-4 w-4"
+        }`
+  }`;
 
-  const valueTypography = isOutlined ? "truncate text-left text-xs leading-tight" : "";
+  const valueTypography = isOutlined
+    ? isMdOutlined
+      ? "truncate text-left text-[14px] font-medium leading-tight"
+      : "truncate text-left text-xs leading-tight"
+    : "";
 
   const inner = (
     <>
@@ -153,7 +204,7 @@ export default function NewDropdown({
     return (
       <div className={`relative w-full ${className}`.trim()} ref={dropdownRef}>
         {inner}
-        <span className="pointer-events-none absolute left-3 top-0 z-10 -translate-y-1/2 bg-white px-1 text-xs font-bold text-dark dark:bg-[#141210] dark:text-gray-200">
+        <span className="pointer-events-none absolute left-3 top-0 z-10 -translate-y-1/2 bg-white px-1 text-[12px] font-medium text-gray-500 dark:bg-[#141210] dark:text-gray-400">
           {label}
         </span>
       </div>
