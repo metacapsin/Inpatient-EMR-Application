@@ -35,62 +35,49 @@ export function LiveBedBoardFilters({
     ];
 
     return (
-      <>
-      <div className="grid grid-cols-3 gap-4 w-full">
-
-    {/* WARD */}
-    <div className="flex flex-col w-full">
-        <label className="text-sm font-medium mb-1">Ward</label>
-        <NewDropdown
-            id="bed-board-ward"
-            value={wardId ? wardId : '__all__'}
-            placeholder={wardsLoading ? 'Loading wards…' : 'All wards'}
-            options={wardOptions}
-            onChange={(v) => onWardChange(v === '__all__' ? '' : String(v))}
-            disabled={disabled || wardsLoading}
-            aria-busy={wardsLoading}
-            compact
-            className="w-full min-w-0"
-        />
-    </div>
-
-    {/* ROOM */}
-    <div className="flex flex-col w-full">
-        <label className="text-sm font-medium mb-1">Room</label>
-        <NewDropdown
-            id="bed-board-room"
-            value={roomId ? roomId : '__all__'}
-            placeholder={!wardId ? 'Select a ward to filter rooms' : roomsLoading ? 'Loading rooms…' : 'All rooms'}
-            options={roomOptions}
-            onChange={(v) => onRoomChange(v === '__all__' ? '' : String(v))}
-            disabled={disabled || roomsLoading || !wardId}
-            aria-busy={roomsLoading}
-            compact
-            className="w-full min-w-0"
-        />
-    </div>
-
-    {/* BED STATUS */}
-    <div className="flex flex-col w-full">
-        <label className="text-sm font-medium mb-1">Bed Status</label>
-        <NewDropdown
-            id="bed-board-status"
-            value={bedStatus || '__all__'}
-            placeholder="All statuses"
-            options={BED_STATUS_FILTERS.map((x) => ({
-                value: x.value || '__all__',
-                label: x.label
-            }))}
-            onChange={(v) => onBedStatusChange(v === '__all__' ? '' : String(v))}
-            disabled={disabled}
-            compact
-            className="w-full min-w-0"
-        />
-    </div>
-
-</div>
-   
-        </>
+        <div className="flex min-w-0 flex-col gap-3 md:flex-row md:flex-nowrap md:items-end md:gap-3">
+            <div className="min-w-0 flex-1 md:min-w-0">
+                <NewDropdown
+                    id="bed-board-ward"
+                    label="Ward"
+                    value={wardId ? wardId : '__all__'}
+                    placeholder={wardsLoading ? 'Loading wards…' : 'All wards'}
+                    options={wardOptions}
+                    onChange={(v) => onWardChange(v === '__all__' ? '' : String(v))}
+                    disabled={disabled || wardsLoading}
+                    aria-busy={wardsLoading}
+                    className="w-full min-w-0"
+                />
+            </div>
+            <div className="min-w-0 flex-1 md:min-w-0">
+                <NewDropdown
+                    id="bed-board-room"
+                    label="Room"
+                    value={roomId ? roomId : '__all__'}
+                    placeholder={!wardId ? 'Select a ward to filter rooms' : roomsLoading ? 'Loading rooms…' : 'All rooms'}
+                    options={roomOptions}
+                    onChange={(v) => onRoomChange(v === '__all__' ? '' : String(v))}
+                    disabled={disabled || roomsLoading || !wardId}
+                    aria-busy={roomsLoading}
+                    className="w-full min-w-0"
+                />
+            </div>
+            <div className="min-w-0 flex-1 md:min-w-0">
+                <NewDropdown
+                    id="bed-board-status"
+                    label="Bed Status"
+                    value={bedStatus || '__all__'}
+                    placeholder="All statuses"
+                    options={BED_STATUS_FILTERS.map((x) => ({
+                        value: x.value || '__all__',
+                        label: x.label,
+                    }))}
+                    onChange={(v) => onBedStatusChange(v === '__all__' ? '' : String(v))}
+                    disabled={disabled}
+                    className="w-full min-w-0"
+                />
+            </div>
+        </div>
     );
 }
 

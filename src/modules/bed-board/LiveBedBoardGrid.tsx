@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format, parseISO, isValid } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ActionIconTooltip } from '@/components/ui/ActionIconTooltip';
 import type { LiveBedBoardRow } from '../../types/liveBedBoard';
-import { bedStatusIndicatorClass } from '../../lib/adtBedPicker';
+import { bedStatusPillClass } from '../../lib/adtBedPicker';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 0] as const;
 
@@ -25,12 +26,13 @@ function abbrevId(id: string): string {
 }
 
 function StatusBadge({ status }: { status: string }) {
-    const label = status.trim() || 'unknown';
-    const cls = bedStatusIndicatorClass(label);
+    const raw = status.trim();
+    const label = raw || 'unknown';
     return (
-        <span className="inline-flex items-center gap-1">
-            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${cls}`} aria-hidden />
-            <span className="text-xs capitalize text-gray-800 dark:text-gray-100">{label || '—'}</span>
+        <span
+            className={`inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize leading-tight ${bedStatusPillClass(label)}`}
+        >
+            <span className="truncate">{label}</span>
         </span>
     );
 }
@@ -92,7 +94,7 @@ export function LiveBedBoardGrid({ rows, loading }: LiveBedBoardGridProps) {
                     {loading ? (
                         <div className="space-y-2">
                             {Array.from({ length: 4 }).map((_, i) => (
-                                <div key={i} className="h-24 animate-pulse rounded-xl bg-gray-200 dark:bg-gray-700" />
+                                <div key={i} className="h-28 animate-pulse rounded-xl bg-gray-200 dark:bg-gray-700" />
                             ))}
                         </div>
                     ) : total === 0 ? (
@@ -106,44 +108,44 @@ export function LiveBedBoardGrid({ rows, loading }: LiveBedBoardGridProps) {
                                 className="rounded-xl border border-gray-200/90 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#1a1a1a]"
                             >
                                 <div className="flex items-start justify-between gap-2">
-                                    <div>
-                                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{row.bed.label}</h3>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    <div className="min-w-0">
+                                        <h3 className="truncate text-sm font-semibold text-gray-900 dark:text-white">{row.bed.label}</h3>
+                                        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                                             {[row.ward?.name, row.room?.name].filter(Boolean).join(' · ') || '—'}
                                         </p>
                                     </div>
-                                    <div className="text-xs" aria-label={`Bed status ${row.bed.bedStatus}`}>
+                                    <div className="shrink-0" aria-label={`Bed status ${row.bed.bedStatus}`}>
                                         <StatusBadge status={row.bed.bedStatus} />
                                     </div>
                                 </div>
                                 <dl className="mt-3 space-y-1 text-xs text-gray-600 dark:text-gray-300">
                                     <div className="flex justify-between gap-2">
-                                        <dt className="text-gray-500 dark:text-gray-400">Patient</dt>
+                                        <dt className="font-bold text-dark dark:text-gray-200">Patient</dt>
                                         <dd className="max-w-[60%] truncate text-right font-medium text-gray-900 dark:text-white">
                                             {row.patient?.displayName ?? '—'}
                                         </dd>
                                     </div>
                                     <div className="flex justify-between gap-2">
-                                        <dt className="text-gray-500 dark:text-gray-400">MRN</dt>
+                                        <dt className="font-bold text-dark dark:text-gray-200">MRN</dt>
                                         <dd className="font-mono text-[11px]">{row.patient?.mrn || '—'}</dd>
                                     </div>
                                     <div className="flex justify-between gap-2">
-                                        <dt className="text-gray-500 dark:text-gray-400">Admitted</dt>
+                                        <dt className="font-bold text-dark dark:text-gray-200">Admitted</dt>
                                         <dd>{formatAdmission(row.encounter?.admissionTimestamp)}</dd>
                                     </div>
                                 </dl>
-                                <div className="mt-3 flex flex-wrap gap-2">
+                                <div className="mt-3 flex flex-wrap justify-end gap-2">
                                     {pid ? (
                                         <>
                                             <Link
                                                 to={`/app/facesheet/${encodeURIComponent(pid)}`}
-                                                className="inline-flex h-8 items-center justify-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-800 dark:border-white/12 dark:bg-[#1a1816] dark:text-gray-100"
+                                                className="inline-flex h-8 min-w-[4.5rem] items-center justify-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
                                             >
                                                 Chart
                                             </Link>
                                             <Link
                                                 to={`/app/facesheet/${encodeURIComponent(pid)}/adt`}
-                                                className="inline-flex h-8 items-center justify-center rounded-lg bg-primary px-3 text-xs font-semibold text-white"
+                                                className="inline-flex h-8 min-w-[4.5rem] items-center justify-center rounded-lg bg-primary px-3 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 hover:shadow-primary"
                                             >
                                                 ADT
                                             </Link>
@@ -191,27 +193,31 @@ export function LiveBedBoardGrid({ rows, loading }: LiveBedBoardGridProps) {
                             </label>
                             {totalPages > 1 ? (
                                 <div className="flex items-center gap-0.5">
-                                    <button
-                                        type="button"
-                                        title="Previous page"
-                                        disabled={safePage <= 1}
-                                        onClick={() => setPage((p) => Math.max(1, p - 1))}
-                                        className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
-                                    >
-                                        <ChevronLeft className="h-3.5 w-3.5" />
-                                    </button>
+                                    <ActionIconTooltip label="Previous page">
+                                        <button
+                                            type="button"
+                                            aria-label="Previous page"
+                                            disabled={safePage <= 1}
+                                            onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                            className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
+                                        >
+                                            <ChevronLeft className="h-3.5 w-3.5" />
+                                        </button>
+                                    </ActionIconTooltip>
                                     <span className="min-w-[4.75rem] text-center text-xs tabular-nums text-gray-600 dark:text-gray-400">
                                         {safePage}/{totalPages}
                                     </span>
-                                    <button
-                                        type="button"
-                                        title="Next page"
-                                        disabled={safePage >= totalPages}
-                                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                                        className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
-                                    >
-                                        <ChevronRight className="h-3.5 w-3.5" />
-                                    </button>
+                                    <ActionIconTooltip label="Next page">
+                                        <button
+                                            type="button"
+                                            aria-label="Next page"
+                                            disabled={safePage >= totalPages}
+                                            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                            className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
+                                        >
+                                            <ChevronRight className="h-3.5 w-3.5" />
+                                        </button>
+                                    </ActionIconTooltip>
                                 </div>
                             ) : null}
                         </div>
@@ -219,10 +225,10 @@ export function LiveBedBoardGrid({ rows, loading }: LiveBedBoardGridProps) {
                 ) : null}
             </div>
 
-            <div className="hidden min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200/70 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.08] dark:bg-[#1a1a1a] dark:shadow-none md:flex md:h-[calc(100dvh-18rem)] md:max-h-[calc(100dvh-18rem)] md:min-h-[16rem]">
+            <div className="hidden min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200/70 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.08] dark:bg-[#1a1a1a] dark:shadow-none md:flex md:min-h-[16rem] md:flex-1">
                 <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto overscroll-contain">
                     <table className="w-full min-w-[880px] text-left text-xs">
-                    <thead className="sticky top-0 z-10 border-b border-gray-200/80 bg-gray-50/90 text-[10px] font-semibold uppercase tracking-wide text-gray-500 shadow-[0_1px_0_0_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-[#1c1c1c]/95 dark:text-gray-400">
+                    <thead className="sticky top-0 z-10 border-b border-gray-200/80 bg-gray-50/90 text-[10px] font-bold uppercase tracking-wide text-gray-500 shadow-[0_1px_0_0_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-[#1c1c1c]/95 dark:text-gray-400">
                         <tr>
                             <th className="px-2.5 py-2">Ward</th>
                             <th className="px-2.5 py-2">Room</th>
@@ -251,42 +257,42 @@ export function LiveBedBoardGrid({ rows, loading }: LiveBedBoardGridProps) {
                                 return (
                                     <tr
                                         key={row.bed.id}
-                                        className="transition-colors hover:bg-gray-50/90 dark:hover:bg-white/[0.04]"
+                                        className="h-10 transition-colors hover:bg-gray-50/90 dark:hover:bg-white/[0.04]"
                                     >
-                                        <td className="px-2.5 py-1.5 text-gray-800 dark:text-gray-200">{row.ward?.name ?? '—'}</td>
-                                        <td className="px-2.5 py-1.5 text-gray-800 dark:text-gray-200">{row.room?.name ?? '—'}</td>
-                                        <td className="px-2.5 py-1.5 font-medium text-gray-900 dark:text-white">{row.bed.label}</td>
-                                        <td className="px-2.5 py-1.5" aria-label={`Bed status ${row.bed.bedStatus}`}>
+                                        <td className="px-2.5 py-1.5 align-middle text-gray-800 dark:text-gray-200">{row.ward?.name ?? '—'}</td>
+                                        <td className="px-2.5 py-1.5 align-middle text-gray-800 dark:text-gray-200">{row.room?.name ?? '—'}</td>
+                                        <td className="px-2.5 py-1.5 align-middle font-medium text-gray-900 dark:text-white">{row.bed.label}</td>
+                                        <td className="px-2.5 py-1.5 align-middle" aria-label={`Bed status ${row.bed.bedStatus}`}>
                                             <StatusBadge status={row.bed.bedStatus} />
                                         </td>
-                                        <td className="max-w-[140px] truncate px-2.5 py-1.5 text-gray-800 dark:text-gray-200">
+                                        <td className="max-w-[140px] truncate px-2.5 py-1.5 align-middle text-gray-800 dark:text-gray-200">
                                             {row.patient?.displayName ?? '—'}
                                         </td>
-                                        <td className="px-2.5 py-1.5 font-mono text-[11px] text-gray-600 dark:text-gray-300">
+                                        <td className="px-2.5 py-1.5 align-middle font-mono text-[11px] text-gray-600 dark:text-gray-300">
                                             {row.patient?.mrn || '—'}
                                         </td>
-                                        <td className="whitespace-nowrap px-2.5 py-1.5 text-gray-600 dark:text-gray-300">
+                                        <td className="whitespace-nowrap px-2.5 py-1.5 align-middle text-gray-600 dark:text-gray-300">
                                             {formatAdmission(row.encounter?.admissionTimestamp)}
                                         </td>
                                         <td
-                                            className="px-2.5 py-1.5 font-mono text-[11px] text-gray-600 dark:text-gray-300"
+                                            className="px-2.5 py-1.5 align-middle font-mono text-[11px] text-gray-600 dark:text-gray-300"
                                             title={encId ?? undefined}
                                         >
                                             {encId ? abbrevId(encId) : '—'}
                                         </td>
-                                        <td className="px-2.5 py-1.5 text-right">
-                                            <div className="flex flex-wrap justify-end gap-1">
+                                        <td className="px-2.5 py-1.5 text-right align-middle">
+                                            <div className="inline-flex flex-nowrap items-center justify-end gap-1.5">
                                                 {pid ? (
                                                     <>
                                                         <Link
                                                             to={`/app/facesheet/${encodeURIComponent(pid)}`}
-                                                            className="inline-flex h-7 items-center justify-center rounded-md border border-gray-200/80 bg-white px-2 text-[11px] font-semibold text-gray-800 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100"
+                                                            className="inline-flex h-7 min-w-[3.25rem] items-center justify-center rounded-md border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
                                                         >
                                                             Chart
                                                         </Link>
                                                         <Link
                                                             to={`/app/facesheet/${encodeURIComponent(pid)}/adt`}
-                                                            className="inline-flex h-7 items-center justify-center rounded-md bg-primary px-2 text-[11px] font-semibold text-white"
+                                                            className="inline-flex h-7 min-w-[3.25rem] items-center justify-center rounded-md bg-primary px-2 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 hover:shadow-primary"
                                                         >
                                                             ADT
                                                         </Link>
@@ -337,27 +343,31 @@ export function LiveBedBoardGrid({ rows, loading }: LiveBedBoardGridProps) {
                             </label>
                             {totalPages > 1 ? (
                                 <div className="flex items-center gap-0.5">
-                                    <button
-                                        type="button"
-                                        title="Previous page"
-                                        disabled={safePage <= 1}
-                                        onClick={() => setPage((p) => Math.max(1, p - 1))}
-                                        className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
-                                    >
-                                        <ChevronLeft className="h-3.5 w-3.5" />
-                                    </button>
+                                    <ActionIconTooltip label="Previous page">
+                                        <button
+                                            type="button"
+                                            aria-label="Previous page"
+                                            disabled={safePage <= 1}
+                                            onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                            className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
+                                        >
+                                            <ChevronLeft className="h-3.5 w-3.5" />
+                                        </button>
+                                    </ActionIconTooltip>
                                     <span className="min-w-[4.75rem] text-center text-xs tabular-nums text-gray-600 dark:text-gray-400">
                                         {safePage}/{totalPages}
                                     </span>
-                                    <button
-                                        type="button"
-                                        title="Next page"
-                                        disabled={safePage >= totalPages}
-                                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                                        className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
-                                    >
-                                        <ChevronRight className="h-3.5 w-3.5" />
-                                    </button>
+                                    <ActionIconTooltip label="Next page">
+                                        <button
+                                            type="button"
+                                            aria-label="Next page"
+                                            disabled={safePage >= totalPages}
+                                            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                            className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
+                                        >
+                                            <ChevronRight className="h-3.5 w-3.5" />
+                                        </button>
+                                    </ActionIconTooltip>
                                 </div>
                             ) : null}
                         </div>

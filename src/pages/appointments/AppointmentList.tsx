@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { Calendar, ChevronLeft, ChevronRight, Pencil, Search } from 'lucide-react';
 import { appointmentAPI } from '../../services/api';
 import NewDropdown from '@/components/ui/NewDropdown';
+import { ActionIconTooltip } from '@/components/ui/ActionIconTooltip';
 import { DateRangePicker } from '@/components/patients/DateRangePicker';
 
 type AppointmentRow = {
@@ -397,19 +398,20 @@ const AppointmentList: React.FC = () => {
                       </div>
                     </dl>
                     <div className="mt-3 flex justify-end">
-                      <button
-                        type="button"
-                        disabled={!id}
-                        title="Edit appointment"
-                        aria-label="Edit appointment"
-                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
-                        onClick={() => {
-                          if (!id) return;
-                          navigate(`/app/appointments/add?appointmentId=${encodeURIComponent(id)}`);
-                        }}
-                      >
-                        <Pencil className="h-3.5 w-3.5" aria-hidden />
-                      </button>
+                      <ActionIconTooltip label="Edit appointment">
+                        <button
+                          type="button"
+                          disabled={!id}
+                          aria-label="Edit appointment"
+                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
+                          onClick={() => {
+                            if (!id) return;
+                            navigate(`/app/appointments/add?appointmentId=${encodeURIComponent(id)}`);
+                          }}
+                        >
+                          <Pencil className="h-3.5 w-3.5" aria-hidden />
+                        </button>
+                      </ActionIconTooltip>
                     </div>
                   </article>
                 );
@@ -443,27 +445,31 @@ const AppointmentList: React.FC = () => {
                 </label>
                 {pages > 1 ? (
                   <div className="flex items-center gap-0.5">
-                    <button
-                      type="button"
-                      title="Previous page"
-                      disabled={safePage <= 1}
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
-                    >
-                      <ChevronLeft className="h-3.5 w-3.5" />
-                    </button>
+                    <ActionIconTooltip label="Previous page">
+                      <button
+                        type="button"
+                        aria-label="Previous page"
+                        disabled={safePage <= 1}
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                      </button>
+                    </ActionIconTooltip>
                     <span className="min-w-[4.75rem] text-center text-xs tabular-nums text-gray-600 dark:text-gray-400">
                       {safePage}/{pages}
                     </span>
-                    <button
-                      type="button"
-                      title="Next page"
-                      disabled={safePage >= pages}
-                      onClick={() => setPage((p) => Math.min(pages, p + 1))}
-                      className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
-                    >
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </button>
+                    <ActionIconTooltip label="Next page">
+                      <button
+                        type="button"
+                        aria-label="Next page"
+                        disabled={safePage >= pages}
+                        onClick={() => setPage((p) => Math.min(pages, p + 1))}
+                        className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    </ActionIconTooltip>
                   </div>
                 ) : null}
               </div>
@@ -511,19 +517,20 @@ const AppointmentList: React.FC = () => {
                           <AppointmentStatusPill status={row.appointmentStatus} />
                         </td>
                         <td className="px-2.5 py-1.5 text-right">
-                          <button
-                            type="button"
-                            disabled={!id}
-                            title="Edit appointment"
-                            aria-label="Edit appointment"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
-                            onClick={() => {
-                              if (!id) return;
-                              navigate(`/app/appointments/add?appointmentId=${encodeURIComponent(id)}`);
-                            }}
-                          >
-                            <Pencil className="h-3.5 w-3.5" aria-hidden />
-                          </button>
+                          <ActionIconTooltip label="Edit appointment">
+                            <button
+                              type="button"
+                              disabled={!id}
+                              aria-label="Edit appointment"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
+                              onClick={() => {
+                                if (!id) return;
+                                navigate(`/app/appointments/add?appointmentId=${encodeURIComponent(id)}`);
+                              }}
+                            >
+                              <Pencil className="h-3.5 w-3.5" aria-hidden />
+                            </button>
+                          </ActionIconTooltip>
                         </td>
                       </tr>
                     );
@@ -559,27 +566,31 @@ const AppointmentList: React.FC = () => {
                 </label>
                 {pages > 1 ? (
                   <div className="flex items-center gap-0.5">
-                    <button
-                      type="button"
-                      title="Previous page"
-                      disabled={safePage <= 1}
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
-                    >
-                      <ChevronLeft className="h-3.5 w-3.5" />
-                    </button>
+                    <ActionIconTooltip label="Previous page">
+                      <button
+                        type="button"
+                        aria-label="Previous page"
+                        disabled={safePage <= 1}
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                      </button>
+                    </ActionIconTooltip>
                     <span className="min-w-[4.75rem] text-center text-xs tabular-nums text-gray-600 dark:text-gray-400">
                       {safePage}/{pages}
                     </span>
-                    <button
-                      type="button"
-                      title="Next page"
-                      disabled={safePage >= pages}
-                      onClick={() => setPage((p) => Math.min(pages, p + 1))}
-                      className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
-                    >
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </button>
+                    <ActionIconTooltip label="Next page">
+                      <button
+                        type="button"
+                        aria-label="Next page"
+                        disabled={safePage >= pages}
+                        onClick={() => setPage((p) => Math.min(pages, p + 1))}
+                        className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    </ActionIconTooltip>
                   </div>
                 ) : null}
               </div>

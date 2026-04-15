@@ -1,6 +1,7 @@
 import { Eye, CalendarPlus, UserPlus, ArrowRightLeft, DoorOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import { ActionIconTooltip } from '@/components/ui/ActionIconTooltip';
 import { formatAgeLabelFromDobRaw, getPatientListRowId, type PatientListItem } from '../../services/patient.service';
 import type { IRootState } from '../../store';
 import { selectAdtEncounter } from '../../store/adtEncounterSlice';
@@ -127,37 +128,51 @@ function InpatientAdtCell({
 
     const hideAdmit = serverAdmitted || workspaceAdmitted;
 
+    const dischargeTip =
+        !bedReadyForDischarge && encounterReady && !dischargePending
+            ? 'No bed linked to this encounter — refresh the chart'
+            : dischargePending
+              ? 'Continue discharge readiness'
+              : 'Start discharge';
+
+    const dischargeAria =
+        !bedReadyForDischarge && encounterReady && !dischargePending
+            ? 'Discharge unavailable: no bed linked'
+            : dischargePending
+              ? 'Continue discharge readiness'
+              : 'Start discharge';
+
     const actions = onOpenAdt ? (
         <div className="flex flex-wrap gap-1">
             {!hideAdmit ? (
-                <button type="button" title="Admit" onClick={open('admit')} className={btnClass}>
-                    <UserPlus className="h-3.5 w-3.5" aria-hidden />
-                </button>
+                <ActionIconTooltip label="Admit">
+                    <button type="button" aria-label="Admit" onClick={open('admit')} className={btnClass}>
+                        <UserPlus className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                </ActionIconTooltip>
             ) : null}
-            <button
-                type="button"
-                title="Transfer"
-                disabled={!encounterReady || dischargePending}
-                onClick={open('transfer')}
-                className={btnClass} 
-            >
-                <ArrowRightLeft className="h-3.5 w-3.5" aria-hidden />
-            </button>
-            <button
-                type="button"
-                title={
-                    !bedReadyForDischarge && encounterReady && !dischargePending
-                        ? 'No bed linked to this encounter — refresh the chart'
-                        : dischargePending
-                          ? 'Continue discharge readiness'
-                          : 'Start discharge'
-                }
-                disabled={!encounterReady || (!bedReadyForDischarge && !dischargePending)}
-                onClick={startDischarge}
-                className={btnClass}
-            >
-                <DoorOpen className="h-3.5 w-3.5" aria-hidden />
-            </button>
+            <ActionIconTooltip label="Transfer">
+                <button
+                    type="button"
+                    aria-label="Transfer"
+                    disabled={!encounterReady || dischargePending}
+                    onClick={open('transfer')}
+                    className={btnClass}
+                >
+                    <ArrowRightLeft className="h-3.5 w-3.5" aria-hidden />
+                </button>
+            </ActionIconTooltip>
+            <ActionIconTooltip label={dischargeTip}>
+                <button
+                    type="button"
+                    aria-label={dischargeAria}
+                    disabled={!encounterReady || (!bedReadyForDischarge && !dischargePending)}
+                    onClick={startDischarge}
+                    className={btnClass}
+                >
+                    <DoorOpen className="h-3.5 w-3.5" aria-hidden />
+                </button>
+            </ActionIconTooltip>
         </div>
     ) : null;
 
@@ -262,24 +277,26 @@ export function PatientTableRow({
             </td>
             <td className="whitespace-nowrap px-2.5 py-1.5 text-right">
                 <div className="flex items-center justify-end gap-0.5">
-                    <button
-                        type="button"
-                        title="Book appointment"
-                        aria-label="Book appointment"
-                        onClick={handleBookAppointment}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
-                    >
-                        <CalendarPlus className="h-3.5 w-3.5" aria-hidden />
-                    </button>
-                    <button
-                        type="button"
-                        title="View"
-                        aria-label="View"
-                        onClick={handleView}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
-                    >
-                        <Eye className="h-3.5 w-3.5" aria-hidden />
-                    </button>
+                    <ActionIconTooltip label="Book appointment">
+                        <button
+                            type="button"
+                            aria-label="Book appointment"
+                            onClick={handleBookAppointment}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
+                        >
+                            <CalendarPlus className="h-3.5 w-3.5" aria-hidden />
+                        </button>
+                    </ActionIconTooltip>
+                    <ActionIconTooltip label="View">
+                        <button
+                            type="button"
+                            aria-label="View chart"
+                            onClick={handleView}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
+                        >
+                            <Eye className="h-3.5 w-3.5" aria-hidden />
+                        </button>
+                    </ActionIconTooltip>
                 </div>
             </td>
         </tr>
@@ -364,24 +381,26 @@ export function PatientMobileCard({
                     ) : null}
                     <div className="mt-3 flex justify-end">
                         <div className="flex items-center gap-0.5">
-                            <button
-                                type="button"
-                                title="Book appointment"
-                                aria-label="Book appointment"
-                                onClick={handleBookAppointment}
-                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
-                            >
-                                <CalendarPlus className="h-3.5 w-3.5" aria-hidden />
-                            </button>
-                            <button
-                                type="button"
-                                title="View"
-                                aria-label="View"
-                                onClick={handleView}
-                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
-                            >
-                                <Eye className="h-3.5 w-3.5" aria-hidden />
-                            </button>
+                            <ActionIconTooltip label="Book appointment">
+                                <button
+                                    type="button"
+                                    aria-label="Book appointment"
+                                    onClick={handleBookAppointment}
+                                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
+                                >
+                                    <CalendarPlus className="h-3.5 w-3.5" aria-hidden />
+                                </button>
+                            </ActionIconTooltip>
+                            <ActionIconTooltip label="View">
+                                <button
+                                    type="button"
+                                    aria-label="View chart"
+                                    onClick={handleView}
+                                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
+                                >
+                                    <Eye className="h-3.5 w-3.5" aria-hidden />
+                                </button>
+                            </ActionIconTooltip>
                         </div>
                     </div>
                 </div>

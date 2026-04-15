@@ -1,5 +1,5 @@
 import type { LiveBedBoardSummary } from '../../types/liveBedBoard';
-import { bedStatusIndicatorClass } from '../../lib/adtBedPicker';
+import { bedStatusPillClass } from '../../lib/adtBedPicker';
 
 interface LiveBedBoardSummaryBarProps {
     summary: LiveBedBoardSummary;
@@ -10,7 +10,7 @@ export function LiveBedBoardSummaryBar({ summary }: LiveBedBoardSummaryBarProps)
     const statusEntries = Object.entries(byStatus).sort(([a], [b]) => a.localeCompare(b));
 
     return (
-        <div className="space-y-2 rounded-lg border border-gray-200/60 bg-gray-50/40 px-3 py-2.5 dark:border-white/[0.06] dark:bg-white/[0.03]">
+        <div className="space-y-2 rounded-lg border border-gray-200/70 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.08] dark:bg-[#1a1a1a] dark:shadow-none">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs">
                 <span className="font-medium text-gray-700 dark:text-gray-300">Summary</span>
                 <span className="text-gray-500 dark:text-gray-500">
@@ -29,14 +29,10 @@ export function LiveBedBoardSummaryBar({ summary }: LiveBedBoardSummaryBarProps)
                     {statusEntries.map(([label, count]) => (
                         <span
                             key={label}
-                            className="inline-flex items-center gap-1 rounded-md border border-gray-200/70 bg-white/80 px-2 py-0.5 text-[11px] text-gray-700 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-gray-200"
+                            className={`inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize leading-tight ${bedStatusPillClass(label)}`}
                         >
-                            <span
-                                className={`h-1.5 w-1.5 shrink-0 rounded-full ${bedStatusIndicatorClass(label)}`}
-                                aria-hidden
-                            />
-                            <span className="capitalize">{label}</span>
-                            <span className="font-mono tabular-nums text-[10px] text-gray-500 dark:text-gray-400">{count}</span>
+                            <span className="truncate">{label}</span>
+                            <span className="shrink-0 font-mono tabular-nums text-[10px] opacity-80">{count}</span>
                         </span>
                     ))}
                 </div>

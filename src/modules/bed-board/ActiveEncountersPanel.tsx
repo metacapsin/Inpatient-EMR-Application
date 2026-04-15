@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { format, isToday, isYesterday, parseISO, isValid } from 'date-fns';
+import { ActionIconTooltip } from '@/components/ui/ActionIconTooltip';
 import type { LiveBedBoardRow } from '../../types/liveBedBoard';
 import { cn } from '../../lib/utils';
 
@@ -53,6 +54,34 @@ function formatEncounterStatus(raw: string | undefined): string {
     if (compact.includes('admitted') || compact.includes('admit')) return 'Admitted';
     if (!raw?.trim()) return 'In Progress';
     return raw.replace(/_/g, ' ');
+}
+
+function encounterStatusPillClass(display: string): string {
+    const s = display.trim().toLowerCase();
+    if (s.includes('progress') || s === 'active') {
+        return 'border border-primary-100/90 bg-primary-50/90 text-primary-900/85 dark:border-primary-800/50 dark:bg-primary-900/25 dark:text-primary-100/90';
+    }
+    if (s.includes('admit')) {
+        return 'border border-emerald-100/90 bg-emerald-50/90 text-emerald-900/80 dark:border-emerald-900/35 dark:bg-emerald-950/30 dark:text-emerald-100/90';
+    }
+    if (s.includes('discharg') || s.includes('complete') || s.includes('closed')) {
+        return 'border border-gray-200/80 bg-gray-50/90 text-gray-700 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-gray-300';
+    }
+    if (s.includes('cancel')) {
+        return 'border border-rose-100/90 bg-rose-50/90 text-rose-900/80 dark:border-rose-900/40 dark:bg-rose-950/35 dark:text-rose-100/90';
+    }
+    return 'border border-gray-200/80 bg-gray-50/90 text-gray-700 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-gray-300';
+}
+
+function EncounterStatusPill({ status }: { status: string }) {
+    const label = status.trim() || '—';
+    return (
+        <span
+            className={`inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize leading-tight ${encounterStatusPillClass(label)}`}
+        >
+            <span className="truncate">{label}</span>
+        </span>
+    );
 }
 
 interface ActiveEncountersPanelProps {
@@ -166,38 +195,30 @@ export function ActiveEncountersPanel({ rows, loading, errorMessage }: ActiveEnc
     }
 
     return (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-gray-200/45 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)] dark:border-white/[0.06] dark:bg-[#1a1a1a] dark:shadow-none">
-            <div className="h-[calc(100vh-220px)] max-h-full min-h-[12rem] overflow-y-auto overflow-x-auto overscroll-contain">
-                <table className="w-full min-w-[720px] border-collapse text-left text-[13px] leading-snug text-gray-900 dark:text-gray-100">
-                    <thead className="sticky top-0 z-20 border-b border-gray-200/50 text-[10px] font-semibold uppercase tracking-wide text-gray-500 backdrop-blur-sm dark:border-white/[0.05] dark:text-gray-400">
-                        <tr className="h-8">
-                            <th className="bg-gray-50/95 px-2 py-1.5 align-middle dark:bg-[#1c1c1c]/95">
-                                {sortBtn('patient', 'Patient name')}
-                            </th>
-                            <th className="bg-gray-50/95 px-2 py-1.5 align-middle dark:bg-[#1c1c1c]/95">
-                                {sortBtn('location', 'Location')}
-                            </th>
-                            <th className="bg-gray-50/95 px-2 py-1.5 align-middle dark:bg-[#1c1c1c]/95">
-                                {sortBtn('admission', 'Admission time')}
-                            </th>
-                            <th className="bg-gray-50/95 px-2 py-1.5 align-middle dark:bg-[#1c1c1c]/95">
-                                {sortBtn('status', 'Status')}
-                            </th>
-                            <th className="bg-gray-50/95 px-2 py-1.5 text-right align-middle dark:bg-[#1c1c1c]/95">Actions</th>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200/70 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.08] dark:bg-[#1a1a1a] dark:shadow-none md:min-h-[16rem] md:flex-1">
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto overscroll-contain">
+                <table className="w-full min-w-[720px] text-left text-xs">
+                    <thead className="sticky top-0 z-10 border-b border-gray-200/80 bg-gray-50/90 text-[10px] font-bold uppercase tracking-wide text-gray-500 shadow-[0_1px_0_0_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-[#1c1c1c]/95 dark:text-gray-400">
+                        <tr>
+                            <th className="px-2.5 py-2 align-middle">{sortBtn('patient', 'Patient name')}</th>
+                            <th className="px-2.5 py-2 align-middle">{sortBtn('location', 'Location')}</th>
+                            <th className="px-2.5 py-2 align-middle">{sortBtn('admission', 'Admission time')}</th>
+                            <th className="px-2.5 py-2 align-middle">{sortBtn('status', 'Status')}</th>
+                            <th className="px-2.5 py-2 text-right align-middle">Actions</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100/70 dark:divide-white/[0.04]">
+                    <tbody className="divide-y divide-gray-100/90 dark:divide-white/[0.05]">
                         {loading ? (
                             Array.from({ length: 10 }).map((_, i) => (
-                                <tr key={i} className="h-9">
-                                    <td colSpan={5} className="px-2 py-1.5 align-middle">
-                                        <div className="h-3 animate-pulse rounded-sm bg-gray-200/90 dark:bg-gray-700/80" />
+                                <tr key={i} className="h-10">
+                                    <td colSpan={5} className="px-2.5 py-2 align-middle">
+                                        <div className="h-3.5 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
                                     </td>
                                 </tr>
                             ))
                         ) : total === 0 ? (
                             <tr>
-                                <td colSpan={5} className="px-2 py-5 text-center text-[13px] text-gray-500 dark:text-gray-400">
+                                <td colSpan={5} className="px-2.5 py-6 text-center text-xs text-gray-500 dark:text-gray-400">
                                     No admitted patients with an active encounter for the current bed board filters.
                                 </td>
                             </tr>
@@ -206,41 +227,42 @@ export function ActiveEncountersPanel({ rows, loading, errorMessage }: ActiveEnc
                                 const encId = r.encounter?.id ?? r.bed.id;
                                 const pid = patientIdForActions(r);
                                 const adm = rowAdmissionRaw(r);
+                                const statusLabel = formatEncounterStatus(r.encounter?.status);
                                 return (
                                     <tr
                                         key={encId}
-                                        className="h-9 transition-colors duration-150 ease-out hover:bg-gray-50/85 dark:hover:bg-white/[0.035]"
+                                        className="h-10 transition-colors hover:bg-gray-50/90 dark:hover:bg-white/[0.04]"
                                     >
-                                        <td className="max-w-[14rem] truncate px-2 py-1 align-middle font-medium text-gray-900 dark:text-white">
+                                        <td className="max-w-[14rem] truncate px-2.5 py-1.5 align-middle font-medium text-gray-900 dark:text-white">
                                             {rowPatientName(r)}
                                         </td>
-                                        <td className="min-w-[10rem] max-w-[18rem] truncate px-2 py-1 align-middle text-gray-600 dark:text-gray-300">
+                                        <td className="min-w-[10rem] max-w-[18rem] truncate px-2.5 py-1.5 align-middle text-gray-600 dark:text-gray-300">
                                             {rowLocation(r)}
                                         </td>
-                                        <td className="whitespace-nowrap px-2 py-1 align-middle text-gray-600 dark:text-gray-300">
+                                        <td className="whitespace-nowrap px-2.5 py-1.5 align-middle text-gray-600 dark:text-gray-300">
                                             {formatAdmissionRelative(adm)}
                                         </td>
-                                        <td className="px-2 py-1 align-middle text-[13px] text-gray-700 dark:text-gray-200">
-                                            {formatEncounterStatus(r.encounter?.status)}
+                                        <td className="px-2.5 py-1.5 align-middle">
+                                            <EncounterStatusPill status={statusLabel} />
                                         </td>
-                                        <td className="px-2 py-1 text-right align-middle">
+                                        <td className="px-2.5 py-1.5 text-right align-middle">
                                             {pid ? (
-                                                <div className="inline-flex flex-nowrap items-center justify-end gap-0.5">
+                                                <div className="inline-flex flex-nowrap items-center justify-end gap-1.5">
                                                     <Link
                                                         to={`/app/facesheet/${encodeURIComponent(pid)}`}
-                                                        className="inline-flex h-6 shrink-0 items-center justify-center rounded border border-gray-200/70 bg-white px-1.5 text-[11px] font-semibold text-gray-800 transition-colors duration-150 hover:bg-gray-50/90 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.06]"
+                                                        className="inline-flex h-7 min-w-[3.25rem] items-center justify-center rounded-md border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
                                                     >
                                                         Chart
                                                     </Link>
                                                     <Link
                                                         to={`/app/facesheet/${encodeURIComponent(pid)}/adt`}
-                                                        className="inline-flex h-6 shrink-0 items-center justify-center rounded bg-primary px-1.5 text-[11px] font-semibold text-white transition-colors duration-150 hover:bg-primary/90"
+                                                        className="inline-flex h-7 min-w-[3.25rem] items-center justify-center rounded-md bg-primary px-2 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 hover:shadow-primary"
                                                     >
                                                         ADT
                                                     </Link>
                                                 </div>
                                             ) : (
-                                                <span className="text-[12px] text-gray-400">—</span>
+                                                <span className="text-xs text-gray-400">—</span>
                                             )}
                                         </td>
                                     </tr>
@@ -251,8 +273,8 @@ export function ActiveEncountersPanel({ rows, loading, errorMessage }: ActiveEnc
                 </table>
             </div>
             {!loading && total > 0 ? (
-                <div className="flex shrink-0 flex-col gap-1.5 border-t border-gray-200/45 px-2 py-1.5 dark:border-white/[0.05] sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-[11px] text-gray-600 dark:text-gray-400">
+                <div className="flex shrink-0 flex-col gap-2 border-t border-gray-200/70 px-2.5 py-2 dark:border-white/[0.06] sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                         {showAll ? (
                             <>
                                 Showing all{' '}
@@ -266,8 +288,8 @@ export function ActiveEncountersPanel({ rows, loading, errorMessage }: ActiveEnc
                             </>
                         )}
                     </p>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                        <label className="flex items-center gap-1 text-[11px] text-gray-600 dark:text-gray-400">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <label className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
                             <span>Rows</span>
                             <select
                                 value={pageSize}
@@ -275,7 +297,7 @@ export function ActiveEncountersPanel({ rows, loading, errorMessage }: ActiveEnc
                                     setPageSize(Number(e.target.value));
                                     setPage(1);
                                 }}
-                                className="h-7 rounded border border-gray-200/70 bg-white px-1.5 text-[11px] dark:border-white/[0.08] dark:bg-[#1a1816]"
+                                className="h-8 rounded-md border border-gray-200/80 bg-white px-2 text-xs dark:border-white/[0.08] dark:bg-[#1a1816]"
                             >
                                 {PAGE_SIZE_OPTIONS.map((n) => (
                                     <option key={n} value={n}>
@@ -286,27 +308,31 @@ export function ActiveEncountersPanel({ rows, loading, errorMessage }: ActiveEnc
                         </label>
                         {totalPages > 1 ? (
                             <div className="flex items-center gap-0.5">
-                                <button
-                                    type="button"
-                                    title="Previous page"
-                                    disabled={safePage <= 1}
-                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                                    className="flex h-7 w-7 items-center justify-center rounded border border-gray-200/70 bg-white text-gray-700 transition-colors duration-150 hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
-                                >
-                                    <ChevronLeft className="h-3.5 w-3.5" />
-                                </button>
-                                <span className="min-w-[4rem] text-center text-[11px] tabular-nums text-gray-600 dark:text-gray-400">
+                                <ActionIconTooltip label="Previous page">
+                                    <button
+                                        type="button"
+                                        aria-label="Previous page"
+                                        disabled={safePage <= 1}
+                                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                        className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
+                                    >
+                                        <ChevronLeft className="h-3.5 w-3.5" />
+                                    </button>
+                                </ActionIconTooltip>
+                                <span className="min-w-[4.75rem] text-center text-xs tabular-nums text-gray-600 dark:text-gray-400">
                                     {safePage}/{totalPages}
                                 </span>
-                                <button
-                                    type="button"
-                                    title="Next page"
-                                    disabled={safePage >= totalPages}
-                                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                                    className="flex h-7 w-7 items-center justify-center rounded border border-gray-200/70 bg-white text-gray-700 transition-colors duration-150 hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
-                                >
-                                    <ChevronRight className="h-3.5 w-3.5" />
-                                </button>
+                                <ActionIconTooltip label="Next page">
+                                    <button
+                                        type="button"
+                                        aria-label="Next page"
+                                        disabled={safePage >= totalPages}
+                                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                        className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
+                                    >
+                                        <ChevronRight className="h-3.5 w-3.5" />
+                                    </button>
+                                </ActionIconTooltip>
                             </div>
                         ) : null}
                     </div>

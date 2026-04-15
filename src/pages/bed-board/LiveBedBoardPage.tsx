@@ -24,6 +24,12 @@ function useDocumentVisible(): boolean {
 
 const POLL_MS = 45_000;
 
+const tabBtnBase =
+    'inline-flex shrink-0 items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold transition';
+const tabBtnInactive =
+    'border border-transparent text-gray-600 hover:bg-gray-100/80 dark:text-gray-400 dark:hover:bg-white/[0.04]';
+const tabBtnActive = 'bg-primary text-white shadow-sm';
+
 const LiveBedBoardPage = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const docVisible = useDocumentVisible();
@@ -97,13 +103,9 @@ const LiveBedBoardPage = () => {
     );
 
     return (
-        <div
-            className={`relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200/70 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-6px_rgba(0,0,0,0.06)] dark:border-white/[0.08] dark:bg-[#141210] dark:shadow-[0_8px_32px_-8px_rgba(0,0,0,0.45)] ${
-                tab === 'encounters' ? 'p-3 sm:p-4' : 'p-4'
-            }`}
-        >
-            <div className={`shrink-0 ${tab === 'encounters' ? 'space-y-2' : 'space-y-3'}`}>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="font-inter relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200/70 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-6px_rgba(0,0,0,0.06)] dark:border-white/[0.08] dark:bg-[#141210] dark:shadow-[0_8px_32px_-8px_rgba(0,0,0,0.45)]">
+            <div className="shrink-0 space-y-3 p-4 sm:p-5 sm:pb-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex min-w-0 items-center gap-2.5">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary dark:bg-primary/15">
                             <BedDouble className="h-4 w-4" aria-hidden />
@@ -119,113 +121,86 @@ const LiveBedBoardPage = () => {
                             </p>
                         </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        {tab === 'board' ? (
-                            <button
-                                type="button"
-                                disabled={boardQuery.isFetching}
-                                onClick={() => void boardQuery.refetch()}
-                                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-gray-200/80 bg-white px-3 text-xs font-semibold text-gray-700 transition hover:bg-gray-50/80 disabled:opacity-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
-                            >
-                                <RefreshCw className={`h-3.5 w-3.5 ${boardQuery.isFetching ? 'animate-spin' : ''}`} aria-hidden />
-                                Refresh board
-                            </button>
-                        ) : (
-                            <button
-                                type="button"
-                                disabled={boardQuery.isFetching}
-                                onClick={() => void boardQuery.refetch()}
-                                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-gray-200/80 bg-white px-3 text-xs font-semibold text-gray-700 transition hover:bg-gray-50/80 disabled:opacity-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
-                            >
-                                <RefreshCw className={`h-3.5 w-3.5 ${boardQuery.isFetching ? 'animate-spin' : ''}`} aria-hidden />
-                                Refresh encounters
-                            </button>
-                        )}
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+                        <button
+                            type="button"
+                            disabled={boardQuery.isFetching}
+                            onClick={() => void boardQuery.refetch()}
+                            className="inline-flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-200/80 bg-white px-3 text-xs font-semibold text-gray-700 transition hover:bg-gray-50/80 disabled:opacity-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04] sm:w-auto"
+                        >
+                            <RefreshCw className={`h-3.5 w-3.5 ${boardQuery.isFetching ? 'animate-spin' : ''}`} aria-hidden />
+                            {tab === 'encounters' ? 'Refresh encounters' : 'Refresh board'}
+                        </button>
                     </div>
                 </div>
 
-                <div
-                    className={`flex flex-wrap gap-1 border-b pb-0.5 dark:border-white/[0.06] ${
-                        tab === 'encounters'
-                            ? 'border-gray-200/45 dark:border-white/[0.05]'
-                            : 'border-gray-200/60'
-                    }`}
-                >
+                <div className="flex flex-wrap gap-1.5 border-b border-gray-200/50 pb-0.5 dark:border-white/[0.06]">
                     <button
                         type="button"
                         onClick={() => setParam({ tab: null })}
-                        className="
-    inline-flex items-center gap-2 text-sm font-medium
-    px-4 py-2 rounded-md transition-all duration-200
-    border border-transparent
-    bg-[#F6F6FA] text-[#8B5E3C]
-    hover:bg-[#8B5E3C] hover:text-white
-    dark:border-gray-600 dark:bg-gray-900 dark:text-amber-100/90
-    dark:hover:border-amber-800 dark:hover:bg-[#8B5E3C] dark:hover:text-white"
+                        className={`${tabBtnBase} ${tab === 'board' ? tabBtnActive : tabBtnInactive}`}
                     >
                         Board
                     </button>
                     <button
                         type="button"
                         onClick={() => setParam({ tab: 'encounters' })}
-                        className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition ${
-                            tab === 'encounters'
-                                ? 'bg-primary text-white shadow-sm'
-                                : 'text-gray-600 hover:bg-gray-100/80 dark:text-gray-400 dark:hover:bg-white/[0.04]'
-                        }`}
+                        className={`${tabBtnBase} ${tab === 'encounters' ? tabBtnActive : tabBtnInactive}`}
                     >
                         Active encounters
                     </button>
                 </div>
-            </div>
 
-            {tab === 'board' ? (
-                <div className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden border-t border-gray-200/50 pt-3 dark:border-white/[0.06]">
-                    <div className="shrink-0 space-y-2">
-                    {boardQuery.data ? <LiveBedBoardSummaryBar summary={boardQuery.data.summary} /> : null}
-                    <LiveBedBoardFilters
-                        wardId={wardId}
-                        roomId={roomId}
-                        bedStatus={bedStatus}
-                        wards={wardsQuery.data ?? []}
-                        rooms={roomsQuery.data ?? []}
-                        wardsLoading={wardsQuery.isLoading}
-                        roomsLoading={roomsQuery.isFetching}
-                        onWardChange={(w) => setParam({ wardId: w || null, roomId: null })}
-                        onRoomChange={(r) => setParam({ roomId: r || null })}
-                        onBedStatusChange={(s) => setParam({ bedStatus: s || null })}
-                        disabled={boardQuery.isFetching}
-                    />
-                    {lastBoardRefreshed ? (
-                        <p className="text-[11px] text-gray-500 dark:text-gray-500">Last updated: {lastBoardRefreshed}</p>
-                    ) : null}
-                    {boardQuery.isError && boardError ? (
-                        <div className="rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/35 dark:bg-amber-950/30 dark:text-amber-100">
-                            {boardError}
-                        </div>
-                    ) : null}
-                    {!boardQuery.isError && !boardQuery.isLoading && boardQuery.data?.rows.length === 0 ? (
-                        <p className="text-xs text-gray-600 dark:text-gray-400">
-                            No beds returned. If this is unexpected, confirm wards and beds are configured under facility settings.
-                        </p>
-                    ) : null}
+                {tab === 'board' ? (
+                    <div className="space-y-3 border-t border-gray-200/50 pt-3 dark:border-white/[0.06]">
+                        {boardQuery.data ? <LiveBedBoardSummaryBar summary={boardQuery.data.summary} /> : null}
+                        <LiveBedBoardFilters
+                            wardId={wardId}
+                            roomId={roomId}
+                            bedStatus={bedStatus}
+                            wards={wardsQuery.data ?? []}
+                            rooms={roomsQuery.data ?? []}
+                            wardsLoading={wardsQuery.isLoading}
+                            roomsLoading={roomsQuery.isFetching}
+                            onWardChange={(w) => setParam({ wardId: w || null, roomId: null })}
+                            onRoomChange={(r) => setParam({ roomId: r || null })}
+                            onBedStatusChange={(s) => setParam({ bedStatus: s || null })}
+                            disabled={boardQuery.isFetching}
+                        />
+                        {lastBoardRefreshed ? (
+                            <p className="text-[11px] text-gray-500 dark:text-gray-500">Last updated: {lastBoardRefreshed}</p>
+                        ) : null}
+                        {boardQuery.isError && boardError ? (
+                            <div className="rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/35 dark:bg-amber-950/30 dark:text-amber-100">
+                                {boardError}
+                            </div>
+                        ) : null}
+                        {!boardQuery.isError && !boardQuery.isLoading && boardQuery.data?.rows.length === 0 ? (
+                            <p className="text-xs text-gray-600 dark:text-gray-400">
+                                No beds returned. If this is unexpected, confirm wards and beds are configured under facility settings.
+                            </p>
+                        ) : null}
                     </div>
-                    {!boardQuery.isError ? (
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                        <LiveBedBoardGrid rows={boardQuery.data?.rows ?? []} loading={boardQuery.isLoading} />
-                        </div>
-                    ) : null}
-                </div>
-            ) : (
-                <div className="mt-2 flex min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-hidden border-t border-gray-200/35 pt-2 dark:border-white/[0.05]">
-                    <div className="shrink-0">
-                        <p className="text-[11px] leading-tight text-gray-500 dark:text-gray-500">
+                ) : (
+                    <div className="border-t border-gray-200/50 pt-3 dark:border-white/[0.06]">
+                        <p className="text-xs leading-snug text-gray-500 dark:text-gray-500">
                             Same dataset as Board — adjust ward, room, and bed status on the Board tab.
                             {lastBoardRefreshed ? (
                                 <span className="text-gray-400 dark:text-gray-600"> · Last updated: {lastBoardRefreshed}</span>
                             ) : null}
                         </p>
                     </div>
+                )}
+            </div>
+
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden border-t border-gray-200/50 px-4 pb-4 pt-3 dark:border-white/[0.06] sm:px-5 sm:pb-5 sm:pt-3">
+                {tab === 'board' ? (
+                    !boardQuery.isError ? (
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                            <LiveBedBoardGrid rows={boardQuery.data?.rows ?? []} loading={boardQuery.isLoading} />
+                        </div>
+                    ) : null
+                ) : (
                     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                         <ActiveEncountersPanel
                             rows={activeBedBoardRows}
@@ -233,8 +208,8 @@ const LiveBedBoardPage = () => {
                             errorMessage={boardQuery.isError ? boardError : null}
                         />
                     </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 };
