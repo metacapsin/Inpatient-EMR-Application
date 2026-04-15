@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { appointmentAPI } from '../../services/api';
 import AppButton from '@/components/ui/AppButton';
 import NewDropdown from '@/components/ui/NewDropdown';
+import { DateRangePicker } from '@/components/patients/DateRangePicker';
 
 type AppointmentRow = {
   _id?: string;
@@ -296,9 +297,10 @@ const AppointmentList: React.FC = () => {
       setFilters((prev) => ({ ...prev, providerId: v as string  }));
     }}
     placeholder="All Providers"
+     label="Date"
   />
 </div>
-        <input
+        {/* <input
           type="date"
           className="form-input"
           value={filters.dateFrom}
@@ -315,9 +317,26 @@ const AppointmentList: React.FC = () => {
             setPage(1);
             setFilters((prev) => ({ ...prev, dateTo: e.target.value }));
           }}
-        />
-    
-        <button
+        /> */}  
+ <DateRangePicker
+  label="Date"
+  value={{
+    from: filters.dateFrom || null,
+    to: filters.dateTo || null,
+  }}
+  onChange={(range) => {
+    setPage(1);
+
+    setFilters((prev) => ({
+      ...prev,
+      dateFrom: range?.from || "",
+      dateTo: range?.to || "",
+    }));
+  }}
+/>
+        
+        
+        <AppButton
           className="btn btn-outline-secondary"
           onClick={() => {
             setPage(1);
@@ -326,7 +345,7 @@ const AppointmentList: React.FC = () => {
           }}
         >
           Clear Filters
-        </button>
+        </AppButton>
       </div>
 
       <div className="table-responsive">
@@ -369,7 +388,7 @@ const AppointmentList: React.FC = () => {
                           navigate(`/app/appointments/add?appointmentId=${encodeURIComponent(id)}`);
                         }}
                       >
-                        Edit
+                        Edit  
                       </button>
                     </div>
                   </td>

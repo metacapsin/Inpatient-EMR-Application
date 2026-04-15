@@ -788,7 +788,7 @@ function ClinicalWorkflowsPage() {
                         <div>
                             <h3 className="font-medium">Record vital</h3>
                             <div className="mt-2 flex flex-wrap gap-2">
-                                <div className="w-28 mt-1 ">
+                                <div className="w-28 -mt-1 ">
                                 <NewDropdown
                         options={(['HR', 'BP', 'Temp', 'SpO2', 'RR'] as const).map((t) => ({
                             value: t,
@@ -807,13 +807,16 @@ function ClinicalWorkflowsPage() {
                                     className="w-32"
                                 />
                                 {vitalType === 'BP' && (
+                                      <div className="w-28 -mt-1 ">
                                     <Input
                                         placeholder="Diastolic"
                                         value={vitalSecondary}
                                         onChange={(e) => setVitalSecondary(e.target.value)}
                                         className="w-32"
                                     />
+                                     </div>
                                 )}
+                                
                                 <AppButton type="button" onClick={() => void submitVital()}>
                                     Save 
                                 </AppButton>
