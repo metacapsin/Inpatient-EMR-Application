@@ -18,6 +18,7 @@ import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { appointmentAPI } from '../../services/api';
 import { cn } from '../../lib/utils';
 import NewDropdown from '../ui/NewDropdown';
+import SearchableSelect from '../ui/SearchableSelect';
 
 type DropdownOption = {
   id: string;
@@ -510,7 +511,7 @@ export default function BookAppointment() {
 
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 md:gap-6">
           <div className="min-w-0">
-            <NewDropdown
+            <SearchableSelect
               fieldSize="md"
               hasError={!!errors.patientId}
               label="Patient *"
@@ -544,7 +545,7 @@ export default function BookAppointment() {
                 className={FORM_FIELD_INPUT}
                 value={form.patientPhone}
                 onChange={(event) => setForm((prev) => ({ ...prev, patientPhone: event.target.value }))}
-                placeholder={selectedPatient ? 'Auto-filled if available, or type phone' : 'Select patient first'}
+                placeholder={selectedPatient ? 'Auto-filled if available, or type phone' : 'Select Phone'}
               />
             </div>
           </div>

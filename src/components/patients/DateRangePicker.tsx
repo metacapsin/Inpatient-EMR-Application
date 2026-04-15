@@ -77,12 +77,12 @@ export function DateRangePicker({
           type="text"
           readOnly
           value={display}
-          placeholder="MM/DD/YY - MM/DD/YY"
+          placeholder="MM/DD/YY - MM/DD/YY "
           onClick={openPicker}
           className={cn(
             'h-8 min-h-0 max-h-[32px] flex-1 cursor-pointer border-0 bg-transparent py-0 pl-2.5 pr-1.5 text-xs outline-none ring-0',
             'placeholder:text-slate-400 dark:placeholder:text-gray-500',
-            display ? 'text-slate-700 dark:text-gray-200' : 'text-slate-500 dark:text-gray-400'
+            display ? 'text-slate-700 dark:text-gray-200' : 'text-slate-500 dark:text-gray-400 w-full'
           )}
         />
 
@@ -103,6 +103,7 @@ export function DateRangePicker({
           <Calendar className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
         </button>
       </div>
+    
 
       <label
         htmlFor={id}

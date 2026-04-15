@@ -418,7 +418,7 @@ const AppointmentList: React.FC = () => {
                 className="w-full min-w-0"
               />
             </div>
-            <div className="min-w-0 flex-1 md:max-w-[320px]">
+            <div className="min-w-0 flex-1 md:max-w-[320px] w-full">
               <DateRangePicker
                 label="Reg. Date"
                 className="w-full min-w-0"

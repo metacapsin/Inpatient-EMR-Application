@@ -424,7 +424,7 @@ const PatientList = () => {
                         <div className="min-w-0 flex-1 md:max-w-[320px]">
                             <DateRangePicker
                                 label="Reg. Date"
-                                className="w-full min-w-0"
+                                className="w-full min-w-0 pr-5"
                                 value={dateRange}
                                 onChange={(range) => {
                                     setDateRange(range);

@@ -121,7 +121,7 @@ const LiveBedBoardPage = () => {
                             </p>
                         </div>
                     </div>
-                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+                    {/* <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
                         <button
                             type="button"
                             disabled={boardQuery.isFetching}
@@ -131,7 +131,7 @@ const LiveBedBoardPage = () => {
                             <RefreshCw className={`h-3.5 w-3.5 ${boardQuery.isFetching ? 'animate-spin' : ''}`} aria-hidden />
                             {tab === 'encounters' ? 'Refresh encounters' : 'Refresh board'}
                         </button>
-                    </div>
+                    </div> */}
                 </div>
 
                 <div className="flex flex-wrap gap-1.5 border-b border-gray-200/50 pb-0.5 dark:border-white/[0.06]">
