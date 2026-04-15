@@ -36,7 +36,7 @@ export function FilterSelect({ label, value, onChange, options, id, className, d
                 value={value}
                 disabled={disabled}
                 onChange={(e) => onChange(e.target.value)}
-                className="form-input w-full cursor-pointer py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                className="form-select w-full cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
             >
                 {options.map((o) => (
                     <option key={o.value} value={o.value}>

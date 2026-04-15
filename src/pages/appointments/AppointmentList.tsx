@@ -239,7 +239,6 @@ const AppointmentList: React.FC = () => {
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 pt-1 lg:gap-4">
           <div className="w-40">
             <NewDropdown
-              variant="outlined"
               label="Status"
               options={[
                 { value: '', label: 'All Status' },
@@ -258,7 +257,6 @@ const AppointmentList: React.FC = () => {
           </div>
           <div className="w-48 min-w-[11rem] max-w-full sm:w-52">
             <NewDropdown
-              variant="outlined"
               label="Provider"
               options={[
                 { value: '', label: 'All Providers' },

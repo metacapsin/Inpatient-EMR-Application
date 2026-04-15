@@ -4,6 +4,7 @@ import { getApiErrorMessage } from '../../../lib/httpError';
 import * as medApi from '../../../services/medicationManagement.service';
 import type { DispenseMedicineLine, PrescriptionRow } from '../../../types/medicationManagement';
 import { Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 interface PharmacyTabProps {
     patientId: string;
@@ -245,9 +246,9 @@ export function PharmacyTab({ patientId, defaultDispensedBy }: PharmacyTabProps)
                                                     />
                                                 </td>
                                                 <td className="px-2 py-2">
-                                                    <input
+                                                    <Input
                                                         type="date"
-                                                        className="h-9 rounded border border-gray-300 px-1 text-xs dark:border-gray-600 dark:bg-gray-800"
+                                                        className="min-w-[7.5rem] max-w-[9.5rem]"
                                                         value={line.expiryDate}
                                                         onChange={(e) =>
                                                             updateLine(rx.prescriptionId, m.medicineId, {

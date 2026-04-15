@@ -363,7 +363,6 @@ const PatientList = () => {
                         <div className="flex flex-wrap items-center gap-3 lg:gap-4">
                             <div className="w-40">
                                 <NewDropdown
-                                    variant="outlined"
                                     label="Status"
                                     options={STATUS_OPTIONS}
                                     value={status || ''}
@@ -376,7 +375,6 @@ const PatientList = () => {
                             </div>
                             <div className="w-40">
                                 <NewDropdown
-                                    variant="outlined"
                                     label="Gender"
                                     options={GENDER_OPTIONS}
                                     value={gender || ''}
@@ -389,7 +387,6 @@ const PatientList = () => {
                             </div>
                             <div className="w-40">
                                 <NewDropdown
-                                    variant="outlined"
                                     label="Age range"
                                     options={AGE_OPTIONS}
                                     value={ageRange || ''}
@@ -402,7 +399,6 @@ const PatientList = () => {
                             </div>
                             <div className="w-40">
                                 <NewDropdown
-                                    variant="outlined"
                                     label="Recent patients"
                                     options={RECENT_OPTIONS}
                                     value={recent || ''}

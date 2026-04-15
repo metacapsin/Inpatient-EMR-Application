@@ -6,6 +6,7 @@ import IconSearch from '../../components/Icon/IconSearch';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { healthDailyLogAPI } from '../../services/healthMonitoringService';
+import { Input } from '@/components/ui/input';
 
 interface DailyLogEntry {
   id?: string;
@@ -265,9 +266,9 @@ const DailyLog: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                   <label className="form-label">Date</label>
-                  <input
+                  <Input
                     type="date"
-                    className="form-input"
+                    className="w-full"
                     value={form.date}
                     onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
                   />

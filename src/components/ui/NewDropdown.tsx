@@ -27,7 +27,7 @@ interface NewDropdownProps {
 export default function NewDropdown({
   id,
   label,
-  variant = "default",
+  variant = "outlined",
   options,
   value,
   placeholder = "Select option",

@@ -364,9 +364,15 @@
     /* Form */
     .form-input,
     .form-textarea,
-    .form-select,
     .form-multiselect {
         @apply w-full rounded-lg border border-primary-200/80 bg-white px-4 py-2 text-sm font-semibold text-black !outline-none focus:border-primary focus:ring-0 transition-colors dark:border-primary-800 dark:bg-[#141210] dark:text-white-dark dark:focus:border-primary;
+    }
+
+    .form-select {
+        @apply w-full rounded-lg border border-primary-200 bg-white py-0 pl-3 pr-9 text-xs font-semibold leading-8 text-black !outline-none focus:border-primary focus:ring-0 transition-colors shadow-sm dark:border-primary-700 dark:bg-[#141210] dark:text-white-dark dark:focus:border-primary;
+        min-height: 2rem;
+        max-height: 2rem;
+        height: 2rem;
     }
 
     .form-input-lg,

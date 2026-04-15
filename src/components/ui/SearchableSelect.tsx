@@ -45,7 +45,7 @@ export type SearchableSelectProps = {
     'aria-busy'?: boolean;
 };
 
-export default function SearchableSelect({
+function SearchableSelect({
     id: idProp,
     options,
     pinnedOptions = [],
@@ -208,14 +208,13 @@ export default function SearchableSelect({
     const triggerLabel = selectedInOptions ? selectedInOptions.label : placeholder;
 
     const triggerClasses = `
-  h-9 w-full
-  border border-gray-300 rounded-md dark:border-gray-600
-  px-2
-  bg-[#F6F6FA] dark:bg-gray-900
-  flex justify-between items-center text-left
-  text-sm text-[#8B5E3C] dark:text-amber-100/90
+  h-8 max-h-[32px] w-full
+  rounded-lg border border-primary-200 bg-white px-2 shadow-sm
+  dark:border-primary-700 dark:bg-[#141210]
+  flex justify-between items-center gap-1 text-left min-w-0
+  text-xs text-slate-700 dark:text-gray-200
   transition-all duration-200
-  ${disabled ? 'cursor-not-allowed opacity-50 pointer-events-none' : 'cursor-pointer hover:border-[#8B5E3C] dark:hover:border-amber-700'}
+  ${disabled ? 'cursor-not-allowed opacity-50 pointer-events-none' : 'cursor-pointer hover:border-primary-300 dark:hover:border-primary-600'}
 `.trim();
 
     return (
@@ -232,11 +231,17 @@ export default function SearchableSelect({
                 onClick={() => !disabled && setOpen((o) => !o)}
                 onKeyDown={onTriggerKeyDown}
             >
-                <span className={!selectedInOptions ? 'truncate text-gray-400 dark:text-gray-500' : 'truncate'}>
+                <span
+                    className={
+                        !selectedInOptions
+                            ? 'min-w-0 flex-1 truncate text-slate-400 dark:text-gray-500'
+                            : 'min-w-0 flex-1 truncate text-slate-700 dark:text-gray-200'
+                    }
+                >
                     {triggerLabel}
                 </span>
                 <ChevronDown
-                    className={`h-4 w-4 shrink-0 text-[#8B5E3C] transition-transform duration-200 dark:text-amber-200/80 ${
+                    className={`h-3.5 w-3.5 shrink-0 text-[#8B5E3C] transition-transform duration-200 dark:text-amber-200/80 ${
                         open ? 'rotate-180' : ''
                     }`}
                     aria-hidden
@@ -246,7 +251,7 @@ export default function SearchableSelect({
             {open && !disabled && (
                 <div
                     id={`${listboxId}-panel`}
-                    className="absolute top-full left-0 right-0 z-30 mt-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-950"
+                    className="absolute top-full left-0 right-0 z-30 mt-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-950"
                     role="listbox"
                     aria-label="Options"
                 >
@@ -326,3 +331,6 @@ export default function SearchableSelect({
         </div>
     );
 }
+
+export default SearchableSelect;
+export { SearchableSelect };
