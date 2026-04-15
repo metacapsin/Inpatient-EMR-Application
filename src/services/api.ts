@@ -476,15 +476,26 @@ export const appointmentAPI = {
     payload.sortField = String(payload.sortField ?? payload.sortBy ?? 'startDate');
     payload.sortOrder = String(payload.sortOrder ?? 'asc').toLowerCase() === 'desc' ? 'desc' : 'asc';
 
+    const hasSearchQuery = typeof payload.query === 'string' && payload.query.trim().length > 0;
+
     if (Array.isArray(payload.providerIds)) {
       payload.providerIds = payload.providerIds.filter((providerId: unknown) =>
         typeof providerId === 'string' ? providerId.trim().length > 0 : Boolean(providerId)
       );
-      if (payload.providerIds.length === 0) delete payload.providerIds;
+      if (payload.providerIds.length === 0 && !hasSearchQuery) delete payload.providerIds;
     } else if (typeof payload.providerIds === 'string' && payload.providerIds.trim()) {
       payload.providerIds = [payload.providerIds.trim()];
-    } else {
+    } else if (!hasSearchQuery) {
       delete payload.providerIds;
+    }
+
+    if (Array.isArray(payload.serviceIds)) {
+      payload.serviceIds = payload.serviceIds.filter((serviceId: unknown) =>
+        typeof serviceId === 'string' ? serviceId.trim().length > 0 : Boolean(serviceId)
+      );
+      if (payload.serviceIds.length === 0 && !hasSearchQuery) delete payload.serviceIds;
+    } else if (!hasSearchQuery) {
+      delete payload.serviceIds;
     }
 
     Object.keys(payload).forEach((key) => {

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Calendar, ChevronLeft, ChevronRight, Pencil, Search } from 'lucide-react';
@@ -36,6 +36,69 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 
 function rowId(row: AppointmentRow): string {
   return String(row?._id ?? row?.id ?? '').trim();
+}
+
+function asNonEmptyString(v: unknown): string | undefined {
+  if (typeof v !== 'string') return undefined;
+  const t = v.trim();
+  return t ? t : undefined;
+}
+
+/** Reads common string shapes from API payloads (including PascalCase / nested patient). */
+function buildPatientDisplayName(raw: any): string | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+
+  const tryKeys = (obj: any, keys: string[]): string | undefined => {
+    for (const k of keys) {
+      const v = asNonEmptyString(obj?.[k]);
+      if (v) return v;
+    }
+    const map = new Map<string, string>();
+    for (const k of Object.keys(obj)) {
+      map.set(k.toLowerCase(), k);
+    }
+    for (const k of keys) {
+      const actual = map.get(k.toLowerCase());
+      if (!actual) continue;
+      const v = asNonEmptyString(obj[actual]);
+      if (v) return v;
+    }
+    return undefined;
+  };
+
+  const direct =
+    tryKeys(raw, [
+      'patientName',
+      'PatientName',
+      'fullName',
+      'FullName',
+      'patientFullName',
+      'displayName',
+      'name',
+    ]) ?? undefined;
+  if (direct) return direct;
+
+  const nested = raw.patient ?? raw.Patient;
+  if (nested && typeof nested === 'object') {
+    const named = tryKeys(nested, ['fullName', 'patientName', 'displayName']);
+    if (named) return named;
+    const lfm = [nested.lastName, nested.firstName, nested.middleName]
+      .map((x: unknown) => asNonEmptyString(x))
+      .filter(Boolean) as string[];
+    if (lfm.length) return lfm.join(', ');
+    const fml = [nested.firstName, nested.middleName, nested.lastName]
+      .map((x: unknown) => asNonEmptyString(x))
+      .filter(Boolean) as string[];
+    if (fml.length) return fml.join(' ');
+  }
+
+  const ln = tryKeys(raw, ['lastName', 'LastName', 'patientLastName']);
+  const fn = tryKeys(raw, ['firstName', 'FirstName', 'patientFirstName']);
+  const mn = tryKeys(raw, ['middleName', 'MiddleName', 'patientMiddleName']);
+  const parts = [ln, fn, mn].filter(Boolean) as string[];
+  if (parts.length) return parts.join(', ');
+
+  return undefined;
 }
 
 function renderDateTime(row: AppointmentRow): string {
@@ -151,6 +214,7 @@ const AppointmentList: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [search, setSearch] = useState<string>('');
+  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const [rows, setRows] = useState<AppointmentRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -164,7 +228,18 @@ const AppointmentList: React.FC = () => {
     dateTo: '',
   });
 
+  const pendingFocusAppointmentIdRef = useRef<string | null>(null);
+
   const pages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(search), 350);
+    return () => window.clearTimeout(id);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   const loadProviders = useCallback(async () => {
     try {
@@ -186,20 +261,45 @@ const AppointmentList: React.FC = () => {
   const loadRows = useCallback(async () => {
     setLoading(true);
     try {
+      const query = debouncedSearch.trim();
       const payload: Record<string, any> = {
         fromDate: filters.dateFrom || undefined,
         toDate: filters.dateTo || undefined,
         page,
         limit: pageSize,
-        providerIds: filters.providerId ? [filters.providerId] : undefined,
         status: filters.status || undefined,
-        sortField: 'startDate',
-        sortOrder: 'asc',
       };
+
+      if (filters.providerId) {
+        payload.providerIds = [filters.providerId];
+      } else if (query) {
+        payload.providerIds = [];
+      }
+
+      if (query) {
+        payload.query = query;
+        payload.serviceIds = [];
+        payload.sortField = 'createOn';
+        payload.sortOrder = 'desc';
+      } else {
+        payload.sortField = 'startDate';
+        payload.sortOrder = 'asc';
+      }
 
       const res = await appointmentAPI.getAppointmentListPaginated(payload);
       const normalized = normalizeAppointmentListResponse(res);
-      setRows(normalized.rows);
+      let nextRows = normalized.rows;
+      const focusId = pendingFocusAppointmentIdRef.current?.trim();
+      if (focusId) {
+        const idx = nextRows.findIndex((r) => rowId(r) === focusId);
+        if (idx > 0) {
+          const copy = [...nextRows];
+          const [picked] = copy.splice(idx, 1);
+          nextRows = [picked, ...copy];
+        }
+        pendingFocusAppointmentIdRef.current = null;
+      }
+      setRows(nextRows);
       setTotal(normalized.total);
     } catch (error) {
       console.error(error);
@@ -208,7 +308,7 @@ const AppointmentList: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.providerId, filters.status, page, pageSize]);
+  }, [debouncedSearch, filters.dateFrom, filters.dateTo, filters.providerId, filters.status, page, pageSize]);
 
   useEffect(() => {
     loadProviders();
@@ -218,24 +318,16 @@ const AppointmentList: React.FC = () => {
     loadRows();
   }, [loadRows]);
 
-  useEffect(() => {
-    const state = location.state as { refreshAppointments?: boolean } | null;
+  useLayoutEffect(() => {
+    const state = location.state as
+      | { refreshAppointments?: boolean; focusAppointmentId?: string }
+      | null;
     if (!state?.refreshAppointments) return;
-    loadRows();
+    const id = String(state.focusAppointmentId ?? '').trim();
+    pendingFocusAppointmentIdRef.current = id || null;
+    setPage(1);
     navigate(location.pathname, { replace: true });
-  }, [loadRows, location.pathname, location.state, navigate]);
-
-  const filteredRows = useMemo(() => {
-    if (!search.trim()) return rows;
-    const s = search.toLowerCase();
-    return rows.filter((row) =>
-      [row.patientName, row.providerName, row.visitReasonName, row.visitReasonmsg, row.appointmentStatus]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(s)
-    );
-  }, [rows, search]);
+  }, [location.pathname, location.state, navigate]);
 
   const safePage = Math.min(page, pages);
   const from = total === 0 ? 0 : (safePage - 1) * pageSize + 1;
@@ -368,10 +460,10 @@ const AppointmentList: React.FC = () => {
                   <div key={i} className="h-28 animate-pulse rounded-xl bg-gray-200 dark:bg-gray-700" />
                 ))}
               </div>
-            ) : filteredRows.length === 0 ? (
+            ) : rows.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400">No appointments found.</p>
             ) : (
-              filteredRows.map((row) => {
+              rows.map((row) => {
                 const id = rowId(row);
                 return (
                   <article
@@ -493,14 +585,14 @@ const AppointmentList: React.FC = () => {
               <tbody className="divide-y divide-gray-100/90 dark:divide-white/[0.05]">
                 {loading ? (
                   <TableSkeletonRows />
-                ) : filteredRows.length === 0 ? (
+                ) : rows.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-2.5 py-6 text-center text-xs text-gray-500 dark:text-gray-400">
                       No appointments found.
                     </td>
                   </tr>
                 ) : (
-                  filteredRows.map((row) => {
+                  rows.map((row) => {
                     const id = rowId(row);
                     return (
                       <tr

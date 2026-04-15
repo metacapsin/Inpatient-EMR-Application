@@ -100,6 +100,22 @@ const FORM_FIELD_INPUT =
 const FORM_TEXTAREA =
   'min-h-[120px] w-full resize-y border-0 bg-transparent px-3 pb-3 pt-7 text-[14px] font-medium text-gray-900 outline-none ring-0 placeholder:text-gray-400 dark:text-gray-100';
 
+function pickAppointmentIdFromSaveResponse(res: any, fallback: string): string {
+  const root = res?.data;
+  const inner = root?.data ?? root?.result ?? root;
+  const fromInner =
+    (typeof inner?._id === 'string' && inner._id.trim()) ||
+    (typeof inner?.id === 'string' && inner.id.trim()) ||
+    (typeof inner?.appointmentId === 'string' && inner.appointmentId.trim()) ||
+    '';
+  if (fromInner) return fromInner;
+  const fromRoot =
+    (typeof root?._id === 'string' && root._id.trim()) ||
+    (typeof root?.id === 'string' && root.id.trim()) ||
+    '';
+  return fromRoot || String(fallback ?? '').trim();
+}
+
 /** Matched schedule panels: calendar + time slots (fixed height, equal width via grid). */
 const SCHEDULE_PANEL =
   'h-[256px] w-full min-h-0 shrink-0 rounded-lg border border-gray-200/70 bg-white dark:border-gray-600 dark:bg-[#141210]';
@@ -449,7 +465,11 @@ export default function BookAppointment() {
 
       await appointmentAPI.getAppointmentListPaginated({ page: 1, limit: 10 });
       toast.success(isEditMode ? 'Appointment updated.' : 'Appointment created.');
-      navigate('/app/appointments', { replace: true, state: { refreshAppointments: true } });
+      const focusAppointmentId = pickAppointmentIdFromSaveResponse(res, isEditMode ? appointmentId : '');
+      navigate('/app/appointments', {
+        replace: true,
+        state: { refreshAppointments: true, ...(focusAppointmentId ? { focusAppointmentId } : {}) },
+      });
     } catch (error: any) {
       const message = error?.response?.data?.message || 'Failed to save appointment.';
       setApiError(message);
