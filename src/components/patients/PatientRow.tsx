@@ -21,27 +21,30 @@ function initials(name: string): string {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function statusPillClass(label: string): string {
+function patientStatusPillClass(label: string): string {
     const n = label.trim().toLowerCase();
+    if (!n || n === '—') {
+        return 'border border-gray-200/80 bg-gray-50/90 text-gray-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-gray-400';
+    }
     if (n === 'active' || n === 'true' || n === '1') {
-        return 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-500/30';
+        return 'border border-emerald-100/90 bg-emerald-50/90 text-emerald-900/80 dark:border-emerald-900/35 dark:bg-emerald-950/30 dark:text-emerald-100/90';
     }
     if (n === 'inactive' || n === 'false' || n === '0') {
-        return 'bg-gray-100 text-gray-700 ring-1 ring-gray-500/15 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-500/25';
+        return 'border border-stone-200/90 bg-stone-100/90 text-stone-700 dark:border-white/[0.08] dark:bg-stone-900/40 dark:text-stone-200';
     }
-    return 'bg-gray-50 text-gray-700 ring-1 ring-gray-500/10 dark:bg-gray-800/60 dark:text-gray-300';
+    return 'border border-gray-200/80 bg-gray-50/90 text-gray-700 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-gray-300';
 }
 
 function PatientStatusCell({ label }: { label: string }) {
     if (!label || label === '—') {
-        return <span className="text-sm text-gray-400">—</span>;
+        return <span className="text-xs text-gray-400 dark:text-gray-500">—</span>;
     }
     return (
         <span
-            className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-medium capitalize ${statusPillClass(label)}`}
+            className={`inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize leading-tight ${patientStatusPillClass(label)}`}
             title={label}
         >
-            {label}
+            <span className="truncate">{label}</span>
         </span>
     );
 }
@@ -91,7 +94,7 @@ function InpatientAdtCell({
     };
 
     const btnClass =
-        'flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-transparent text-gray-500 transition-colors hover:border-gray-200 hover:bg-gray-100 hover:text-primary disabled:pointer-events-none disabled:opacity-40 dark:hover:border-white/10 dark:hover:bg-white/10';
+        'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]';
 
     const admittedTitle =
         dischargePending
@@ -105,20 +108,20 @@ function InpatientAdtCell({
     const badge =
         showAdmittedBadge ? (
             <span
-                className={`inline-flex max-w-full items-center truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                className={`inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize leading-tight ${
                     dischargePending
-                        ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-500/25 dark:bg-amber-950/50 dark:text-amber-100'
+                        ? 'border border-amber-200/90 bg-amber-50/90 text-amber-900/85 dark:border-amber-900/40 dark:bg-amber-950/35 dark:text-amber-100/90'
                         : transferred
-                          ? 'bg-sky-100 text-sky-900 ring-1 ring-sky-600/20 dark:bg-sky-950/45 dark:text-sky-100'
-                          : 'bg-emerald-100 text-emerald-900 ring-1 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-100'
+                          ? 'border border-sky-200/90 bg-sky-50/90 text-sky-900/80 dark:border-sky-900/35 dark:bg-sky-950/30 dark:text-sky-100/90'
+                          : 'border border-emerald-100/90 bg-emerald-50/90 text-emerald-900/80 dark:border-emerald-900/35 dark:bg-emerald-950/30 dark:text-emerald-100/90'
                 }`}
                 title={admittedTitle}
             >
-                {dischargePending ? 'Discharge…' : transferred ? 'Transferred' : 'Admitted'}
+                <span className="truncate">{dischargePending ? 'Discharge…' : transferred ? 'Transferred' : 'Admitted'}</span>
             </span>
         ) : (
-            <span className="inline-flex max-w-full truncate rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600 ring-1 ring-gray-500/10 dark:bg-gray-800 dark:text-gray-300">
-                Not admitted
+            <span className="inline-flex max-w-full items-center rounded-full border border-gray-200/80 bg-gray-50/90 px-2 py-0.5 text-[11px] font-medium capitalize leading-tight text-gray-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-gray-400">
+                <span className="truncate">Not admitted</span>
             </span>
         );
 
@@ -199,14 +202,14 @@ export function PatientTableRow({
     };
 
     return (
-        <tr className="transition-colors hover:bg-gray-50/40">
-            <td className="max-w-0 px-2 py-2 align-middle">
+        <tr className="transition-colors hover:bg-gray-50/90 dark:hover:bg-white/[0.04]">
+            <td className="max-w-0 px-2.5 py-1.5 align-middle">
                 <div className="flex min-w-0 items-center gap-2">
                     {patient.profilePicture ? (
                         <img
                             src={patient.profilePicture}
                             alt=""
-                            className="h-8 w-8 shrink-0 rounded-md object-cover ring-1 ring-gray-200"
+                            className="h-8 w-8 shrink-0 rounded-md object-cover ring-1 ring-gray-200 dark:ring-white/[0.08]"
                         />
                     ) : (
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/15 text-[10px] font-bold text-primary ring-1 ring-primary/20">
@@ -214,12 +217,12 @@ export function PatientTableRow({
                         </div>
                     )}
                     <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-gray-900">{patient.name}</p>
+                        <p className="truncate text-sm font-medium text-gray-900 dark:text-white">{patient.name}</p>
                         {/* <p className="truncate text-[11px] text-gray-500">{patient.email || '—'}</p> */}
                     </div>
                 </div>
             </td>
-            <td className="max-w-0 px-2 py-2 text-xs text-gray-700">
+            <td className="max-w-0 px-2.5 py-1.5 text-xs text-gray-600 dark:text-gray-300">
                 <div className="min-w-0">
                     <span className="block truncate tabular-nums" title={patient.dob}>
                         {patient.dob}
@@ -229,7 +232,7 @@ export function PatientTableRow({
                     </span>
                 </div>
             </td>
-            <td className="px-2 py-2 text-center text-xs text-gray-700">{patient.gender}</td>
+            <td className="px-2.5 py-1.5 text-center text-xs text-gray-800 dark:text-gray-200">{patient.gender}</td>
             {/* <td className="max-w-0 truncate px-2 py-2 text-xs text-gray-700" title={patient.ward}>
                 {patient.ward}
             </td>
@@ -239,10 +242,10 @@ export function PatientTableRow({
             <td className="max-w-0 truncate px-2 py-2 text-xs text-gray-700 tabular-nums" title={patient.bed}>
                 {patient.bed}
             </td> */}
-            <td className="max-w-0 px-2 py-2 text-xs text-gray-700">
+            <td className="max-w-0 px-2.5 py-1.5 text-xs text-gray-800 dark:text-gray-200">
                 <PatientStatusCell label={patient.statusLabel} />
             </td>
-            <td className="max-w-0 px-2 py-2 align-top">
+            <td className="max-w-0 px-2.5 py-1.5 align-top">
                 <InpatientAdtCell
                     patient={patient}
                     chartId={chartId}
@@ -251,73 +254,33 @@ export function PatientTableRow({
                     onOpenAdt={onOpenAdt}
                 />
             </td>
-            <td className="max-w-0 truncate px-2 py-2 text-xs text-gray-700 tabular-nums" title={patient.phone || undefined}>
+            <td className="max-w-0 truncate px-2.5 py-1.5 text-xs text-gray-800 dark:text-gray-200 tabular-nums" title={patient.phone || undefined}>
                 {patient.phone}
             </td>
-            <td className="max-w-0 truncate px-2 py-2 text-xs text-gray-700 tabular-nums" title={patient.createdDate || undefined}>
+            <td className="max-w-0 truncate px-2.5 py-1.5 text-xs text-gray-800 dark:text-gray-200 tabular-nums" title={patient.createdDate || undefined}>
                 {patient.createdDate}
             </td>
-            <td className="whitespace-nowrap px-1 py-2">
-                {/* <div className="flex items-center justify-end gap-0.5">
+            <td className="whitespace-nowrap px-2.5 py-1.5 text-right">
+                <div className="flex items-center justify-end gap-0.5">
                     <button
                         type="button"
                         title="Book appointment"
+                        aria-label="Book appointment"
                         onClick={handleBookAppointment}
-                        className="flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
                     >
-                        <CalendarPlus className="h-3.5 w-3.5" />
+                        <CalendarPlus className="h-3.5 w-3.5" aria-hidden />
                     </button>
                     <button
                         type="button"
                         title="View"
+                        aria-label="View"
                         onClick={handleView}
-                        className="flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
                     >
-                        <Eye className="h-3.5 w-3.5" />
+                        <Eye className="h-3.5 w-3.5" aria-hidden />
                     </button>
-                </div> */}
-                <div className="flex items-center justify-end gap-0.5">
-    
-  {/* Book Appointment */}
-  <div className="relative group">
-    <button
-      type="button"
-      title=""   // title empty so default tooltip off
-      onClick={handleBookAppointment}
-      className="flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary"
-    >
-      <CalendarPlus className="h-3.5 w-3.5" />
-    </button>
-
-    {/* Custom Tooltip */}
-    <span className="absolute -top-8 left-1/2 -translate-x-1/2 
-                     hidden group-hover:block 
-                     bg-black text-white text-xs rounded px-2 py-1 
-                     whitespace-nowrap z-50">
-      Book appointment
-    </span>
-  </div>
-
-  {/* View Button */}
-  <div className="relative group">
-    <button
-      type="button"
-      title=""
-      onClick={handleView}
-      className="flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary"
-    >
-      <Eye className="h-3.5 w-3.5" />
-    </button>
-
-    <span className="absolute -top-8 left-1/2 -translate-x-1/2 
-                     hidden group-hover:block 
-                     bg-black text-white text-xs rounded px-2 py-1 
-                     whitespace-nowrap z-50">
-      View
-    </span>
-  </div>
-
-</div>
+                </div>
             </td>
         </tr>
     );
@@ -347,13 +310,13 @@ export function PatientMobileCard({
     };
 
     return (
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <article className="rounded-xl border border-gray-200/90 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#1a1a1a]">
             <div className="flex items-start gap-3">
                 {patient.profilePicture ? (
                     <img
                         src={patient.profilePicture}
                         alt=""
-                        className="h-12 w-12 shrink-0 rounded-xl object-cover ring-1 ring-gray-200"
+                        className="h-12 w-12 shrink-0 rounded-xl object-cover ring-1 ring-gray-200 dark:ring-white/[0.08]"
                     />
                 ) : (
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-sm font-bold text-primary">
@@ -361,10 +324,10 @@ export function PatientMobileCard({
                     </div>
                 )}
                 <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-gray-900">{patient.name}</p>
-                    <p className="text-xs text-gray-500">{patient.email || '—'}</p>
-                    <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-gray-600">
-                        <span className="text-gray-400">DOB</span>
+                    <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{patient.name}</p>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{patient.email || '—'}</p>
+                    <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
+                        <span className="font-bold text-dark dark:text-gray-200">DOB</span>
                         <span className="text-right">
                             <span className="block tabular-nums">{patient.dob}</span>
                             <span className="block text-gray-500 tabular-nums dark:text-gray-400">
@@ -377,11 +340,11 @@ export function PatientMobileCard({
                         <span className="text-right tabular-nums">{patient.room}</span>
                         <span className="text-gray-400">Bed</span>
                         <span className="text-right tabular-nums">{patient.bed}</span> */}
-                        <span className="text-gray-400">Status</span>
+                        <span className="font-bold text-dark dark:text-gray-200">Status</span>
                         <span className="flex justify-end">
                             <PatientStatusCell label={patient.statusLabel} />
                         </span>
-                        <span className="text-gray-400">Phone</span>
+                        <span className="font-bold text-dark dark:text-gray-200">Phone</span>
                         <span>{patient.phone}</span>
                     </div>
                     {onOpenAdt ? (
@@ -399,28 +362,30 @@ export function PatientMobileCard({
                             />
                         </div>
                     ) : null}
-                    <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-                        <div className="flex items-center gap-1">
+                    <div className="mt-3 flex justify-end">
+                        <div className="flex items-center gap-0.5">
                             <button
                                 type="button"
                                 title="Book appointment"
+                                aria-label="Book appointment"
                                 onClick={handleBookAppointment}
-                                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary"
+                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
                             >
-                                <CalendarPlus className="h-4 w-4" />
+                                <CalendarPlus className="h-3.5 w-3.5" aria-hidden />
                             </button>
                             <button
                                 type="button"
                                 title="View"
+                                aria-label="View"
                                 onClick={handleView}
-                                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary"
+                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100 dark:hover:bg-white/[0.04]"
                             >
-                                <Eye className="h-4 w-4" />
+                                <Eye className="h-3.5 w-3.5" aria-hidden />
                             </button>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </article>
     );
 }

@@ -386,13 +386,13 @@ const AppointmentList: React.FC = () => {
                     </div>
                     <dl className="mt-3 space-y-1 text-xs text-gray-600 dark:text-gray-300">
                       <div className="flex justify-between gap-2">
-                        <dt className="text-gray-500 dark:text-gray-400">Provider</dt>
+                        <dt className="font-bold text-dark dark:text-gray-200">Provider</dt>
                         <dd className="max-w-[55%] truncate text-right font-medium text-gray-900 dark:text-white">
                           {row.providerName || '—'}
                         </dd>
                       </div>
                       <div className="flex justify-between gap-2">
-                        <dt className="text-gray-500 dark:text-gray-400">Reason</dt>
+                        <dt className="font-bold text-dark dark:text-gray-200">Reason</dt>
                         <dd className="max-w-[55%] truncate text-right">{row.visitReasonmsg || row.visitReasonName || '—'}</dd>
                       </div>
                     </dl>
@@ -474,7 +474,7 @@ const AppointmentList: React.FC = () => {
         <div className="hidden min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200/70 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.08] dark:bg-[#1a1a1a] dark:shadow-none md:flex md:min-h-[16rem] md:flex-1">
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto overscroll-contain">
             <table className="w-full min-w-[720px] text-left text-xs">
-              <thead className="sticky top-0 z-10 border-b border-gray-200/80 bg-gray-50/90 text-[10px] font-semibold uppercase tracking-wide text-gray-500 shadow-[0_1px_0_0_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-[#1c1c1c]/95 dark:text-gray-400">
+              <thead className="sticky top-0 z-10 border-b border-gray-200/80 bg-gray-50/90 text-[10px] font-bold uppercase tracking-wide text-gray-500 shadow-[0_1px_0_0_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-[#1c1c1c]/95 dark:text-gray-400">
                 <tr>
                   <th className="px-2.5 py-2">Patient</th>
                   <th className="px-2.5 py-2">Date / time</th>

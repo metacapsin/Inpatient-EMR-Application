@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { PatientMobileCard, PatientTableRow } from './PatientRow';
 import { SortableHeader } from './SortableHeader';
 import type { PatientListItem, PatientListSortField } from '../../services/patient.service';
@@ -29,12 +30,15 @@ function PatientTableColGroup() {
     );
 }
 
+const theadClassName =
+    'sticky top-0 z-10 border-b border-gray-200/80 bg-gray-50/90 text-[10px] font-bold uppercase tracking-wide text-gray-500 shadow-[0_1px_0_0_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-[#1c1c1c]/95 dark:text-gray-400';
+
 function TableSkeleton() {
     return (
         <>
             {Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i}>
-                    <td className="px-2 py-2" colSpan={8}>
+                    <td className="px-2.5 py-2" colSpan={8}>
                         <div className="flex min-w-0 items-center gap-2">
                             <div className="h-8 w-8 shrink-0 animate-pulse rounded-md bg-gray-200 dark:bg-gray-700" />
                             <div className="min-w-0 flex-1 space-y-1.5">
@@ -58,6 +62,14 @@ function sortHandler(
     onSort(field);
 }
 
+function DesktopTableCard({ children }: { children: ReactNode }) {
+    return (
+        <div className="hidden min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200/70 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.08] dark:bg-[#1a1a1a] dark:shadow-none md:flex md:min-h-[16rem] md:flex-1">
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto overscroll-contain">{children}</div>
+        </div>
+    );
+}
+
 const PatientTable = ({
     patients,
     loading,
@@ -79,108 +91,95 @@ const PatientTable = ({
         disabled: sortDisabled,
     });
 
-    const theadClassName =
-        'sticky top-0 z-10 border-b border-gray-200 bg-white dark:border-gray-600 dark:bg-[#1a1a1a]';
+    const headerRow = (
+        <tr>
+            <SortableHeader {...headerProps('patient')}>Patient</SortableHeader>
+            <SortableHeader {...headerProps('dob')}>DOB / Age</SortableHeader>
+            <SortableHeader {...headerProps('gender')}>Gender</SortableHeader>
+            <SortableHeader {...headerProps('status')}>Status</SortableHeader>
+            <SortableHeader isSortable={false}>Inpatient</SortableHeader>
+            <SortableHeader {...headerProps('phone')}>Phone</SortableHeader>
+            <SortableHeader {...headerProps('createdDate')}>Created Date</SortableHeader>
+            <SortableHeader isSortable={false} align="right">
+                Actions
+            </SortableHeader>
+        </tr>
+    );
+
+    const tableShell = (body: ReactNode) => (
+        <table className="w-full min-w-[720px] table-fixed text-left text-xs">
+            <PatientTableColGroup />
+            <thead className={theadClassName}>{headerRow}</thead>
+            <tbody className="divide-y divide-gray-100/90 dark:divide-white/[0.05]">{body}</tbody>
+        </table>
+    );
 
     if (loading) {
         return (
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-[#1a1a1a] md:flex md:min-h-0 md:flex-1 md:flex-col">
-                <div className="hidden min-h-0 min-w-0 md:flex md:min-h-0 md:flex-1 md:flex-col">
-                    <div className="max-h-[min(70vh,40rem)] min-h-0 flex-1 overflow-y-auto overflow-x-hidden md:max-h-none">
-                        <table className="w-full table-fixed text-left text-sm">
-                            <PatientTableColGroup />
-                            <thead className={theadClassName}>
-                            <tr>
-                                <SortableHeader {...headerProps('patient')}>Patient</SortableHeader>
-                                <SortableHeader {...headerProps('dob')}>DOB / Age</SortableHeader>
-                                <SortableHeader {...headerProps('gender')}>Gender</SortableHeader>
-                                {/* <SortableHeader {...headerProps('ward')}>Ward</SortableHeader>
-                                <SortableHeader {...headerProps('room')}>Room</SortableHeader>
-                                <SortableHeader {...headerProps('bed')}>Bed</SortableHeader> */}
-                                <SortableHeader {...headerProps('status')}>Status</SortableHeader>
-                                <SortableHeader isSortable={false}>Inpatient</SortableHeader>
-                                <SortableHeader {...headerProps('phone')}>Phone</SortableHeader>
-                                <SortableHeader {...headerProps('createdDate')}>Created Date</SortableHeader>
-                                <SortableHeader isSortable={false} align="right">
-                                    Actions
-                                </SortableHeader>
-                            </tr>
-                            </thead>
-                            <tbody>
-                                <TableSkeleton />
-                            </tbody>
-                        </table>
+            <>
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:hidden">
+                    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden pe-1">
+                        <div className="space-y-2">
+                            {Array.from({ length: 4 }).map((_, i) => (
+                                <div key={i} className="h-28 animate-pulse rounded-xl bg-gray-200 dark:bg-gray-700" />
+                            ))}
+                        </div>
                     </div>
                 </div>
-                <div className="space-y-3 p-4 md:hidden">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                        <div key={i} className="h-36 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
-                    ))}
-                </div>
-            </div>
+                <DesktopTableCard>{tableShell(<TableSkeleton />)}</DesktopTableCard>
+            </>
         );
     }
 
     if (patients.length === 0) {
         return (
-            <div className="flex min-h-[240px] flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50/50 px-6 py-16 text-center dark:border-gray-600 dark:bg-gray-800/30">
-                <p className="text-lg font-medium text-gray-800 dark:text-gray-100">No patients found</p>
-                <p className="mt-1 max-w-sm text-sm text-gray-600 dark:text-gray-400">
-                    Try adjusting search or filters.
-                </p>
-            </div>
+            <>
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:hidden">
+                    <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pe-1">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">No patients found.</p>
+                    </div>
+                </div>
+                <DesktopTableCard>
+                    {tableShell(
+                        <tr>
+                            <td colSpan={8} className="px-2.5 py-6 text-center text-xs text-gray-500 dark:text-gray-400">
+                                No patients found.
+                            </td>
+                        </tr>
+                    )}
+                </DesktopTableCard>
+            </>
         );
     }
 
     return (
         <>
-            <div className="hidden min-h-0 min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-[#1a1a1a] md:flex md:min-h-0 md:flex-1 md:flex-col">
-                <div className="max-h-[min(70vh,40rem)] min-h-0 flex-1 overflow-y-auto overflow-x-hidden md:max-h-none">
-                    <table className="w-full table-fixed text-left text-sm">
-                        <PatientTableColGroup />
-                        <thead className={theadClassName}>
-                            <tr>
-                                <SortableHeader {...headerProps('patient')}>Patient</SortableHeader>
-                                <SortableHeader {...headerProps('dob')}>DOB / Age</SortableHeader>
-                                <SortableHeader {...headerProps('gender')}>Gender</SortableHeader>
-                                {/* <SortableHeader {...headerProps('ward')}>Ward</SortableHeader>
-                                <SortableHeader {...headerProps('room')}>Room</SortableHeader>
-                                <SortableHeader {...headerProps('bed')}>Bed</SortableHeader> */}
-                                <SortableHeader {...headerProps('status')}>Status</SortableHeader>
-                                <SortableHeader isSortable={false}>Inpatient</SortableHeader>
-                                <SortableHeader {...headerProps('phone')}>Phone</SortableHeader>
-                                <SortableHeader {...headerProps('createdDate')}>Created Date</SortableHeader>
-                                <SortableHeader isSortable={false} align="right" className="text-gray-500">
-                                    Actions
-                                </SortableHeader>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                            {patients.map((p) => (
-                                <PatientTableRow
-                                    key={p.id}
-                                    patient={p}
-                                    serverActivePatientIds={serverActivePatientIds}
-                                    activeEncounterIdByPatientId={activeEncounterIdByPatientId}
-                                    onOpenAdt={onOpenAdt}
-                                />
-                            ))}
-                        </tbody>
-                    </table>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:hidden">
+                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden pe-1">
+                    {patients.map((p) => (
+                        <PatientMobileCard
+                            key={p.id}
+                            patient={p}
+                            serverActivePatientIds={serverActivePatientIds}
+                            activeEncounterIdByPatientId={activeEncounterIdByPatientId}
+                            onOpenAdt={onOpenAdt}
+                        />
+                    ))}
                 </div>
             </div>
-
-            <div className="space-y-3 md:hidden">
-                {patients.map((p) => (
-                    <PatientMobileCard
-                        key={p.id}
-                        patient={p}
-                        serverActivePatientIds={serverActivePatientIds}
-                        activeEncounterIdByPatientId={activeEncounterIdByPatientId}
-                        onOpenAdt={onOpenAdt}
-                    />
-                ))}
-            </div>
+            <DesktopTableCard>
+                {tableShell(
+                    patients.map((p) => (
+                        <PatientTableRow
+                            key={p.id}
+                            patient={p}
+                            serverActivePatientIds={serverActivePatientIds}
+                            activeEncounterIdByPatientId={activeEncounterIdByPatientId}
+                            onOpenAdt={onOpenAdt}
+                        />
+                    ))
+                )}
+            </DesktopTableCard>
         </>
     );
 };

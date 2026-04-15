@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
 import { DateRangePicker } from '../../components/patients/DateRangePicker';
@@ -24,10 +24,7 @@ import {
     type PatientListSortField,
 } from '../../services/patient.service';
 import NewDropdown from '@/components/ui/NewDropdown';
-type DateRange = {
-    from: string;
-    to: string;
-  };
+
 const LIMIT_OPTIONS = [10, 25, 50] as const;
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -343,178 +340,192 @@ const PatientList = () => {
     const to = Math.min(page * limit, total);
 
     return (
-        <div className="panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <div className="shrink-0">
+        <div className="font-inter relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200/70 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-6px_rgba(0,0,0,0.06)] dark:border-white/[0.08] dark:bg-[#141210] dark:shadow-[0_8px_32px_-8px_rgba(0,0,0,0.45)]">
+            <div className="shrink-0 space-y-3 p-4 sm:p-5 sm:pb-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <h3 className="text-lg font-semibold text-gray-800 dark:text-white sm:text-xl">Patient List</h3>
-                    <SearchInput
-                        className="w-full sm:max-w-md lg:max-w-lg"
-                        inputRef={searchInputRef}
-                        value={searchInput}
-                        onChange={setSearchInput}
-                        placeholder="Search by name, MRN, or phone"
-                    />
+                    <div className="flex min-w-0 items-center gap-2.5">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary dark:bg-primary/15">
+                            <Users className="h-4 w-4" aria-hidden />
+                        </div>
+                        <div className="min-w-0">
+                            <h1 className="text-base font-semibold tracking-tight text-gray-900 dark:text-white">Patient List</h1>
+                        </div>
+                    </div>
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+                        <SearchInput
+                            variant="premium"
+                            className="w-full min-w-0 sm:w-60 lg:w-72"
+                            inputRef={searchInputRef}
+                            value={searchInput}
+                            onChange={setSearchInput}
+                            placeholder="Search by name, MRN, or phone"
+                        />
+                    </div>
+                </div>
+
+                <div className="border-t border-gray-200/50 pt-3 dark:border-white/[0.06]">
+                    <div className="flex min-w-0 flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:gap-3">
+                        <div className="min-w-0 flex-1 md:min-w-[9rem] md:max-w-[14rem]">
+                            <NewDropdown
+                                id="patient-list-status"
+                                label="Status"
+                                options={STATUS_OPTIONS}
+                                value={status || ''}
+                                placeholder="Select Status"
+                                className="w-full min-w-0"
+                                onChange={(v) => {
+                                    setStatus(v as StatusValue);
+                                    setPage(1);
+                                }}
+                            />
+                        </div>
+                        <div className="min-w-0 flex-1 md:min-w-[9rem] md:max-w-[14rem]">
+                            <NewDropdown
+                                id="patient-list-gender"
+                                label="Gender"
+                                options={GENDER_OPTIONS}
+                                value={gender || ''}
+                                placeholder="Select Gender"
+                                className="w-full min-w-0"
+                                onChange={(v) => {
+                                    setGender(v as string);
+                                    setPage(1);
+                                }}
+                            />
+                        </div>
+                        <div className="min-w-0 flex-1 md:min-w-[9rem] md:max-w-[14rem]">
+                            <NewDropdown
+                                id="patient-list-age"
+                                label="Age range"
+                                options={AGE_OPTIONS}
+                                value={ageRange || ''}
+                                placeholder="Select Age range"
+                                className="w-full min-w-0"
+                                onChange={(v) => {
+                                    setAgeRange(v as string);
+                                    setPage(1);
+                                }}
+                            />
+                        </div>
+                        <div className="min-w-0 flex-1 md:min-w-[9rem] md:max-w-[14rem]">
+                            <NewDropdown
+                                id="patient-list-recent"
+                                label="Recent patients"
+                                options={RECENT_OPTIONS}
+                                value={recent || ''}
+                                placeholder="Select Recent patients"
+                                className="w-full min-w-0"
+                                onChange={(v) => {
+                                    setRecent(v as string);
+                                    setPage(1);
+                                }}
+                            />
+                        </div>
+                        <div className="min-w-0 flex-1 md:max-w-[320px]">
+                            <DateRangePicker
+                                label="Reg. Date"
+                                className="w-full min-w-0"
+                                value={dateRange}
+                                onChange={(range) => {
+                                    setDateRange(range);
+
+                                    if (range.from && range.to) {
+                                        setPage(1);
+                                    }
+                                }}
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            onClick={clearFilters}
+                            className="inline-flex h-8 shrink-0 items-center justify-center self-start rounded-lg border border-transparent px-3 text-xs font-semibold text-gray-600 transition hover:bg-gray-100/80 dark:text-gray-400 dark:hover:bg-white/[0.04] md:self-auto"
+                        >
+                            Clear all filters
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white-light pt-4 dark:border-[#191e3a]">
-                <div className="mb-3 flex shrink-0 flex-col gap-3 pt-1 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 lg:gap-4">
-                        <div className="flex flex-wrap items-center gap-3 lg:gap-4">
-                            <div className="w-40">
-                                <NewDropdown
-                                    label="Status"
-                                    options={STATUS_OPTIONS}
-                                    value={status || ''}
-                                    placeholder="Select Status"
-                                    onChange={(v) => {
-                                        setStatus(v as StatusValue);
-                                        setPage(1);
-                                    }}
-                                />
-                            </div>
-                            <div className="w-40">
-                                <NewDropdown
-                                    label="Gender"
-                                    options={GENDER_OPTIONS}
-                                    value={gender || ''}
-                                    placeholder="Select Gender"
-                                    onChange={(v) => {
-                                        setGender(v as string);
-                                        setPage(1);
-                                    }}
-                                />
-                            </div>
-                            <div className="w-40">
-                                <NewDropdown
-                                    label="Age range"
-                                    options={AGE_OPTIONS}
-                                    value={ageRange || ''}
-                                    placeholder="Select Age range"
-                                    onChange={(v) => {
-                                        setAgeRange(v as string);
-                                        setPage(1);
-                                    }}
-                                />
-                            </div>
-                            <div className="w-40">
-                                <NewDropdown
-                                    label="Recent patients"
-                                    options={RECENT_OPTIONS}
-                                    value={recent || ''}
-                                    placeholder="Select Recent patients"
-                                    onChange={(v) => {
-                                        setRecent(v as string);
-                                        setPage(1);
-                                    }}
-                                />
-                            </div>
-                            <div className="min-w-[240px] max-w-full sm:min-w-[260px] sm:max-w-[320px]">
-                                <DateRangePicker
-                                    label="Reg. Date"
-                                    value={dateRange}
-                                    onChange={(range) => {
-                                        setDateRange(range);
-
-                                        if (range.from && range.to) {
-                                            setPage(1);
-                                        }
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={clearFilters}
-                        className="btn btn-outline-primary inline-flex h-8 max-h-[32px] shrink-0 items-center px-3 py-0 text-xs"
-                    >
-                        Clear all filters
-                    </button>
-                </div>
-
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden border-t border-gray-200/50 px-4 pb-4 pt-3 dark:border-white/[0.06] sm:px-5 sm:pb-5 sm:pt-3">
                 {error ? (
-                    <div className="mb-3 shrink-0 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+                    <div className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
                         {error}
                     </div>
                 ) : null}
 
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                    <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto md:flex md:flex-col md:overflow-hidden">
-                        <PatientTable
-                            patients={items}
-                            loading={loading}
-                            sortBy={sortBy}
-                            sortOrder={sortOrder}
-                            onSort={handleSort}
-                            sortDisabled={loading}
-                            serverActivePatientIds={serverActivePatientIds}
-                            activeEncounterIdByPatientId={encounterMapForTable}
-                            onOpenAdt={(patient, intent) => setAdtModal({ patient, intent })}
-                        />
-                    </div>
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+                    <PatientTable
+                        patients={items}
+                        loading={loading}
+                        sortBy={sortBy}
+                        sortOrder={sortOrder}
+                        onSort={handleSort}
+                        sortDisabled={loading}
+                        serverActivePatientIds={serverActivePatientIds}
+                        activeEncounterIdByPatientId={encounterMapForTable}
+                        onOpenAdt={(patient, intent) => setAdtModal({ patient, intent })}
+                    />
+                </div>
 
-                    {!loading && !error ? (
-                        <div className="mt-3 flex shrink-0 flex-col gap-3 border-t border-white-light pt-3 dark:border-[#191e3a] sm:flex-row sm:items-center sm:justify-between">
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                                {total === 0 ? (
-                                    <>0 patients</>
-                                ) : (
-                                    <>
-                                        Showing <span className="font-medium text-gray-900 dark:text-gray-100">{from}</span>
-                                        –
-                                        <span className="font-medium text-gray-900 dark:text-gray-100">{to}</span> of{' '}
-                                        <span className="font-medium text-gray-900 dark:text-gray-100">{total}</span>
-                                    </>
-                                )}
-                            </p>
+                {!loading && !error ? (
+                    <div className="flex shrink-0 flex-col gap-2 border-t border-gray-200/70 pt-2 dark:border-white/[0.06] sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
+                            {total === 0 ? (
+                                <>0 patients</>
+                            ) : (
+                                <>
+                                    Showing <span className="font-medium text-gray-900 dark:text-gray-100">{from}</span>–
+                                    <span className="font-medium text-gray-900 dark:text-gray-100">{to}</span> of{' '}
+                                    <span className="font-medium text-gray-900 dark:text-gray-100">{total}</span>
+                                </>
+                            )}
+                        </p>
 
-                            <div className="flex flex-wrap items-center gap-3">
-                                <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                    <span>Rows</span>
-                                    <select
-                                        value={limit}
-                                        onChange={(e) => {
-                                            setLimit(Number(e.target.value));
-                                            setPage(1);
-                                        }}
-                                        className="form-input cursor-pointer py-1.5 pl-3 pr-8 text-sm"
-                                    >
-                                        {LIMIT_OPTIONS.map((n) => (
-                                            <option key={n} value={n}>
-                                                {n}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <label className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
+                                <span>Rows</span>
+                                <select
+                                    value={limit}
+                                    onChange={(e) => {
+                                        setLimit(Number(e.target.value));
+                                        setPage(1);
+                                    }}
+                                    className="h-8 rounded-md border border-gray-200/80 bg-white px-2 text-xs dark:border-white/[0.08] dark:bg-[#1a1816]"
+                                >
+                                    {LIMIT_OPTIONS.map((n) => (
+                                        <option key={n} value={n}>
+                                            {n}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
 
-                                <div className="flex items-center gap-1">
-                                    <button
-                                        type="button"
-                                        title="Previous page"
-                                        disabled={page <= 1 || loading}
-                                        onClick={() => setPage((p) => Math.max(1, p - 1))}
-                                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                                    >
-                                        <ChevronLeft className="h-4 w-4" />
-                                    </button>
-                                    <span className="min-w-[5.5rem] text-center text-sm text-gray-600 dark:text-gray-400">
-                                        Page {page} / {totalPages}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        title="Next page"
-                                        disabled={page >= totalPages || loading || total === 0}
-                                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                                    >
-                                        <ChevronRight className="h-4 w-4" />
-                                    </button>
-                                </div>
+                            <div className="flex items-center gap-0.5">
+                                <button
+                                    type="button"
+                                    title="Previous page"
+                                    disabled={page <= 1 || loading}
+                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                    className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
+                                >
+                                    <ChevronLeft className="h-3.5 w-3.5" />
+                                </button>
+                                <span className="min-w-[5.5rem] text-center text-xs tabular-nums text-gray-600 dark:text-gray-400">
+                                    Page {page} / {totalPages}
+                                </span>
+                                <button
+                                    type="button"
+                                    title="Next page"
+                                    disabled={page >= totalPages || loading || total === 0}
+                                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                    className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200/80 bg-white text-gray-700 transition hover:bg-gray-50/80 disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04]"
+                                >
+                                    <ChevronRight className="h-3.5 w-3.5" />
+                                </button>
                             </div>
                         </div>
-                    ) : null}
-                </div>
+                    </div>
+                ) : null}
             </div>
 
             {adtModal ? (

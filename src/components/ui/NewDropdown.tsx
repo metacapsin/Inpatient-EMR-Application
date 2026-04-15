@@ -204,7 +204,7 @@ export default function NewDropdown({
     return (
       <div className={`relative w-full ${className}`.trim()} ref={dropdownRef}>
         {inner}
-        <span className="pointer-events-none absolute left-3 top-0 z-10 -translate-y-1/2 bg-white px-1 text-[12px] font-medium text-gray-500 dark:bg-[#141210] dark:text-gray-400">
+        <span className="pointer-events-none absolute left-3 top-0 z-10 -translate-y-1/2 bg-white px-1 text-xs font-bold text-dark dark:bg-[#141210] dark:text-gray-200">
           {label}
         </span>
       </div>

@@ -35,7 +35,7 @@ export function SortableHeader({
             {isSortable && (
                 <span
                     className={cn(
-                        'select-none text-xs font-normal tabular-nums',
+                        'select-none text-[10px] font-normal tabular-nums',
                         active ? 'text-primary font-semibold' : 'text-gray-400'
                     )}
                     aria-hidden
@@ -50,7 +50,7 @@ export function SortableHeader({
         <th
             scope="col"
             className={cn(
-                'px-2 py-2 text-[11px] font-semibold uppercase tracking-wide',
+                'px-2.5 py-2 text-[10px] font-bold uppercase tracking-wide',
                 active ? 'bg-primary/5 text-primary dark:bg-primary/10 dark:text-primary-200' : 'text-gray-500',
                 alignClass,
                 className
@@ -62,7 +62,7 @@ export function SortableHeader({
                     disabled={disabled}
                     onClick={() => onSort?.(sortKey)}
                     className={cn(
-                        '-mx-1 inline-flex w-full items-center rounded-md px-1 py-0.5 text-left hover:bg-gray-100/80 dark:hover:bg-white/5',
+                        '-mx-1 inline-flex w-full items-center rounded-md px-1 py-0.5 text-left hover:bg-gray-100/80 dark:hover:bg-white/[0.04]',
                         align === 'right' && 'justify-end text-right',
                         align === 'center' && 'justify-center text-center',
                         disabled && 'pointer-events-none cursor-default opacity-50 hover:bg-transparent'
