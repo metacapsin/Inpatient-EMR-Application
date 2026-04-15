@@ -91,27 +91,31 @@ function DischargeReadinessLoaded({
 }) {
     return (
         <DischargeReadinessProvider encounterId={eid} view={view} setView={setView}>
-            <div className="space-y-4">
-                <div className="panel p-6">
+            <div className="panel overflow-hidden rounded-lg border border-gray-200/80 bg-white p-0 shadow-none dark:border-gray-700/80 dark:bg-[#0c0a08]/40">
+                <div className="px-3 pt-2 sm:px-3">
                     <DischargeReadinessCommandStrip />
                 </div>
 
-                <div className="panel space-y-4 p-4 sm:p-6">
-                    <DischargeReadinessBlockingAlert />
-                    <DischargeReadinessHeader view={view} />
+                <div className="grid gap-3 p-3 sm:p-3 lg:grid-cols-12 lg:items-start lg:gap-3">
+                    <div className="divide-y divide-gray-200/80 overflow-hidden rounded-lg border border-gray-200/90 bg-gray-50/30 dark:divide-gray-700/70 dark:border-gray-700 dark:bg-gray-900/25 lg:col-span-12">
+                        <DischargeReadinessBlockingAlert />
+                        <DischargeReadinessHeader view={view} />
+                    </div>
 
-                    <div className="rounded-2xl border border-gray-200/90 bg-white p-6 shadow-md dark:border-gray-700 dark:bg-gray-900/50 sm:p-8">
-                    <div className="mb-2">
-                        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Discharge workspace</h2>
-                        <p className="mt-1 max-w-3xl text-sm text-gray-600 dark:text-gray-400">
-                            Review documentation, operational tasks, charges, eligibility, and billing. Finalize only when all gates are
-                            satisfied.
-                        </p>
+                    <div className="rounded-lg border border-gray-200/90 bg-white p-3 dark:border-gray-700 dark:bg-gray-900/50 lg:col-span-12">
+                    <div className="mb-2 flex flex-col gap-1 border-b border-gray-100 pb-2 dark:border-gray-800 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
+                        <div className="min-w-0">
+                            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Discharge workspace</h2>
+                            <p className="mt-0.5 max-w-3xl text-[11px] leading-snug text-gray-600 dark:text-gray-400">
+                                Review documentation, operational tasks, charges, eligibility, and billing. Finalize only when all gates are
+                                satisfied.
+                            </p>
+                        </div>
                     </div>
 
                     <DischargeReadinessTabStrip tab={tab} setTab={setTab} />
 
-                    <div className="mt-8 space-y-8">
+                    <div className="mt-2 space-y-3">
                         <div className={tab === 'summary' ? '' : 'hidden'} aria-hidden={tab !== 'summary'}>
                             <DischargeSummaryTab
                                 summary={view.summary}
@@ -230,7 +234,6 @@ function DischargeReadinessLoaded({
                         <div className={tab === 'billing' ? '' : 'hidden'} aria-hidden={tab !== 'billing'}>
                             <BillingTab
                                 claimPrep={view.claimPrep}
-                                billingReady={view.billingReady}
                                 canEdit={canBilling}
                                 onSaveClaimPrep={async (patch) => {
                                     const res = await updateClaimPrep(eid, patch);
@@ -239,7 +242,7 @@ function DischargeReadinessLoaded({
                                         return false;
                                     }
                                     setView(res.data);
-                                    toast.success('Claim prep updated');
+                                    toast.success('Claim prep saved as draft');
                                     return true;
                                 }}
                                 onSubmitClaim={async () => {
@@ -261,7 +264,7 @@ function DischargeReadinessLoaded({
                         </div>
                     </div>
                 </div>
-            </div>
+                </div>
             </div>
         </DischargeReadinessProvider>
     );

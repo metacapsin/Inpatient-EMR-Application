@@ -7,31 +7,32 @@ export function DischargeReadinessBlockingAlert() {
     const flow = useDischargeFinalizeFlow(encounterId, view);
 
     if (flow.readinessQuery.isLoading) return null;
-    if (!flow.gatesForUi || flow.blockingReasons.length === 0) return null;
+    if (flow.blockingReasons.length === 0) return null;
 
     return (
         <div
-            className="rounded-xl border border-red-200 bg-red-50/95 p-4 shadow-sm dark:border-red-900/50 dark:bg-red-950/40"
+            className="border-l-4 border-red-500 bg-red-50/70 py-1.5 pl-2 pr-2 dark:border-red-600 dark:bg-red-950/25"
             role="alert"
         >
-            <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-100 dark:bg-red-900/50">
-                    <AlertTriangle className="h-5 w-5 text-red-700 dark:text-red-200" aria-hidden />
-                </div>
+            <div className="flex gap-2">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-700 dark:text-red-300" aria-hidden />
                 <div className="min-w-0 flex-1">
-                    <h3 className="text-base font-bold text-red-950 dark:text-red-50">Discharge Blocked</h3>
-                    <p className="mt-1 text-sm text-red-900/90 dark:text-red-100/90">
-                        Complete the following before finalizing discharge.
-                    </p>
-                    <ul className="mt-3 space-y-2">
-                        {flow.blockingReasons.map((msg) => (
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <span className="text-xs font-semibold text-red-950 dark:text-red-50">Discharge blocked</span>
+                        <span className="text-[11px] leading-snug text-red-900/90 dark:text-red-100/85">
+                            Finish the items below before finalizing discharge.
+                        </span>
+                    </div>
+                    <ul className="mt-1 space-y-0.5">
+                        {flow.blockingReasons.map((msg, i) => (
                             <li
-                                key={msg}
-                                className="flex gap-2 text-sm font-medium text-red-950 dark:text-red-50"
+                                key={`${i}-${msg}`}
+                                className="flex gap-1.5 text-[11px] font-medium leading-snug text-red-950 dark:text-red-50"
                             >
-                                <span className="shrink-0" aria-hidden>
-                                    ⚠️
-                                </span>
+                                <span
+                                    className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-red-600 dark:bg-red-400"
+                                    aria-hidden
+                                />
                                 <span>{msg}</span>
                             </li>
                         ))}

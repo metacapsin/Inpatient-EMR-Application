@@ -77,7 +77,7 @@ function NursingChecklistTabInner({ tasks, canEdit, onUpdateTask }: Props) {
     }, [ctx?.snapshot]);
 
     return (
-        <div className="space-y-4" data-nursing-checklist-tab>
+        <div className="space-y-3" data-nursing-checklist-tab>
             <p className="text-sm text-gray-600 dark:text-gray-400">
                 Required items must be completed before the clinical discharge track clears. Incomplete items appear as hard blockers in the
                 readiness header.

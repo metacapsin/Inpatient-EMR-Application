@@ -186,7 +186,7 @@ function ChargeCaptureTabInner({ charges, canEdit, onUpdateCharge, onAddCharge, 
     }, [ctx?.snapshot]);
 
     return (
-        <div className="space-y-6" data-charges-tab>
+        <div className="space-y-3" data-charges-tab>
             <div
                 className={cn(
                     'rounded-lg border px-4 py-4 dark:border-gray-700',

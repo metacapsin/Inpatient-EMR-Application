@@ -1,10 +1,9 @@
 import { AlertTriangle, Check } from 'lucide-react';
 import { useMemo } from 'react';
 import { useDischargeReadiness } from '../../../contexts/DischargeReadinessContext';
-import { useDischargeFinalizeFlow } from '../../../hooks/useDischargeFinalizeFlow';
-import { computeDischargeTabCompletion, resolveFinalizeGates } from '../../../utils/dischargeReadinessUi';
+import { computeDischargeTabCompletion, type DischargeWorkspaceTabId } from '../../../utils/dischargeReadinessUi';
 
-export type DischargeWorkspaceTabId = 'summary' | 'checklist' | 'charges' | 'insurance' | 'billing';
+export type { DischargeWorkspaceTabId };
 
 type TabDef = { id: DischargeWorkspaceTabId; label: string };
 
@@ -30,10 +29,8 @@ type Props = {
 };
 
 export function DischargeReadinessTabStrip({ tab, setTab }: Props) {
-    const { encounterId, view, snapshot } = useDischargeReadiness();
-    const flow = useDischargeFinalizeFlow(encounterId, view);
-    const gates = useMemo(() => resolveFinalizeGates(view, flow.gatesForUi), [view, flow.gatesForUi]);
-    const tabDone = useMemo(() => computeDischargeTabCompletion(view, snapshot, gates), [view, snapshot, gates]);
+    const { view, snapshot } = useDischargeReadiness();
+    const tabDone = useMemo(() => computeDischargeTabCompletion(view, snapshot), [view, snapshot]);
 
     const statusMap: Record<DischargeWorkspaceTabId, boolean> = {
         summary: tabDone.summary,
@@ -44,33 +41,38 @@ export function DischargeReadinessTabStrip({ tab, setTab }: Props) {
     };
 
     return (
-        <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex flex-wrap gap-2 pb-1">
-                {TABS.map((b) => {
-                    const done = statusMap[b.id];
-                    return (
-                        <button
-                            key={b.id}
-                            type="button"
-                            {...TAB_SCROLL_MARKERS[b.id]}
-                            onClick={() => setTab(b.id)}
-                            className={`inline-flex items-center gap-2 rounded-t-lg border border-b-0 px-4 py-2.5 text-sm font-semibold transition ${
-                                tab === b.id
-                                    ? 'relative z-[1] border-gray-200 bg-white text-gray-900 shadow-sm dark:border-gray-600 dark:bg-gray-900 dark:text-white'
-                                    : 'border-transparent bg-gray-50/80 text-gray-600 hover:bg-gray-100 dark:bg-gray-800/50 dark:text-gray-300 dark:hover:bg-gray-800'
-                            } ${tab === b.id ? '-mb-px' : ''}`}
-                        >
-                            {done ? (
-                                <Check className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
-                            ) : (
-                                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400" aria-hidden />
-                            )}
-                            <span>{b.label}</span>
-                            <span className="sr-only">{done ? 'Completed' : 'Pending'}</span>
-                        </button>
-                    );
-                })}
-            </div>
+        <div
+            className="mb-2 inline-flex max-w-full flex-wrap rounded-lg border border-gray-200/90 bg-gray-50/90 p-0.5 dark:border-gray-700 dark:bg-gray-900/40"
+            role="tablist"
+            aria-label="Discharge workspace sections"
+        >
+            {TABS.map((b) => {
+                const done = statusMap[b.id];
+                const active = tab === b.id;
+                return (
+                    <button
+                        key={b.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        {...TAB_SCROLL_MARKERS[b.id]}
+                        onClick={() => setTab(b.id)}
+                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition sm:px-2.5 sm:text-xs ${
+                            active
+                                ? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-200/80 dark:bg-gray-950 dark:text-white dark:ring-gray-600'
+                                : 'text-gray-600 hover:bg-white/70 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800/80 dark:hover:text-gray-100'
+                        }`}
+                    >
+                        {done ? (
+                            <Check className="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                        ) : (
+                            <AlertTriangle className="h-3 w-3 shrink-0 text-amber-500 dark:text-amber-400" aria-hidden />
+                        )}
+                        <span>{b.label}</span>
+                        <span className="sr-only">{done ? 'Completed' : 'Pending'}</span>
+                    </button>
+                );
+            })}
         </div>
     );
 }

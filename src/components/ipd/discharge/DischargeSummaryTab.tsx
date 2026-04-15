@@ -8,6 +8,7 @@ import type { DischargeSummaryState } from '../../../types/dischargeReadiness';
 import { cn } from '@/lib/utils';
 import { useDischargeReadinessOptional } from '../../../contexts/DischargeReadinessContext';
 import {
+    DISCHARGE_SUMMARY_ERROR_SCROLL_ORDER,
     scrollToFirstDischargeSummaryError,
     scrollToFirstReadinessIssue,
     validateDischargeSummaryRequired,
@@ -91,7 +92,9 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
     ref,
 ) {
     const ctx = useDischargeReadinessOptional();
-    const locked = summary.status === 'signed' || !canEdit;
+    /** After successful sign (persisted); not used to enable the Sign control. */
+    const dischargeSummarySigned = summary.status === 'signed';
+    const locked = dischargeSummarySigned || !canEdit;
 
     const [form, setForm] = useState<FormState>(() => summaryToFormState(summary));
     const [fieldErrors, setFieldErrors] = useState<DischargeSummaryRequiredErrors>({});
@@ -143,40 +146,74 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
     }));
 
     const snapshot = ctx?.snapshot;
-    const canSignByRules = snapshot?.canSignDischargeSummary ?? false;
+
+    /** Required documentation on the current form — independent of signature / readiness snapshot. */
+    const summaryReady = useMemo(() => {
+        const { ok } = validateDischargeSummaryRequired({
+            admissionDiagnosis: form.admissionDiagnosis,
+            hospitalCourse: form.hospitalCourse,
+            finalDiagnoses: form.finalDiagnoses,
+            dischargeMedications: form.dischargeMedications,
+            followUpInstructions: form.followUpInstructions,
+        });
+        return ok;
+    }, [
+        form.admissionDiagnosis,
+        form.hospitalCourse,
+        form.finalDiagnoses,
+        form.dischargeMedications,
+        form.followUpInstructions,
+    ]);
 
     const signBlockerHint = useMemo(() => {
-        if (summary.status === 'signed') return null;
+        if (dischargeSummarySigned) return null;
         if (!canSign) return signDisabledExplanation ?? null;
-        if (!snapshot) return null;
-        if (!snapshot.canSignDischargeSummary) {
-            const msgs = snapshot.hardBlockers
-                .filter((g) => g.id !== 'gate-summary-signed')
-                .map((g) => g.message);
-            return msgs.length ? msgs.join(' · ') : 'Resolve readiness blockers before signing.';
+        if (!summaryReady) {
+            const { errors } = validateDischargeSummaryRequired({
+                admissionDiagnosis: form.admissionDiagnosis,
+                hospitalCourse: form.hospitalCourse,
+                finalDiagnoses: form.finalDiagnoses,
+                dischargeMedications: form.dischargeMedications,
+                followUpInstructions: form.followUpInstructions,
+            });
+            for (const key of DISCHARGE_SUMMARY_ERROR_SCROLL_ORDER) {
+                const msg = errors[key];
+                if (msg) return msg;
+            }
+            return 'Complete required discharge summary fields.';
         }
         return null;
-    }, [summary.status, canSign, signDisabledExplanation, snapshot]);
+    }, [dischargeSummarySigned, canSign, signDisabledExplanation, summaryReady, form]);
 
-    const signDisabled = !canSign || summary.status === 'signed' || saving || signing || !canSignByRules;
-    const signTitle = signDisabled ? signBlockerHint ?? 'Signing is not available.' : undefined;
+    /** When the form is ready but other workspace gates block signing (charges, nursing, etc.). */
+    const signPrecheckHint = useMemo(() => {
+        if (!snapshot || dischargeSummarySigned || !summaryReady) return undefined;
+        if (snapshot.canSignDischargeSummary) return undefined;
+        const msgs = snapshot.hardBlockers
+            .filter((g) => g.id !== 'gate-summary-signed')
+            .map((g) => g.message);
+        return msgs.length ? `Also required before signing: ${msgs.join(' · ')}` : undefined;
+    }, [snapshot, dischargeSummarySigned, summaryReady]);
+
+    const signDisabled = !canSign || dischargeSummarySigned || saving || signing || !summaryReady;
+    const signTitle = signDisabled ? (signBlockerHint ?? 'Signing is not available.') : signPrecheckHint;
 
     const selectBase =
         'mt-1 h-10 w-full rounded-md border bg-white px-2 text-sm dark:bg-gray-900 dark:text-gray-100 focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary';
 
     return (
-        <div className="space-y-4" data-discharge-summary-tab>
+        <div className="space-y-3" data-discharge-summary-tab>
             <div className="flex flex-wrap items-center gap-2">
                 <span
                     className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        summary.status === 'signed'
+                        dischargeSummarySigned
                             ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100'
                             : 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
                     }`}
                 >
-                    {summary.status === 'signed' ? `Signed ${summary.signedAt ? new Date(summary.signedAt).toLocaleString() : ''}` : 'Draft'}
+                    {dischargeSummarySigned ? `Signed ${summary.signedAt ? new Date(summary.signedAt).toLocaleString() : ''}` : 'Draft'}
                 </span>
-                {summary.status === 'signed' && (summary.signedByName || summary.signedBy) ? (
+                {dischargeSummarySigned && (summary.signedByName || summary.signedBy) ? (
                     <span className="text-xs text-gray-500">
                         by {summary.signedByName?.trim() || summary.signedBy}
                     </span>
@@ -415,7 +452,7 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
                     </Button>
                 </span>
             </div>
-            {!canEdit && summary.status !== 'signed' ? (
+            {!canEdit && !dischargeSummarySigned ? (
                 <p className="text-sm text-gray-500">Your role cannot edit the discharge summary.</p>
             ) : null}
         </div>

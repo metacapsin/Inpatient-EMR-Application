@@ -41,7 +41,7 @@ function EligibilityTabInner({ history, canRun, onRunCheck }: Props) {
     const latestExpired = latest ? now >= eligibilityExpiresAtMs(latest) : false;
 
     return (
-        <div className="space-y-6" data-insurance-tab>
+        <div className="space-y-3" data-insurance-tab>
             {gateMsg ? (
                 <div
                     className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100"
