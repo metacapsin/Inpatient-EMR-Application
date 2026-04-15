@@ -3,7 +3,6 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
 import { DateRangePicker } from '../../components/patients/DateRangePicker';
-import { FilterSelect } from '../../components/patients/FilterSelect';
 import { SearchInput } from '../../components/patients/SearchInput';
 import PatientTable from '../../components/patients/PatientTable';
 import { AdtPatientWorkflowModal } from '../../components/adt/AdtPatientWorkflowModal';
@@ -359,87 +358,80 @@ const PatientList = () => {
             </div>
 
             <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white-light pt-4 dark:border-[#191e3a]">
-                <div className="mb-3 flex shrink-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-                    <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3 lg:gap-4">
-                        <div className="flex gap-4 flex-wrap">
-                          <div className="w-40">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Status
-                                </label>
+                <div className="mb-3 flex shrink-0 flex-col gap-3 pt-1 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 lg:gap-4">
+                        <div className="flex flex-wrap items-center gap-3 lg:gap-4">
+                            <div className="w-40">
                                 <NewDropdown
+                                    variant="outlined"
+                                    label="Status"
                                     options={STATUS_OPTIONS}
-                                    value={status || ""}
+                                    value={status || ''}
                                     placeholder="Select Status"
                                     onChange={(v) => {
-                                    setStatus(v as StatusValue);
-                                    setPage(1);
+                                        setStatus(v as StatusValue);
+                                        setPage(1);
                                     }}
                                 />
-                                </div>
-                      <div className="w-40">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Gender
-                            </label>
-
-                            <NewDropdown
-                                options={GENDER_OPTIONS}
-                                value={gender || ""}
-                                placeholder="Select Gender"
-                                onChange={(v) => {
-                                setGender(v as string);
-                                setPage(1);
-                                }}
-                            />
                             </div>
-                             <div className="w-40">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Age range
-                                    </label>
-
-                                    <NewDropdown
-                                        options={AGE_OPTIONS}
-                                        value={ageRange || ""}
-                                        placeholder="Select Age range"
-                                        onChange={(v) => {
+                            <div className="w-40">
+                                <NewDropdown
+                                    variant="outlined"
+                                    label="Gender"
+                                    options={GENDER_OPTIONS}
+                                    value={gender || ''}
+                                    placeholder="Select Gender"
+                                    onChange={(v) => {
+                                        setGender(v as string);
+                                        setPage(1);
+                                    }}
+                                />
+                            </div>
+                            <div className="w-40">
+                                <NewDropdown
+                                    variant="outlined"
+                                    label="Age range"
+                                    options={AGE_OPTIONS}
+                                    value={ageRange || ''}
+                                    placeholder="Select Age range"
+                                    onChange={(v) => {
                                         setAgeRange(v as string);
                                         setPage(1);
-                                        }}
-                                    />
-                                    </div>
-                           <div className="w-40">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Recent patients
-                                </label>
-
-                                <NewDropdown
-                                    options={RECENT_OPTIONS}
-                                    value={recent || ""}
-                                    placeholder="Select Recent patients"
-                                    onChange={(v) => {
-                                    setRecent(v as string);
-                                    setPage(1);
                                     }}
                                 />
-                                </div>
-                                <div className="w-50">
-                        <DateRangePicker
-                            label="Reg Date"
-                            value={dateRange}
-                            onChange={(range) => {
-                                setDateRange(range);
+                            </div>
+                            <div className="w-40">
+                                <NewDropdown
+                                    variant="outlined"
+                                    label="Recent patients"
+                                    options={RECENT_OPTIONS}
+                                    value={recent || ''}
+                                    placeholder="Select Recent patients"
+                                    onChange={(v) => {
+                                        setRecent(v as string);
+                                        setPage(1);
+                                    }}
+                                />
+                            </div>
+                            <div className="min-w-[240px] max-w-full sm:min-w-[260px] sm:max-w-[320px]">
+                                <DateRangePicker
+                                    label="Reg. Date"
+                                    value={dateRange}
+                                    onChange={(range) => {
+                                        setDateRange(range);
 
-                                if (range.from && range.to) {
-                                    setPage(1);
-                                }
-                            }}
-                        />
-                        </div>
+                                        if (range.from && range.to) {
+                                            setPage(1);
+                                        }
+                                    }}
+                                />
+                            </div>
                         </div>
                     </div>
                     <button
                         type="button"
                         onClick={clearFilters}
-                        className="btn btn-outline-primary inline-flex h-[38px] shrink-0 items-center px-4 py-0 text-sm"
+                        className="btn btn-outline-primary inline-flex h-8 max-h-[32px] shrink-0 items-center px-3 py-0 text-xs"
                     >
                         Clear all filters
                     </button>

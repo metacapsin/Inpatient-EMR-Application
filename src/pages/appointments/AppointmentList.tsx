@@ -221,8 +221,7 @@ const AppointmentList: React.FC = () => {
     type="text"
     placeholder="Search by name, MRN, or phone"
       // className="w-full sm:max-w-md lg:max-w-lg"
-    className="pl-10 pr-3 py-2 text-sm border border-gray-100 rounded-lg shadow-sm 
-               focus:outline-none focus:ring-2focus:ring-blue-200 w-full sm:max-w-md lg:max-w-lg"
+    className="w-full rounded-lg border border-gray-100 py-2 pl-10 pr-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200 sm:max-w-md lg:max-w-lg"
     value={search}
     onChange={(e) => setSearch(e.target.value)}
   />
@@ -236,116 +235,75 @@ const AppointmentList: React.FC = () => {
     </div>
   </div>
 
- 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
-        {/* <select
-          className="form-select"
-          value={filters.status}
-          onChange={(e) => {
-            setPage(1);
-            setFilters((prev) => ({ ...prev, status: e.target.value }));
-          }}
-        >
-          <option value="">All Status</option>
-          <option value="Scheduled">Scheduled</option>
-          <option value="Completed">Completed</option>
-          <option value="Cancelled">Cancelled</option>
-          <option value="No Show">No Show</option>
-        </select> */}
-        <div className="w-55">
-  <NewDropdown
-    options={[
-      { value: "", label: "All Status" },
-      { value: "Scheduled", label: "Scheduled" },
-      { value: "Completed", label: "Completed" },
-      { value: "Cancelled", label: "Cancelled" },
-      { value: "No Show", label: "No Show" },
-    ]}
-    value={filters.status}
-    onChange={(v) => {
-      setPage(1);
-      setFilters((prev) => ({ ...prev, status: v as string  }));
-    }}
-    placeholder="All Status"
-  />
-</div>
-        {/* <select
-          className="form-select"
-          value={filters.providerId}
-          onChange={(e) => {
-            setPage(1);
-            setFilters((prev) => ({ ...prev, providerId: e.target.value }));
-          }}
-        >
-          <option value="">All Providers</option>
-          {providers.map((provider) => (
-            <option key={provider.id} value={provider.id}>{provider.name}</option>
-          ))}
-        </select> */}
-        <div className="w-55"> 
-  <NewDropdown
-    options={[
-      { value: "", label: "All Providers" },
-      ...providers.map((p) => ({
-        value: p.id,
-        label: p.name,
-      })),
-    ]}
-    value={filters.providerId}
-    onChange={(v) => {
-      setPage(1);
-      setFilters((prev) => ({ ...prev, providerId: v as string  }));
-    }}
-    placeholder="All Providers"
-     label="Date"
-  />
-</div>
-        {/* <input
-          type="date"
-          className="form-input"
-          value={filters.dateFrom}
-          onChange={(e) => {
-            setPage(1);
-            setFilters((prev) => ({ ...prev, dateFrom: e.target.value }));
-          }}
-        />
-        <input
-          type="date"
-          className="form-input"
-          value={filters.dateTo}
-          onChange={(e) => {
-            setPage(1);
-            setFilters((prev) => ({ ...prev, dateTo: e.target.value }));
-          }}
-        /> */}  
- <DateRangePicker
-  label="Date"
-  value={{
-    from: filters.dateFrom || null,
-    to: filters.dateTo || null,
-  }}
-  onChange={(range) => {
-    setPage(1);
-
-    setFilters((prev) => ({
-      ...prev,
-      dateFrom: range?.from || "",
-      dateTo: range?.to || "",
-    }));
-  }}
-/>
-        
-        
-        <AppButton
-          className="btn btn-outline-secondary"
+      <div className="mb-4 flex shrink-0 flex-col gap-3 border-t border-white-light pt-4 dark:border-[#191e3a] sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 pt-1 lg:gap-4">
+          <div className="w-40">
+            <NewDropdown
+              variant="outlined"
+              label="Status"
+              options={[
+                { value: '', label: 'All Status' },
+                { value: 'Scheduled', label: 'Scheduled' },
+                { value: 'Completed', label: 'Completed' },
+                { value: 'Cancelled', label: 'Cancelled' },
+                { value: 'No Show', label: 'No Show' },
+              ]}
+              value={filters.status}
+              onChange={(v) => {
+                setPage(1);
+                setFilters((prev) => ({ ...prev, status: v as string }));
+              }}
+              placeholder="All Status"
+            />
+          </div>
+          <div className="w-48 min-w-[11rem] max-w-full sm:w-52">
+            <NewDropdown
+              variant="outlined"
+              label="Provider"
+              options={[
+                { value: '', label: 'All Providers' },
+                ...providers.map((p) => ({
+                  value: p.id,
+                  label: p.name,
+                })),
+              ]}
+              value={filters.providerId}
+              onChange={(v) => {
+                setPage(1);
+                setFilters((prev) => ({ ...prev, providerId: v as string }));
+              }}
+              placeholder="All Providers"
+            />
+          </div>
+          <div className="min-w-[240px] max-w-full sm:min-w-[260px] sm:max-w-[320px]">
+            <DateRangePicker
+              label="Date"
+              value={{
+                from: filters.dateFrom || '',
+                to: filters.dateTo || '',
+              }}
+              onChange={(range) => {
+                setPage(1);
+                setFilters((prev) => ({
+                  ...prev,
+                  dateFrom: range?.from || '',
+                  dateTo: range?.to || '',
+                }));
+              }}
+            />
+          </div>
+        </div>
+        <button
+          type="button"
           onClick={() => {
             setPage(1);
             setFilters({ status: '', providerId: '', dateFrom: '', dateTo: '' });
             setSearch('');
           }}
+          className="btn btn-outline-primary inline-flex h-8 max-h-[32px] shrink-0 items-center px-3 py-0 text-xs"
         >
           Clear Filters
-        </AppButton>
+        </button>
       </div>
 
       <div className="table-responsive">

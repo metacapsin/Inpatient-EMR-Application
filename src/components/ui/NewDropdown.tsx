@@ -6,9 +6,14 @@ interface DropdownOption {
   label: string;
 }
 
+type NewDropdownVariant = "default" | "outlined";
+
 interface NewDropdownProps {
   id?: string;
+  /** When `variant` is `outlined`, shown as a notched label on the field border (Reg. Date style). */
   label?: string;
+  /** `outlined`: white field, border, notched label, 32px height (patient list filters). */
+  variant?: NewDropdownVariant;
   options: DropdownOption[];
   value: string | number;
   placeholder?: string;
@@ -21,6 +26,8 @@ interface NewDropdownProps {
 
 export default function NewDropdown({
   id,
+  label,
+  variant = "default",
   options,
   value,
   placeholder = "Select option",
@@ -30,6 +37,7 @@ export default function NewDropdown({
 }: NewDropdownProps) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const isOutlined = variant === "outlined";
 
   const selectedOption = options.find((opt) => opt.value === value);
 
@@ -48,47 +56,74 @@ export default function NewDropdown({
     if (disabled) setOpen(false);
   }, [disabled]);
 
-  return (
-    <div id={id} className={`w-full relative ${className}`.trim()} ref={dropdownRef}>
-      {/* Selected Box */}
+  const triggerBase = disabled
+    ? "cursor-not-allowed opacity-50 pointer-events-none"
+    : "cursor-pointer";
 
-      <div
-        className={`
-  h-9
+  const triggerDefault = `
+  h-9 max-h-9
   border border-gray-300 rounded-md dark:border-gray-600
   px-2
   bg-[#F6F6FA] dark:bg-gray-900
-  flex justify-between items-center
+  ${!disabled ? "hover:border-[#8B5E3C] dark:hover:border-amber-700" : ""}
+`;
+
+  const triggerOutlined = `
+  h-8 max-h-[32px]
+  rounded-lg border border-primary-200 bg-white shadow-sm
+  dark:border-primary-700 dark:bg-[#141210]
+  px-2
+  ${!disabled ? "hover:border-primary-300 dark:hover:border-primary-600" : ""}
+`;
+
+  const triggerClass = `
+  w-full flex justify-between items-center gap-1 min-w-0
   text-[#8B5E3C] dark:text-amber-100/90
   transition-all duration-200
-  ${disabled ? "cursor-not-allowed opacity-50 pointer-events-none" : "cursor-pointer hover:border-[#8B5E3C] dark:hover:border-amber-700"}
-`}
+  ${triggerBase}
+  ${isOutlined ? triggerOutlined : triggerDefault}
+`.trim();
+
+  const valueTextClass = !selectedOption
+    ? isOutlined
+      ? "text-slate-400 dark:text-gray-500"
+      : "text-gray-400 dark:text-gray-500"
+    : isOutlined
+      ? "text-slate-700 dark:text-gray-200"
+      : "text-[#8B5E3C] dark:text-amber-100/90";
+
+  const chevronClass = `shrink-0 text-[#8B5E3C] transition-transform duration-200 dark:text-amber-200/80 ${
+    open ? "rotate-180" : ""
+  } ${isOutlined ? "h-3.5 w-3.5" : "h-4 w-4"}`;
+
+  const valueTypography = isOutlined ? "truncate text-left text-xs leading-tight" : "";
+
+  const inner = (
+    <>
+      <button
+        type="button"
+        id={id}
+        className={triggerClass}
         onClick={() => !disabled && setOpen(!open)}
         aria-disabled={disabled}
+        aria-expanded={open}
+        aria-haspopup="listbox"
       >
-        <span
-          className={
-            !selectedOption ? "text-gray-400 dark:text-gray-500" : "text-[#8B5E3C] dark:text-amber-100/90"
-          }
-        >
+        <span className={`min-w-0 flex-1 ${valueTextClass} ${valueTypography}`}>
           {selectedOption ? selectedOption.label : placeholder}
         </span>
 
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 text-[#8B5E3C] transition-transform duration-200 dark:text-amber-200/80 ${
-            open ? "rotate-180" : ""
-          }`}
-        />
-      </div>
+        <ChevronDown className={chevronClass} aria-hidden />
+      </button>
 
       {/* Dropdown menu */}
       {open && !disabled && (
         <div
-          className="
-            absolute top-full left-0 right-0 z-30 mt-2 max-h-60
-            overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg
+          className={`
+            absolute left-0 right-0 z-30 max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg
             dark:border-gray-700 dark:bg-gray-950
-          "
+            ${isOutlined ? "top-full mt-1" : "top-full mt-2"}
+          `}
         >
           {options.map((opt) => (
             <div
@@ -111,6 +146,23 @@ export default function NewDropdown({
           ))}
         </div>
       )}
+    </>
+  );
+
+  if (isOutlined && label) {
+    return (
+      <div className={`relative w-full ${className}`.trim()} ref={dropdownRef}>
+        {inner}
+        <span className="pointer-events-none absolute left-3 top-0 z-10 -translate-y-1/2 bg-white px-1 text-xs font-bold text-dark dark:bg-[#141210] dark:text-gray-200">
+          {label}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`relative w-full ${className}`.trim()} ref={dropdownRef}>
+      {inner}
     </div>
   );
 }
