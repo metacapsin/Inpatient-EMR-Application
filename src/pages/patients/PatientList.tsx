@@ -96,7 +96,12 @@ function readListQuery(sp: URLSearchParams): ListQueryState {
         recent: sp.get('recent') || 'all',
         startDate: sp.get('startDate') || sp.get('fromDate') || '',
         endDate: sp.get('endDate') || sp.get('toDate') || '',
-        sortBy: parsePatientListSortField(sp.get('sortBy')) ?? 'patient',
+        sortBy: (() => {
+            const parsed = parsePatientListSortField(sp.get('sortBy'));
+            // `patient` previously mapped to API `fullName`; both now sort by `createdOn` — align URL state with the Created Date column.
+            if (parsed === 'patient') return 'createdDate';
+            return parsed ?? 'createdDate';
+        })(),
         sortOrder: sp.get('sortOrder') === 'desc' ? 'desc' : 'asc',
         search: sp.get('search') || '',
     };

@@ -93,7 +93,7 @@ const PatientTable = ({
 
     const headerRow = (
         <tr>
-            <SortableHeader {...headerProps('patient')}>Patient</SortableHeader>
+            <SortableHeader isSortable={false}>Patient</SortableHeader>
             <SortableHeader {...headerProps('dob')}>DOB / Age</SortableHeader>
             <SortableHeader {...headerProps('gender')}>Gender</SortableHeader>
             <SortableHeader {...headerProps('status')}>Status</SortableHeader>

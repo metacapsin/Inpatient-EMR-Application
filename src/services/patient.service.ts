@@ -470,7 +470,7 @@ export function parsePatientListSortField(value: string | null | undefined): Pat
 /** Maps UI sort keys to API `sortField` names (Patient record fields). */
 function patientListSortFieldToApi(field: PatientListSortField | undefined): string {
     const map: Record<PatientListSortField, string> = {
-        patient: 'fullName',
+        patient: 'createdOn',
         mrn: 'mrn',
         dob: 'dOB',
         gender: 'sex',
@@ -481,7 +481,7 @@ function patientListSortFieldToApi(field: PatientListSortField | undefined): str
         bed: 'bed',
         status: 'status',
     };
-    return map[field ?? 'patient'] ?? 'fullName';
+    return map[field ?? 'patient'] ?? 'createdOn';
 }
 
 function compactQueryParams(record: Record<string, unknown>): Record<string, string | number | boolean> {
