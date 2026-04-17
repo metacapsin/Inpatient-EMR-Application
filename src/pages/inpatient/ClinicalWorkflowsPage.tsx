@@ -40,7 +40,7 @@ import AppButton from '@/components/ui/AppButton';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
-type TabId = 'physician' | 'nursing' | 'vitals' | 'orders' | 'alerts';
+type TabId = 'physician' | 'nursing' | 'vitals' | 'orders' | 'Result' |'Medication'| "Alert";
 
 const selectClass =
     'h-10 w-full max-w-md rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100';
@@ -118,13 +118,16 @@ function ClinicalWorkflowsPage() {
     const [vitals, setVitals] = useState<InpatientVitalRow[]>([]);
     const [chartVitalType, setChartVitalType] = useState<string>('HR');
 
-    const [orderTab, setOrderTab] = useState<'medication' | 'lab' | 'imaging'>('medication');
+    const [orderTab, setOrderTab] = useState<' Ordes' | 'lab' | 'imaging'| 'pro'>('medication');
     const [orderPriority, setOrderPriority] = useState<'routine' | 'urgent' | 'stat'>('routine');
     const [orderJson, setOrderJson] = useState('');
     const [orders, setOrders] = useState<CpoeOrderRow[]>([]);
 
-    const [alerts, setAlerts] = useState<ClinicalAlertRow[]>([]);
 
+    const [alerts, setAlerts] = useState<ClinicalAlertRow[]>([]);
+    const [Result, setResult] = useState<ClinicalAlertRow[]>([]);
+
+    
     const [patients, setPatients] = useState<PatientListItem[]>([]);
     const [patientsLoading, setPatientsLoading] = useState(false);
     const [encounters, setEncounters] = useState<ActiveEncounterRow[]>([]);
@@ -221,7 +224,10 @@ function ClinicalWorkflowsPage() {
                     refreshNursing(),
                     refreshVitals(),
                     refreshOrders(),
+                    refreshResult(),
+                    refreshMedication(),
                     refreshAlerts(),
+                    // refreshProcedures(),
                 ]);
             } catch (e) {
                 console.error(e);
@@ -488,28 +494,7 @@ function ClinicalWorkflowsPage() {
                     </div>
                     <div>
                         <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Encounter</label>
-                        {/* <select
-                            className={selectClass}
-                            value={encounterId}
-                            disabled={!patientId || encountersLoading}
-                            onChange={(e) => setEncounterSelection(e.target.value)}
-                        >
-                            <option value="">
-                                {!patientId
-                                    ? 'Select a patient first…'
-                                    : encountersLoading
-                                      ? 'Loading encounters…'
-                                      : 'Select active encounter…'}
-                            </option>
-                            {encounterId && !encounterInList && patientId ? (
-                                <option value={encounterId}>Current selection · …{encounterId.slice(-8)}</option>
-                            ) : null}
-                            {encounters.map((enc) => (
-                                <option key={enc.id} value={enc.id}>
-                                    {formatEncounterLabel(enc)}
-                                </option>
-                            ))}
-                        </select> */}
+                     
                         <div className="w-full">
                             <SearchableSelect
                                 allowEmpty
@@ -586,7 +571,7 @@ function ClinicalWorkflowsPage() {
                 {loading && <p className="mt-2 text-sm text-gray-500">Loading clinical data…</p>}
 
                 <div className="mt-4 flex flex-wrap gap-2 border-b border-gray-200 pb-2 dark:border-gray-700">
-                    {(['physician', 'nursing', 'vitals', 'orders', 'alerts'] as TabId[]).map((t) => (
+                    {(['physician', 'nursing', 'vitals', 'orders','Result','Medication', 'alerts',] as TabId[]).map((t) => (
                         <button
                             key={t}
                             type="button"
@@ -603,18 +588,7 @@ function ClinicalWorkflowsPage() {
                 {tab === 'physician' && (
                     <div className="mt-4 space-y-4">
                         <div className="flex flex-wrap gap-2">
-                            <label className="text-sm font-medium">Template</label>
-                            {/* <select
-                                className="rounded border border-gray-300 bg-white px-2 py-1 dark:border-gray-600 dark:bg-gray-900"
-                                value={noteType}
-                                onChange={(e) => setNoteType(e.target.value)}
-                            >
-                                {NOTE_TEMPLATES.map((n) => (
-                                    <option key={n.value} value={n.value}>
-                                        {n.label}
-                                    </option>
-                                ))}
-                            </select> */}
+                       
                              <div className="w-36 mt-1 ">
                             <NewDropdown
                             options={NOTE_TEMPLATES.map((n) => ({
@@ -696,15 +670,7 @@ function ClinicalWorkflowsPage() {
                         <div className="grid gap-6 md:grid-cols-2">
                             <div>
                                 <h3 className="font-medium">Nursing note</h3>
-                                {/* <select
-                                    className="mt-2 rounded border px-2 py-1 dark:border-gray-600 dark:bg-gray-900"
-                                    value={nursingShift}
-                                    onChange={(e) => setNursingShift(e.target.value as typeof nursingShift)}
-                                >
-                                    <option value="morning">Morning</option>
-                                    <option value="evening">Evening</option>
-                                    <option value="night">Night</option>
-                                </select> */}
+                             
                                 <div className="w-32 mt-2">
                                 <NewDropdown
                                     options={[
@@ -826,17 +792,7 @@ function ClinicalWorkflowsPage() {
                         <div>
                             <div className="mb-2 flex items-center gap-2">
                                 <span className="text-sm">Chart</span>
-                                {/* <select
-                                    className="rounded border px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900"
-                                    value={chartVitalType}
-                                    onChange={(e) => setChartVitalType(e.target.value)}
-                                >
-                                    {['HR', 'BP', 'Temp', 'SpO2', 'RR'].map((t) => (
-                                        <option key={t} value={t}>
-                                            {t}
-                                        </option>
-                                    ))}
-                                </select> */}
+                             
                                  <div className="w-28">
                                 <NewDropdown
   options={['HR', 'BP', 'Temp', 'SpO2', 'RR'].map((t) => ({
@@ -864,7 +820,7 @@ function ClinicalWorkflowsPage() {
                 {tab === 'orders' && (
                     <div className="mt-4">
                         <div className="mb-4 flex flex-wrap gap-2">
-                            {(['medication', 'lab', 'imaging'] as const).map((t) => (
+                            {(['medication Orders', 'lab', 'imaging' , 'Procredures','History'] as const).map((t) => (
                                 <button
                                     key={t}
                                     type="button"
@@ -878,15 +834,6 @@ function ClinicalWorkflowsPage() {
                         {showOrders ? (
                             <>
                                 <label className="text-xs text-gray-500">Priority</label>
-                                {/* <select
-                                    className="mb-2 ml-2 rounded border px-2 py-1 dark:border-gray-600 dark:bg-gray-900"
-                                    value={orderPriority}
-                                    onChange={(e) => setOrderPriority(e.target.value as typeof orderPriority)}
-                                >
-                                    <option value="routine">routine</option>
-                                    <option value="urgent">urgent</option>
-                                    <option value="stat">stat</option>
-                                </select> */}
                                 <div className="w-28">
                                 <NewDropdown
                                         options={[
@@ -946,7 +893,50 @@ function ClinicalWorkflowsPage() {
                     </div>
                 )}
 
-                {tab === 'alerts' && (
+                {tab === 'Result' && (
+    <div className="mt-4 space-y-4">
+        <div className="flex gap-2">
+       {(['Lab Result', 'Imaging Report',] as const).map((t) => (
+                                <button
+                                    key={t}
+                                    type="button"
+                                    className={`rounded px-3 py-1 text-sm capitalize ${orderTab === t ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'}`}
+                                    onClick={() => setOrderTab(t)}
+                                >
+                                    {t}
+                                </button>
+                            ))}
+                             </div>
+        <Textarea
+            rows={4}
+            placeholder="Enter result details..."
+            className="w-full"
+        />
+
+        <AppButton type="button">
+            Save Result
+        </AppButton>
+    </div>
+)}
+
+                {tab === 'Medication' && (
+    <div className="mt-4 space-y-4">
+        <h3 className="font-medium">Medication</h3>
+
+        <Textarea
+            rows={4}
+            placeholder="Enter Medication details..."
+            className="w-full"
+        />
+
+        <AppButton type="button">
+            Save Medication
+        </AppButton>
+    </div>
+)}
+
+
+                  {tab === 'alerts' && (
                     <ul className="mt-4 space-y-2">
                         {alerts.map((a) => (
                             <li
