@@ -469,7 +469,8 @@ export default function BookAppointment() {
       const focusAppointmentId = pickAppointmentIdFromSaveResponse(res, isEditMode ? appointmentId : '');
       navigate('/app/appointments', {
         replace: true,
-        state: { refreshAppointments: true, ...(focusAppointmentId ? { focusAppointmentId } : {}) },
+        state: { refreshAppointments: true ,
+            ...(focusAppointmentId ? { focusAppointmentId } : {}) },
       });
     } catch (error: any) {
       const message = error?.response?.data?.message || 'Failed to save appointment.';
@@ -521,7 +522,7 @@ export default function BookAppointment() {
                   value: p.id,
                   label: p.label,
                 })),
-              ]}
+              ]}    
               value={form.patientId}
               placeholder="Select Patient"
               onChange={(value) => {

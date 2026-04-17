@@ -102,7 +102,8 @@ function readListQuery(sp: URLSearchParams): ListQueryState {
             if (parsed === 'patient') return 'createdDate';
             return parsed ?? 'createdDate';
         })(),
-        sortOrder: sp.get('sortOrder') === 'desc' ? 'desc' : 'asc',
+        // sortOrder: sp.get('sortOrder') === 'desc' ? 'desc' : 'asc',
+        sortOrder: sp.get('sortOrder') || 'desc',
         search: sp.get('search') || '',
     };
 }
