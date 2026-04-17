@@ -279,12 +279,9 @@ const AppointmentList: React.FC = () => {
       if (query) {
         payload.query = query;
         payload.serviceIds = [];
-        payload.sortField = 'createOn';
-        payload.sortOrder = 'desc';
-      } else {
-        payload.sortField = 'startDate';
-        payload.sortOrder = 'asc';
       }
+      payload.sortField = 'createOn';
+      payload.sortOrder = 'desc';
 
       const res = await appointmentAPI.getAppointmentListPaginated(payload);
       const normalized = normalizeAppointmentListResponse(res);

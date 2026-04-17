@@ -473,8 +473,8 @@ export const appointmentAPI = {
 
     payload.page = Number(payload.page ?? 1) || 1;
     payload.limit = Number(payload.limit ?? 10) || 10;
-    payload.sortField = String(payload.sortField ?? payload.sortBy ?? 'startDate');
-    payload.sortOrder = String(payload.sortOrder ?? 'asc').toLowerCase() === 'desc' ? 'desc' : 'asc';
+    payload.sortField = String(payload.sortField ?? payload.sortBy ?? 'createOn');
+    payload.sortOrder = String(payload.sortOrder ?? 'desc').toLowerCase() === 'desc' ? 'desc' : 'asc';
 
     const hasSearchQuery = typeof payload.query === 'string' && payload.query.trim().length > 0;
 
