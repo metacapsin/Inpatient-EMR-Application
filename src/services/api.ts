@@ -591,6 +591,16 @@ export const appointmentAPI = {
     api.put(`/appointments/${id}/status`, { status, ...data }),
 };
 
+// Practice Information API
+export const practiceAPI = {
+  getList: () =>
+    api.get('/PracticeInformation/getPracticeInformationList'),
+  getById: (id: string) =>
+    api.get(`/PracticeInformation/getPracticeInformationById/${id}`),
+  update: (id: string, data: Record<string, any>) =>
+    api.post(`/PracticeInformation/updatePracticeInformationById/${id}`, data),
+};
+
 // Common API
 export const commonAPI = {
   getStates: (countryCode: string) =>
