@@ -30,6 +30,7 @@ export const FaExclamationTriangle = asIcon(Real.FaExclamationTriangle);
 export const FaEye = asIcon(Real.FaEye);
 export const FaEyeSlash = asIcon(Real.FaEyeSlash);
 export const FaFileMedical = asIcon(Real.FaFileMedical);
+export const FaFilter = asIcon(Real.FaFilter);
 export const FaFlask = asIcon(Real.FaFlask);
 export const FaHeartbeat = asIcon(Real.FaHeartbeat);
 export const FaHistory = asIcon(Real.FaHistory);

@@ -799,6 +799,184 @@ pre.hljs {
         font-size: 1.25rem;
     }
 }
+
+/* ── List view (Week / Day) ───────────────────────────────────────────────── */
+.appointment-calendar-responsive .fc-list {
+    border: none;
+    border-radius: 0.75rem;
+    overflow: hidden;
+}
+/* Day header row */
+.appointment-calendar-responsive .fc-list-day th {
+    padding: 0.35rem 0.75rem;
+    background: #f3f4f6;
+    border-bottom: 1px solid #e5e7eb;
+}
+.dark .appointment-calendar-responsive .fc-list-day th {
+    background: #1e2a3b;
+    border-bottom-color: rgba(255,255,255,0.07);
+}
+.appointment-calendar-responsive .fc-list-day-cushion {
+    padding: 0.35rem 0 !important;
+    background: transparent !important;
+}
+.appointment-calendar-responsive .fc-list-day-text,
+.appointment-calendar-responsive .fc-list-day-side-text {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #374151;
+}
+.dark .appointment-calendar-responsive .fc-list-day-text,
+.dark .appointment-calendar-responsive .fc-list-day-side-text {
+    color: #e5e7eb;
+}
+/* Event row */
+.appointment-calendar-responsive .fc-list-event {
+    cursor: pointer;
+    border-bottom: 1px solid #f3f4f6;
+}
+.appointment-calendar-responsive .fc-list-event:hover td {
+    background: #f9fafb !important;
+}
+.dark .appointment-calendar-responsive .fc-list-event:hover td {
+    background: rgba(255,255,255,0.03) !important;
+}
+.dark .appointment-calendar-responsive .fc-list-event td {
+    border-color: rgba(255,255,255,0.05);
+}
+/* Time column */
+.appointment-calendar-responsive .fc-list-event-time {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #6b7280;
+    white-space: nowrap;
+    padding: 0.6rem 0.75rem;
+    width: 110px;
+    min-width: 90px;
+    vertical-align: top;
+}
+.dark .appointment-calendar-responsive .fc-list-event-time {
+    color: #9ca3af;
+}
+/* Dot column */
+.appointment-calendar-responsive .fc-list-event-graphic {
+    padding: 0.7rem 0.25rem 0.7rem 0;
+    vertical-align: top;
+}
+.appointment-calendar-responsive .fc-list-event-dot {
+    margin-top: 3px;
+}
+/* Title / content column */
+.appointment-calendar-responsive .fc-list-event-title {
+    padding: 0.5rem 0.75rem 0.5rem 0.25rem;
+    vertical-align: top;
+}
+/* No-events message */
+.appointment-calendar-responsive .fc-list-empty {
+    background: transparent;
+    padding: 2rem;
+    font-size: 0.85rem;
+    color: #9ca3af;
+}
+
+/* ── Mobile toolbar: stack into two rows (pill style) ────────────────────── */
+@media (max-width: 639px) {
+    /* Stack the three toolbar chunks vertically, centered */
+    .appointment-calendar-responsive .fc .fc-toolbar {
+        flex-direction: column !important;
+        align-items: center !important;
+        gap: 0.625rem !important;
+    }
+    .appointment-calendar-responsive .fc .fc-toolbar-chunk {
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+    }
+
+    /* Hide center title — already shown above */
+    .appointment-calendar-responsive .fc .fc-toolbar > .fc-toolbar-chunk:nth-child(2) {
+        display: none !important;
+    }
+
+    /* ── Row 1: < Today > ── */
+    .appointment-calendar-responsive .fc .fc-toolbar > .fc-toolbar-chunk:first-child {
+        gap: 0.5rem !important;
+    }
+    /* Circular prev / next */
+    .appointment-calendar-responsive .fc .fc-prev-button,
+    .appointment-calendar-responsive .fc .fc-next-button {
+        width: 2.25rem !important;
+        height: 2.25rem !important;
+        padding: 0 !important;
+        border-radius: 50% !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background: transparent !important;
+        border: 1.5px solid #d1d5db !important;
+        color: #374151 !important;
+        box-shadow: none !important;
+    }
+    .dark .appointment-calendar-responsive .fc .fc-prev-button,
+    .dark .appointment-calendar-responsive .fc .fc-next-button {
+        border-color: rgba(255,255,255,0.15) !important;
+        color: #e5e7eb !important;
+    }
+    .appointment-calendar-responsive .fc .fc-prev-button:hover,
+    .appointment-calendar-responsive .fc .fc-next-button:hover {
+        background: #f3f4f6 !important;
+    }
+    /* Wide pill Today button */
+    .appointment-calendar-responsive .fc .fc-today-button {
+        padding: 0.375rem 1.25rem !important;
+        border-radius: 9999px !important;
+        background: transparent !important;
+        border: 1.5px solid #d1d5db !important;
+        color: #374151 !important;
+        font-size: 0.875rem !important;
+        font-weight: 600 !important;
+        opacity: 1 !important;
+        box-shadow: none !important;
+        line-height: 1.5 !important;
+    }
+    .dark .appointment-calendar-responsive .fc .fc-today-button {
+        border-color: rgba(255,255,255,0.15) !important;
+        color: #e5e7eb !important;
+    }
+    .appointment-calendar-responsive .fc .fc-today-button:hover {
+        background: #f3f4f6 !important;
+    }
+
+    /* ── Row 2: Month | Week | Day ── */
+    .appointment-calendar-responsive .fc .fc-toolbar > .fc-toolbar-chunk:last-child .fc-button-group {
+        display: flex !important;
+        gap: 0.375rem !important;
+        background: transparent !important;
+        box-shadow: none !important;
+    }
+    .appointment-calendar-responsive .fc .fc-toolbar > .fc-toolbar-chunk:last-child .fc-button-group .fc-button {
+        flex: 1 !important;
+        border-radius: 9999px !important;
+        padding: 0.375rem 0.75rem !important;
+        font-size: 0.875rem !important;
+        font-weight: 600 !important;
+        background: transparent !important;
+        border: 1.5px solid #d1d5db !important;
+        color: #374151 !important;
+        box-shadow: none !important;
+        transition: all 0.15s !important;
+    }
+    .dark .appointment-calendar-responsive .fc .fc-toolbar > .fc-toolbar-chunk:last-child .fc-button-group .fc-button {
+        border-color: rgba(255,255,255,0.15) !important;
+        color: #e5e7eb !important;
+    }
+    /* Active view button — dark filled */
+    .appointment-calendar-responsive .fc .fc-toolbar > .fc-toolbar-chunk:last-child .fc-button-group .fc-button.fc-button-active {
+        background: #1e3a5f !important;
+        border-color: #1e3a5f !important;
+        color: #ffffff !important;
+    }
+}
 /* Custom Scrollbar */
 
 ::-webkit-scrollbar {

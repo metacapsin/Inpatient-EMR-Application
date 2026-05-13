@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { Calendar, ChevronLeft, ChevronRight, Pencil, Search } from 'lucide-react';
+import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Pencil, Search } from 'lucide-react';
 import { appointmentAPI } from '../../services/api';
 import NewDropdown from '@/components/ui/NewDropdown';
 import { ActionIconTooltip } from '@/components/ui/ActionIconTooltip';
@@ -363,6 +363,14 @@ const AppointmentList: React.FC = () => {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+            <button
+              type="button"
+              onClick={() => navigate('/app/appointments/calendar')}
+              className="inline-flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-200/80 bg-white px-3 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04] sm:w-auto"
+            >
+              <CalendarDays className="h-3.5 w-3.5" aria-hidden />
+              Calendar View
+            </button>
             <button
               type="button"
               onClick={() => navigate('/app/appointments/add')}

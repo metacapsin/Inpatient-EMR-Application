@@ -450,6 +450,15 @@ export const appointmentAPI = {
   getGeneralCalendarSetting: () =>
     api.get("/CalendarSetting/getGeneralCalendarSetting"),
 
+  getProviderServiceLocations: (providerId: string) =>
+    api.get(`/CalendarSetting/getProviderServiceLocations/${encodeURIComponent(providerId)}`),
+
+  getProviderList: () =>
+    api.get("/ProviderProfile/getProviderList"),
+
+  getServiceLocationList: () =>
+    api.get("/ServiceLocation/getServiceLocationList"),
+
   getVisitTypesList: () =>
     api.get("/VisitType/getVisitTypeList"),
 

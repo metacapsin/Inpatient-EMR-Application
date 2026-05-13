@@ -1,14 +1,16 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import FullCalendar from '@fullcalendar/react';
-import type { EventClickArg } from '@fullcalendar/core';
+import type { EventClickArg, DatesSetArg } from '@fullcalendar/core';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
+import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
 import { appointmentAPI } from '../../services/api';
 import { format, parseISO, isValid } from 'date-fns';
 import {
   FaCalendar,
+  FaFilter,
   FaList,
   FaPlus,
   FaUser,
@@ -17,8 +19,7 @@ import {
   FaDollarSign,
   FaHistory,
   FaChevronDown,
-  FaChevronLeft,
-  FaChevronRight,
+  FaTimes,
 } from 'react-icons/fa';
 import IconSearch from '../../components/Icon/IconSearch';
 import IconX from '../../components/Icon/IconX';
@@ -28,7 +29,9 @@ export interface CalendarAppointment {
   patientName: string;
   patientId: string;
   providerName: string;
+  providerId?: string;
   serviceLocationName: string;
+  serviceLocationId?: string;
   roomNumber?: string;
   startDate: string;
   startTime?: string;
@@ -45,6 +48,25 @@ export interface CalendarAppointment {
   otherReason?: string;
 }
 
+interface ProviderOption {
+  _id: string;
+  id?: string;
+  firstName?: string;
+  lastName?: string;
+  prefix?: string;
+  suffix?: string;
+  name?: string;
+  fullName?: string;
+}
+
+interface LocationOption {
+  _id: string;
+  id?: string;
+  name?: string;
+  locationName?: string;
+  serviceLocationName?: string;
+}
+
 interface AppointmentCalendarProps {
   onListView: () => void;
   onAddAppointment: () => void;
@@ -52,32 +74,80 @@ interface AppointmentCalendarProps {
 
 const VISIBLE_IN_DAY_CELL = 1;
 
+// Palette for visit-type colour dots in the legend
+const LEGEND_COLORS = [
+  '#4361ee',
+  '#e7515a',
+  '#3b82f6',
+  '#f59e0b',
+  '#10b981',
+  '#8b5cf6',
+  '#ec4899',
+  '#14b8a6',
+];
+
+function getProviderDisplayName(p: ProviderOption): string {
+  if (p.fullName) return p.fullName;
+  if (p.name) return p.name;
+  return [p.prefix, p.firstName, p.lastName, p.suffix].filter(Boolean).join(' ').trim() || 'Unknown';
+}
+
+function getLocationDisplayName(l: LocationOption): string {
+  return l.locationName || l.serviceLocationName || l.name || 'Unknown';
+}
+
+function extractArray(res: any, keys: string[]): any[] {
+  const root = res?.data ?? res ?? {};
+  const data = root?.data ?? root?.result ?? root?.results ?? root;
+  for (const k of keys) {
+    if (Array.isArray(data?.[k])) return data[k];
+  }
+  if (Array.isArray(data)) return data;
+  return [];
+}
+
 const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({
   onListView,
   onAddAppointment,
 }) => {
   const navigate = useNavigate();
   const [appointments, setAppointments] = useState<CalendarAppointment[]>([]);
+  const [providers, setProviders] = useState<ProviderOption[]>([]);
+  const [serviceLocations, setServiceLocations] = useState<LocationOption[]>([]);
+  const [visibleLocations, setVisibleLocations] = useState<LocationOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [calendarView, setCalendarView] = useState<'dayGridMonth' | 'timeGridWeek' | 'timeGridDay'>('dayGridMonth');
   const [filtersCollapsed, setFiltersCollapsed] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Mobile / tablet: drawer overlay for filters
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   // Filters
   const [providerSearch, setProviderSearch] = useState('');
   const [locationSearch, setLocationSearch] = useState('');
-  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
-  const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
+  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
 
-  // Small modal for "+X more" (list of appointments for that day)
+  // Current calendar date range for fetching
+  const [dateRange, setDateRange] = useState<{ fromDate: string; toDate: string }>(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const from = new Date(y, m, 1);
+    const to = new Date(y, m + 1, 0);
+    const fmt = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return { fromDate: fmt(from), toDate: fmt(to) };
+  });
+
+  // Modals
   const [moreModalDate, setMoreModalDate] = useState<Date | null>(null);
-
-  // Appointment details modal
   const [detailsAppointment, setDetailsAppointment] = useState<CalendarAppointment | null>(null);
 
   const calendarRef = useRef<FullCalendar>(null);
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
 
   const parseAppointmentDateTime = (appt: CalendarAppointment): { start: Date; end: Date } => {
     let start: Date;
@@ -89,8 +159,7 @@ const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({
     } else {
       try {
         const d = typeof dateStr === 'string' && dateStr.includes('T') ? parseISO(dateStr) : new Date(dateStr);
-        if (!isValid(d)) start = new Date();
-        else start = new Date(d);
+        start = isValid(d) ? new Date(d) : new Date();
       } catch {
         start = new Date(dateStr);
       }
@@ -100,11 +169,11 @@ const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({
       const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
       if (match) {
         let h = parseInt(match[1], 10);
-        const m = parseInt(match[2], 10);
+        const m2 = parseInt(match[2], 10);
         const ampm = (match[3] || '').toUpperCase();
         if (ampm === 'PM' && h < 12) h += 12;
         if (ampm === 'AM' && h === 12) h = 0;
-        start.setHours(h, m, 0, 0);
+        start.setHours(h, m2, 0, 0);
       }
     }
 
@@ -113,106 +182,205 @@ const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({
     return { start, end };
   };
 
-  useEffect(() => {
-    fetchAppointments();
+  // ── Data fetching ──────────────────────────────────────────────────────────
+
+  const fetchStaticData = useCallback(async () => {
+    try {
+      const [provRes, locRes] = await Promise.allSettled([
+        appointmentAPI.getProviderList(),
+        appointmentAPI.getServiceLocationList(),
+      ]);
+
+      if (provRes.status === 'fulfilled') {
+        const list = extractArray(provRes.value, ['providers', 'providerList', 'data', 'list', 'results']);
+        setProviders(list.filter((p: any) => p?._id || p?.id));
+      }
+      if (locRes.status === 'fulfilled') {
+        const list = extractArray(locRes.value, ['serviceLocations', 'locationList', 'locations', 'data', 'list', 'results']);
+        setServiceLocations(list.filter((l: any) => l?._id || l?.id));
+        setVisibleLocations(list.filter((l: any) => l?._id || l?.id));
+      }
+    } catch {
+      // non-fatal; calendar still loads
+    }
   }, []);
 
-  const fetchAppointments = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const userDetails = localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user') || '{}') : {};
-      const response = await appointmentAPI.getAppointments(userDetails.patientId || userDetails.rcopiaID);
-      if (response.data?.data) {
-        setAppointments(response.data.data);
-      } else {
+  // Stable fetch — all variable inputs passed as explicit params so useCallback deps stay []
+  const fetchAppointments = useCallback(
+    async (
+      range: { fromDate: string; toDate: string },
+      provId: string | null,
+      locId: string | null
+    ) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const payload: Record<string, any> = {
+          fromDate: range.fromDate,
+          toDate: range.toDate,
+          page: 1,
+          limit: 500,
+          sortField: 'startDate',
+          sortOrder: 'asc',
+        };
+        if (provId) payload.providerIds = [provId];
+        if (locId) payload.serviceIds = [locId];
+
+        const res = await appointmentAPI.getAppointmentListPaginated(payload);
+        const root = res?.data ?? res ?? {};
+        const data = root?.data ?? root?.result ?? root?.results ?? root;
+        const items: any[] =
+          (Array.isArray(data) && data) ||
+          data?.items ||
+          data?.rows ||
+          data?.appointments ||
+          data?.list ||
+          data?.appointmentList ||
+          data?.appointmentDetails ||
+          data?.pagination?.items ||
+          [];
+
+        const mapped: CalendarAppointment[] = items.map((r: any) => ({
+          _id: String(r?._id ?? r?.id ?? Math.random()),
+          patientName: r?.patientName ?? r?.patient?.fullName ?? '',
+          patientId: r?.patientId ?? '',
+          providerName: r?.providerName ?? '',
+          providerId: r?.providerId ?? '',
+          serviceLocationName: r?.serviceLocationName ?? '',
+          serviceLocationId: r?.serviceLocationId ?? '',
+          roomNumber: r?.roomNumber,
+          startDate: r?.startDate ?? '',
+          startTime: r?.startTime,
+          endDate: r?.endDate,
+          endTime: r?.endTime,
+          duration: r?.duration,
+          visitReasonName: r?.visitReasonName ?? r?.visitReasonmsg ?? '',
+          visitReasonmsg: r?.visitReasonmsg,
+          appointmentStatus: r?.appointmentStatus ?? '',
+          emailTo: r?.emailTo,
+          phoneNo: r?.phoneNo,
+          dob: r?.dob,
+          sex: r?.sex,
+          otherReason: r?.otherReason,
+        }));
+
+        setAppointments(mapped);
+      } catch (err: any) {
+        setError(err?.response?.data?.message || 'Failed to load appointments');
         setAppointments([]);
+      } finally {
+        setLoading(false);
       }
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'Failed to load appointments');
-      setAppointments([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [] // stable — params are passed at call-site
+  );
 
-  const filteredAppointments = useMemo(() => {
-    let list = [...appointments];
-    if (selectedProvider) {
-      list = list.filter((a) => a.providerName === selectedProvider);
-    }
-    if (selectedLocation) {
-      list = list.filter((a) => a.serviceLocationName === selectedLocation);
-    }
-    return list;
-  }, [appointments, selectedProvider, selectedLocation]);
+  // When a provider is selected, also fetch provider-specific locations
+  const handleProviderSelect = useCallback(
+    async (providerId: string | null) => {
+      setSelectedProviderId(providerId);
+      setSelectedLocationId(null);
+      if (providerId) {
+        try {
+          const res = await appointmentAPI.getProviderServiceLocations(providerId);
+          const list = extractArray(res, ['serviceLocations', 'locationList', 'locations', 'data', 'list', 'results']);
+          if (list.length > 0) {
+            setVisibleLocations(list.filter((l: any) => l?._id || l?.id));
+            return;
+          }
+        } catch {
+          // fall through to show all locations
+        }
+      }
+      setVisibleLocations(serviceLocations);
+    },
+    [serviceLocations]
+  );
 
-  const providers = useMemo(() => {
-    const set = new Set(appointments.map((a) => a.providerName).filter(Boolean));
-    return Array.from(set).sort();
-  }, [appointments]);
+  // ── Effects ────────────────────────────────────────────────────────────────
 
-  const locations = useMemo(() => {
-    const set = new Set(appointments.map((a) => a.serviceLocationName).filter(Boolean));
-    return Array.from(set).sort();
-  }, [appointments]);
+  useEffect(() => {
+    fetchStaticData();
+  }, [fetchStaticData]);
+
+  useEffect(() => {
+    fetchAppointments(dateRange, selectedProviderId, selectedLocationId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange.fromDate, dateRange.toDate, selectedProviderId, selectedLocationId]);
+
+  // ── Derived state ──────────────────────────────────────────────────────────
 
   const filteredProviders = useMemo(() => {
-    if (!providerSearch.trim()) return providers;
-    const q = providerSearch.toLowerCase();
-    return providers.filter((p) => p.toLowerCase().includes(q));
+    const q = providerSearch.trim().toLowerCase();
+    return providers.filter((p) => !q || getProviderDisplayName(p).toLowerCase().includes(q));
   }, [providers, providerSearch]);
 
   const filteredLocations = useMemo(() => {
-    if (!locationSearch.trim()) return locations;
-    const q = locationSearch.toLowerCase();
-    return locations.filter((l) => l.toLowerCase().includes(q));
-  }, [locations, locationSearch]);
+    const q = locationSearch.trim().toLowerCase();
+    return visibleLocations.filter((l) => !q || getLocationDisplayName(l).toLowerCase().includes(q));
+  }, [visibleLocations, locationSearch]);
 
-  const activeFiltersCount = (selectedProvider ? 1 : 0) + (selectedLocation ? 1 : 0);
+  const activeFiltersCount = (selectedProviderId ? 1 : 0) + (selectedLocationId ? 1 : 0);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const next7 = new Date(today);
-  next7.setDate(next7.getDate() + 7);
-  const last7 = new Date(today);
-  last7.setDate(last7.getDate() - 7);
+  // Stats
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
 
   const stats = useMemo(() => {
-    const list = filteredAppointments;
-    const todayCount = list.filter((a) => {
+    const next7 = new Date(today);
+    next7.setDate(next7.getDate() + 7);
+    const last7 = new Date(today);
+    last7.setDate(last7.getDate() - 7);
+
+    const todayCount = appointments.filter((a) => {
       const { start } = parseAppointmentDateTime(a);
       return start.toDateString() === today.toDateString();
     }).length;
-    const next7Count = list.filter((a) => {
+
+    const next7Count = appointments.filter((a) => {
       const { start } = parseAppointmentDateTime(a);
       return start >= today && start <= next7;
     }).length;
-    const last7Count = list.filter((a) => {
+
+    const last7Count = appointments.filter((a) => {
       const { start } = parseAppointmentDateTime(a);
       return start >= last7 && start < today;
     }).length;
-    const uniqueProviders = new Set(list.map((a) => a.providerName)).size;
-    const uniqueLocations = new Set(list.map((a) => a.serviceLocationName)).size;
-    return { todayCount, next7Count, last7Count, uniqueProviders, uniqueLocations };
-  }, [filteredAppointments, today, next7, last7]);
 
+    return { todayCount, next7Count, last7Count };
+  }, [appointments, today]);
+
+  // Visit-type legend
+  const visitTypeLegend = useMemo(() => {
+    const types = Array.from(new Set(appointments.map((a) => a.visitReasonName).filter(Boolean)));
+    return types.slice(0, 8).map((name, i) => ({ name, color: LEGEND_COLORS[i % LEGEND_COLORS.length] }));
+  }, [appointments]);
+
+  // Calendar events
   const calendarEvents = useMemo(() => {
-    return filteredAppointments.map((appt) => {
+    return appointments.map((appt) => {
       const { start, end } = parseAppointmentDateTime(appt);
+      const typeIdx = visitTypeLegend.findIndex((v) => v.name === appt.visitReasonName);
+      const color = typeIdx >= 0 ? LEGEND_COLORS[typeIdx % LEGEND_COLORS.length] : LEGEND_COLORS[0];
       return {
         id: appt._id,
         title: appt.patientName || 'Appointment',
         start: start.toISOString(),
         end: end.toISOString(),
+        color,
         extendedProps: { appointment: appt },
       };
     });
-  }, [filteredAppointments]);
+  }, [appointments, visitTypeLegend]);
+
+  // ── More-modal helpers ─────────────────────────────────────────────────────
 
   const handleMoreLinkClick = (info: { date: Date }) => {
     setMoreModalDate(info.date);
-    return 'dayGridMonth';
+    return 'dayGridMonth' as any;
   };
 
   const appointmentsForMoreModal = useMemo(() => {
@@ -221,19 +389,13 @@ const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({
     dayStart.setHours(0, 0, 0, 0);
     const dayEnd = new Date(dayStart);
     dayEnd.setDate(dayEnd.getDate() + 1);
-    return filteredAppointments
+    return appointments
       .filter((a) => {
         const { start } = parseAppointmentDateTime(a);
         return start >= dayStart && start < dayEnd;
       })
-      .sort((a, b) => {
-        const { start: sa } = parseAppointmentDateTime(a);
-        const { start: sb } = parseAppointmentDateTime(b);
-        return sa.getTime() - sb.getTime();
-      });
-  }, [moreModalDate, filteredAppointments]);
-
-  const closeMoreModal = () => setMoreModalDate(null);
+      .sort((a, b) => parseAppointmentDateTime(a).start.getTime() - parseAppointmentDateTime(b).start.getTime());
+  }, [moreModalDate, appointments]);
 
   const handleEventClick = (info: EventClickArg) => {
     info.jsEvent.preventDefault();
@@ -241,334 +403,448 @@ const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({
     if (appointment) setDetailsAppointment(appointment);
   };
 
+  const handleDatesSet = useCallback((arg: DatesSetArg) => {
+    setCurrentDate(arg.start);
+    const fmt = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const from = new Date(arg.start);
+    from.setDate(from.getDate() - 7);
+    const to = new Date(arg.end);
+    to.setDate(to.getDate() + 7);
+    const newFrom = fmt(from);
+    const newTo = fmt(to);
+    // Only update state when the strings actually change — prevents FullCalendar
+    // re-render from creating a new object reference and triggering an infinite loop.
+    setDateRange((prev) =>
+      prev.fromDate === newFrom && prev.toDate === newTo
+        ? prev
+        : { fromDate: newFrom, toDate: newTo }
+    );
+  }, []);
+
+  // ── Error state ────────────────────────────────────────────────────────────
+
   if (error) {
     return (
       <div className="panel p-8 text-center">
         <p className="text-danger mb-4">{error}</p>
-        <button onClick={fetchAppointments} className="btn btn-outline-primary">
+        <button onClick={() => fetchAppointments(dateRange, selectedProviderId, selectedLocationId)} className="btn btn-outline-primary">
           Retry
         </button>
       </div>
     );
   }
 
+  // ── Shared filter panel content (used in both drawer and desktop sidebar) ─
+  const FilterPanelContent = (
+    <>
+      <div className="grid grid-cols-3 gap-2 mb-4 text-center">
+        <div className="rounded-xl bg-primary/5 dark:bg-primary/10 border border-primary/10 p-2">
+          <div className="font-bold text-primary text-sm">{providers.length}</div>
+          <div className="text-gray-500 dark:text-gray-400 text-[11px] leading-tight">Total Providers</div>
+        </div>
+        <div className="rounded-xl bg-success/5 dark:bg-success/10 border border-success/10 p-2">
+          <div className="font-bold text-success text-sm">{serviceLocations.length}</div>
+          <div className="text-gray-500 dark:text-gray-400 text-[11px] leading-tight">Locations</div>
+        </div>
+        <div className="rounded-xl bg-info/5 dark:bg-info/10 border border-info/10 p-2">
+          <div className="font-bold text-info text-sm">{activeFiltersCount}</div>
+          <div className="text-gray-500 dark:text-gray-400 text-[11px] leading-tight">Active</div>
+        </div>
+      </div>
+
+      {/* Providers */}
+      <div className="mb-4">
+        <h4 className="text-sm font-semibold text-gray-800 dark:text-white mb-1">Providers</h4>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Highlight specific care teams.</p>
+        <div className="relative mb-2">
+          <input
+            type="text"
+            className="form-input pl-9 text-sm"
+            placeholder="Search providers"
+            value={providerSearch}
+            onChange={(e) => setProviderSearch(e.target.value)}
+          />
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400">
+            <IconSearch className="w-4 h-4" />
+          </span>
+        </div>
+        <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1">
+          <label className="flex items-center gap-2 cursor-pointer text-sm">
+            <input type="radio" name="provider-filter" checked={selectedProviderId === null}
+              onChange={() => { handleProviderSelect(null); setMobileDrawerOpen(false); }}
+              className="form-radio text-primary" />
+            <span className="text-gray-700 dark:text-gray-300">All providers</span>
+          </label>
+          {filteredProviders.map((p) => {
+            const id = p._id || p.id || '';
+            return (
+              <label key={id} className="flex items-center gap-2 cursor-pointer text-sm">
+                <input type="radio" name="provider-filter" checked={selectedProviderId === id}
+                  onChange={() => { handleProviderSelect(id); setMobileDrawerOpen(false); }}
+                  className="form-radio text-primary" />
+                <span className="text-gray-700 dark:text-gray-300 truncate">{getProviderDisplayName(p)}</span>
+              </label>
+            );
+          })}
+          {filteredProviders.length === 0 && providerSearch && (
+            <p className="text-xs text-gray-400 px-1">No providers found.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Locations */}
+      <div className="mb-4">
+        <h4 className="text-sm font-semibold text-gray-800 dark:text-white mb-1">Service Locations</h4>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Focus the calendar on specific sites.</p>
+        <div className="relative mb-2">
+          <input
+            type="text"
+            className="form-input pl-9 text-sm"
+            placeholder="Search locations"
+            value={locationSearch}
+            onChange={(e) => setLocationSearch(e.target.value)}
+          />
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400">
+            <IconSearch className="w-4 h-4" />
+          </span>
+        </div>
+        <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1">
+          <label className="flex items-center gap-2 cursor-pointer text-sm">
+            <input type="radio" name="location-filter" checked={selectedLocationId === null}
+              onChange={() => { setSelectedLocationId(null); setMobileDrawerOpen(false); }}
+              className="form-radio text-primary" />
+            <span className="text-gray-700 dark:text-gray-300">All locations</span>
+          </label>
+          {filteredLocations.map((l) => {
+            const id = l._id || l.id || '';
+            return (
+              <label key={id} className="flex items-center gap-2 cursor-pointer text-sm">
+                <input type="radio" name="location-filter" checked={selectedLocationId === id}
+                  onChange={() => { setSelectedLocationId(id); setMobileDrawerOpen(false); }}
+                  className="form-radio text-primary" />
+                <span className="text-gray-700 dark:text-gray-300 truncate">{getLocationDisplayName(l)}</span>
+              </label>
+            );
+          })}
+          {filteredLocations.length === 0 && locationSearch && (
+            <p className="text-xs text-gray-400 px-1">No locations found.</p>
+          )}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => { handleProviderSelect(null); setSelectedLocationId(null); }}
+        className="btn btn-outline-primary w-full btn-sm"
+      >
+        Clear all filters
+      </button>
+    </>
+  );
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
   return (
-    <div className="flex flex-col lg:flex-row gap-3 sm:gap-4">
-      {/* Left sidebar - Filters */}
-      {!sidebarCollapsed && (
+    <>
+      {/* ── Mobile/tablet filter drawer ───────────────────────────────────── */}
+      {mobileDrawerOpen && (
         <div
-          className={`flex-shrink-0 w-full lg:w-72 rounded-xl sm:rounded-2xl border border-primary/10 dark:border-primary/20 bg-gradient-to-b from-white to-gray-50/80 dark:from-[#0e1726] dark:to-[#1b2e4b] p-3 sm:p-4 shadow-lg transition-all ${
-            filtersCollapsed ? 'overflow-hidden' : ''
-          }`}
+          className="fixed inset-0 z-50 lg:hidden"
+          onClick={() => setMobileDrawerOpen(false)}
         >
-          <div className="flex items-center justify-between mb-2">
-            <button
-              onClick={() => setFiltersCollapsed(!filtersCollapsed)}
-              className="flex items-center gap-2 text-sm sm:text-base text-gray-800 dark:text-gray-200 font-semibold"
-            >
-              <FaChevronDown className={`w-4 h-4 transition-transform ${filtersCollapsed ? '-rotate-90' : ''}`} />
-              Filters
-            </button>
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed(true)}
-              className="p-1.5 rounded-lg hover:bg-white-light dark:hover:bg-[#191e3a] lg:hidden"
-              aria-label="Hide filters"
-            >
-              <FaChevronLeft className="w-4 h-4" />
-            </button>
-          </div>
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-3 sm:mb-4">
-            Stack providers & service locations to tailor the calendar.
-          </p>
-          <div className="grid grid-cols-3 gap-2 mb-3 sm:mb-4 text-center text-xs sm:text-sm">
-            <div className="rounded-xl bg-primary/5 dark:bg-primary/10 border border-primary/10 p-2">
-              <div className="font-bold text-primary">{providers.length}</div>
-              <div className="text-gray-500 dark:text-gray-400 text-xs">Total Providers</div>
-            </div>
-            <div className="rounded-xl bg-success/5 dark:bg-success/10 border border-success/10 p-2">
-              <div className="font-bold text-success">{locations.length}</div>
-              <div className="text-gray-500 dark:text-gray-400 text-xs">Locations</div>
-            </div>
-            <div className="rounded-xl bg-info/5 dark:bg-info/10 border border-info/10 p-2">
-              <div className="font-bold text-info">{activeFiltersCount}</div>
-              <div className="text-gray-500 dark:text-gray-400 text-xs">Active</div>
-            </div>
-          </div>
-          {!filtersCollapsed && (
-            <>
-              <div className="mb-4">
-                <h4 className="text-sm font-semibold text-gray-800 dark:text-white mb-1">
-                  Providers
-                </h4>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Highlight specific care teams.</p>
-                <div className="relative mb-2">
-                  <input
-                    type="text"
-                    className="form-input pl-9 text-sm"
-                    placeholder="Search providers"
-                    value={providerSearch}
-                    onChange={(e) => setProviderSearch(e.target.value)}
-                  />
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400">
-                    <IconSearch className="w-4 h-4" />
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          {/* Drawer panel */}
+          <div
+            className="absolute left-0 top-0 h-full w-[min(300px,85vw)] overflow-y-auto bg-white dark:bg-[#0e1726] shadow-2xl border-r border-primary/10 dark:border-primary/20 p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <FaFilter className="text-primary w-3.5 h-3.5" />
+                <span className="font-semibold text-gray-800 dark:text-white">Filters</span>
+                {activeFiltersCount > 0 && (
+                  <span className="inline-flex items-center justify-center h-5 min-w-[20px] rounded-full bg-primary text-white text-[10px] font-bold px-1.5">
+                    {activeFiltersCount}
                   </span>
-                </div>
-                <div className="max-h-40 overflow-y-auto space-y-1.5">
-                  <label className="flex items-center gap-2 cursor-pointer text-sm">
-                    <input
-                      type="radio"
-                      name="provider"
-                      checked={selectedProvider === null}
-                      onChange={() => setSelectedProvider(null)}
-                      className="form-radio text-primary"
-                    />
-                    <span className="text-gray-700 dark:text-gray-300">All providers</span>
-                  </label>
-                  {filteredProviders.map((name) => (
-                    <label key={name} className="flex items-center gap-2 cursor-pointer text-sm">
-                      <input
-                        type="radio"
-                        name="provider"
-                        checked={selectedProvider === name}
-                        onChange={() => setSelectedProvider(name)}
-                        className="form-radio text-primary"
-                      />
-                      <span className="text-gray-700 dark:text-gray-300 truncate">{name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="mb-4">
-                <h4 className="text-sm font-semibold text-gray-800 dark:text-white mb-1">
-                  Service Locations
-                </h4>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Focus the calendar on specific sites.</p>
-                <div className="relative mb-2">
-                  <input
-                    type="text"
-                    className="form-input pl-9 text-sm"
-                    placeholder="Search locations"
-                    value={locationSearch}
-                    onChange={(e) => setLocationSearch(e.target.value)}
-                  />
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400">
-                    <IconSearch className="w-4 h-4" />
-                  </span>
-                </div>
-                <div className="max-h-40 overflow-y-auto space-y-1.5">
-                  <label className="flex items-center gap-2 cursor-pointer text-sm">
-                    <input
-                      type="radio"
-                      name="location"
-                      checked={selectedLocation === null}
-                      onChange={() => setSelectedLocation(null)}
-                      className="form-radio text-primary"
-                    />
-                    <span className="text-gray-700 dark:text-gray-300">All locations</span>
-                  </label>
-                  {filteredLocations.map((name) => (
-                    <label key={name} className="flex items-center gap-2 cursor-pointer text-sm">
-                      <input
-                        type="radio"
-                        name="location"
-                        checked={selectedLocation === name}
-                        onChange={() => setSelectedLocation(name)}
-                        className="form-radio text-primary"
-                      />
-                      <span className="text-gray-700 dark:text-gray-300 truncate">{name}</span>
-                    </label>
-                  ))}
-                </div>
+                )}
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedProvider(null);
-                  setSelectedLocation(null);
-                }}
-                className="btn btn-outline-primary w-full btn-sm"
+                onClick={() => setMobileDrawerOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400"
               >
-                Clear all filters
+                <FaTimes className="w-4 h-4" />
               </button>
-            </>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+              Stack providers &amp; service locations to tailor the calendar.
+            </p>
+            {FilterPanelContent}
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-3 sm:gap-4">
+
+        {/* ── Stats row – always at the top ─────────────────────────────────── */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
+          {[
+            { label: 'Today',           value: stats.todayCount,        icon: <FaCalendar />,    bg: 'bg-primary/10 dark:bg-primary/15',   text: 'text-primary',  border: 'border-primary/15'  },
+            { label: 'Next 7 Days',     value: stats.next7Count,        icon: <FaCalendar />,    bg: 'bg-success/10 dark:bg-success/15',   text: 'text-success',  border: 'border-success/15'  },
+            { label: 'Last 7 Days',     value: stats.last7Count,        icon: <FaCalendar />,    bg: 'bg-info/10 dark:bg-info/15',         text: 'text-info',     border: 'border-info/15'     },
+            { label: 'Active Providers',value: providers.length,        icon: <FaUser />,        bg: 'bg-warning/10 dark:bg-warning/15',   text: 'text-warning',  border: 'border-warning/15'  },
+            { label: 'Active Locations',value: serviceLocations.length, icon: <FaMapMarkerAlt />,bg: 'bg-danger/10 dark:bg-danger/15',     text: 'text-danger',   border: 'border-danger/15'   },
+          ].map(({ label, value, icon, bg, text, border }, i) => (
+            <div
+              key={label}
+              className={`flex items-center gap-2.5 rounded-xl border ${border} bg-white dark:bg-[#0e1726] p-3 shadow-sm
+                ${i === 4 ? 'col-span-2 sm:col-span-1' : ''}`}
+            >
+              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${bg} ${text} text-base`}>
+                {icon}
+              </div>
+              <div className="min-w-0">
+                <div className={`text-[10px] font-semibold uppercase tracking-wide truncate ${text}`}>{label}</div>
+                <div className="text-xl font-bold text-gray-900 dark:text-white leading-tight">{value}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Main 3-column row ─────────────────────────────────────────────── */}
+        <div className="flex flex-col lg:flex-row gap-3 sm:gap-4">
+
+          {/* Desktop left sidebar */}
+          {!sidebarCollapsed && (
+            <div className="hidden lg:block flex-shrink-0 w-72 rounded-2xl border border-primary/10 dark:border-primary/20 bg-gradient-to-b from-white to-gray-50/80 dark:from-[#0e1726] dark:to-[#1b2e4b] p-4 shadow-lg self-start">
+              <div className="flex items-center justify-between mb-2">
+                <button
+                  onClick={() => setFiltersCollapsed(!filtersCollapsed)}
+                  className="flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200 font-semibold"
+                >
+                  <FaChevronDown className={`w-3.5 h-3.5 transition-transform ${filtersCollapsed ? '-rotate-90' : ''}`} />
+                  Filters
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                Stack providers &amp; service locations to tailor the calendar.
+              </p>
+              {!filtersCollapsed && FilterPanelContent}
+            </div>
           )}
-        </div>
-      )}
-      {sidebarCollapsed && (
-        <button
-          type="button"
-          onClick={() => setSidebarCollapsed(false)}
-          className="flex-shrink-0 self-start p-2 rounded-lg panel hover:bg-white-light dark:hover:bg-[#191e3a] lg:hidden"
-          aria-label="Show filters"
-        >
-          <FaChevronRight className="w-4 h-4" />
-        </button>
-      )}
 
-      {/* Main calendar */}
-      <div className="flex-1 min-w-0 rounded-xl sm:rounded-2xl border border-primary/10 dark:border-primary/20 bg-white dark:bg-[#0e1726] p-3 sm:p-4 lg:p-5 shadow-lg">
-        <div className="mb-4 sm:mb-5">
-          <ul className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm mb-2 flex-wrap">
-            <li>
-              <a href="/app/appointments" className="text-primary hover:underline">Appointments</a>
-            </li>
-            <li>/</li>
-            <li className="text-gray-900 dark:text-white font-medium">Appointment Calendar</li>
-          </ul>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-1 sm:mb-2">Appointment Calendar</h1>
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-            Monitor provider coverage, visit mix, and location utilization in real time.
-          </p>
-        </div>
+          {/* ── Calendar column ──────────────────────────────────────────────── */}
+          <div className="flex-1 min-w-0 rounded-xl sm:rounded-2xl border border-primary/10 dark:border-primary/20 bg-white dark:bg-[#0e1726] p-3 sm:p-4 lg:p-5 shadow-lg">
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 mb-3 sm:mb-4">
-          <button
-            type="button"
-            onClick={onListView}
-            className="btn btn-outline-primary rounded-xl border-2 hover:bg-primary/10 font-semibold text-sm w-full sm:w-auto justify-center"
-          >
-            <FaList className="mr-2" />
-            <span className="hidden sm:inline">List View</span>
-            <span className="sm:hidden">List</span>
-          </button>
-          <button type="button" onClick={onAddAppointment} className="btn btn-primary rounded-xl shadow-md shadow-primary/30 hover:shadow-lg hover:shadow-primary/40 font-semibold text-sm w-full sm:w-auto justify-center">
-            <FaPlus className="mr-2" />
-            <span className="hidden sm:inline">New Appointment</span>
-            <span className="sm:hidden">New</span>
-          </button>
-        </div>
+            {/* Page header */}
+            <div className="mb-3 sm:mb-4">
+              <ul className="flex items-center gap-1 text-xs mb-1.5 flex-wrap text-gray-500 dark:text-gray-400">
+                <li><a href="/app/appointments" className="text-primary hover:underline">Appointments</a></li>
+                <li>/</li>
+                <li className="text-gray-700 dark:text-gray-200 font-medium">Appointment Calendar</li>
+              </ul>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-16">Loading...</div>
-        ) : (
-          <>
-            <div className="mb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+              {/* ── Title row ── */}
+              <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+                <div>
+                  <h1 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white leading-tight">
+                    Appointment Calendar
+                  </h1>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 hidden sm:block">
+                    Monitor provider coverage, visit mix, and location utilization in real time.
+                  </p>
+                </div>
+
+                {/* ── Desktop: all three buttons inline ── */}
+                <div className="hidden sm:flex items-center gap-2 flex-wrap">
+                  <button type="button" onClick={onListView}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200/80 dark:border-white/10 bg-white dark:bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-white/[0.08] transition">
+                    <FaList className="w-3 h-3" />
+                    List View
+                  </button>
+                  <button type="button" onClick={onAddAppointment}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-primary/90 transition">
+                    <FaPlus className="w-3 h-3" />
+                    New Appointment
+                  </button>
+                  <button type="button"
+                    onClick={() => setSidebarCollapsed((v) => !v)}
+                    className="relative inline-flex items-center gap-1.5 rounded-lg border border-gray-200/80 dark:border-white/10 bg-white dark:bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-white/[0.08] transition">
+                    <FaFilter className="w-3 h-3" />
+                    {sidebarCollapsed ? 'Show Filters' : 'Hide Filters'}
+                    {activeFiltersCount > 0 && (
+                      <span className="inline-flex items-center justify-center h-4 min-w-[16px] rounded-full bg-primary text-white text-[10px] font-bold px-1 leading-none">
+                        {activeFiltersCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* ── Mobile only: stacked full-width buttons ── */}
+              <div className="flex flex-col gap-2 sm:hidden">
+                <button type="button" onClick={onListView}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.04] py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-white/[0.06] transition active:scale-[0.98]">
+                  <FaList className="w-3.5 h-3.5" />
+                  List View
+                </button>
+                <button type="button" onClick={onAddAppointment}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition active:scale-[0.98]">
+                  <FaPlus className="w-3.5 h-3.5" />
+                  New Appointment
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
               Schedule Overview
             </div>
-            <div className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
+            <div className="mb-0.5 text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
               {format(currentDate, 'MMMM yyyy')}
             </div>
-            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-3 sm:mb-4">
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-3">
               Showing times in {Intl.DateTimeFormat().resolvedOptions().timeZone}
             </p>
 
-            <div className="appointment-calendar-responsive">
-              <FullCalendar
-                ref={calendarRef}
-                plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-                initialView="dayGridMonth"
-                viewDidMount={(view) => setCalendarView(view.view.type as any)}
-                datesSet={(arg) => setCurrentDate(arg.start)}
-                events={calendarEvents}
-                eventClick={handleEventClick}
-                dayMaxEvents={VISIBLE_IN_DAY_CELL}
-                moreLinkClick={handleMoreLinkClick}
-                headerToolbar={{
-                  left: 'prev,next today',
-                  center: 'title',
-                  right: sidebarCollapsed
-                    ? 'dayGridMonth,timeGridWeek,timeGridDay showFilters'
-                    : 'dayGridMonth,timeGridWeek,timeGridDay hideFilters',
-                }}
-                buttonText={{
-                  today: 'Today',
-                  month: 'Month',
-                  week: 'Week',
-                  day: 'Day',
-                }}
-                customButtons={{
-                  hideFilters: {
-                    text: 'Hide Filters',
-                    click: () => setSidebarCollapsed(true),
-                  },
-                  showFilters: {
-                    text: 'Show Filters',
-                    click: () => setSidebarCollapsed(false),
-                  },
-                }}
-                height="auto"
-                eventContent={(arg) => {
-                  const appt = arg.event.extendedProps.appointment as CalendarAppointment;
-                  const { start } = parseAppointmentDateTime(appt);
-                  const timeStr = format(start, 'h:mm a');
-                  return (
-                    <div className="fc-event-main-frame cursor-pointer rounded border-l-2 sm:border-l-4 border-primary bg-primary/10 dark:bg-primary/20 p-1 sm:p-1.5 shadow-sm min-h-0 overflow-hidden">
-                      <div className="text-[10px] sm:text-xs font-semibold text-primary leading-tight">{timeStr}</div>
-                      <div className="text-[10px] sm:text-xs font-semibold text-gray-800 dark:text-white truncate leading-tight">{appt.patientName}</div>
-                      <div className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 truncate leading-tight hidden sm:block">{appt.providerName}</div>
-                      <div className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 truncate leading-tight hidden sm:block">{appt.visitReasonName}</div>
+            {/* ── Mobile only: Show/Hide Filters button below toolbar ── */}
+            <div className="sm:hidden mb-3">
+              <button
+                type="button"
+                onClick={() => setMobileDrawerOpen(true)}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.04] py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-white/[0.06] transition active:scale-[0.98]"
+              >
+                <FaFilter className="w-3.5 h-3.5" />
+                {activeFiltersCount > 0 ? `Filters (${activeFiltersCount} active)` : 'Show Filters'}
+              </button>
+            </div>
+
+            {/* Calendar — horizontal scroll wrapper on small screens */}
+            <div className="overflow-x-auto -mx-3 sm:-mx-4 lg:mx-0 px-3 sm:px-4 lg:px-0">
+              <div className="min-w-[320px] relative">
+                {/* Loading overlay — keeps FullCalendar mounted to prevent blink */}
+                {loading && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/75 dark:bg-[#0e1726]/75 backdrop-blur-[2px]">
+                    <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                      <span className="inline-block w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                      Loading appointments…
                     </div>
-                  );
-                }}
-              />
+                  </div>
+                )}
+                <FullCalendar
+                  ref={calendarRef}
+                  plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
+                  initialView="dayGridMonth"
+                  datesSet={handleDatesSet}
+                  events={calendarEvents}
+                  eventClick={handleEventClick}
+                  dayMaxEvents={VISIBLE_IN_DAY_CELL}
+                  moreLinkClick={handleMoreLinkClick}
+                  headerToolbar={{
+                    left: 'prev today next',
+                    center: 'title',
+                    right: 'dayGridMonth,listWeek,listDay',
+                  }}
+                  buttonText={{ today: 'Today', month: 'Month', week: 'Week', day: 'Day' }}
+                  height="auto"
+                  listDayFormat={{ weekday: 'long', month: 'long', day: 'numeric' }}
+                  listDaySideFormat={false}
+                  noEventsText="No appointments"
+                  eventContent={(arg) => {
+                    const appt = arg.event.extendedProps.appointment as CalendarAppointment;
+                    const { start, end } = parseAppointmentDateTime(appt);
+                    const color = arg.event.backgroundColor || LEGEND_COLORS[0];
+                    const isListView = arg.view.type === 'listWeek' || arg.view.type === 'listDay';
+
+                    if (isListView) {
+                      const status = (appt.appointmentStatus || '').trim();
+                      const statusColor =
+                        status.toLowerCase().includes('confirm') ? '#10b981' :
+                        status.toLowerCase().includes('cancel') ? '#e7515a' :
+                        status.toLowerCase().includes('complet') ? '#4361ee' :
+                        '#9ca3af';
+                      return (
+                        <div className="py-1 cursor-pointer">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span
+                              className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: color }}
+                            />
+                            <span className="text-xs font-semibold" style={{ color }}>
+                              {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
+                            </span>
+                          </div>
+                          <div className="text-sm font-semibold text-gray-900 dark:text-white leading-snug">
+                            {appt.patientName || '—'}
+                          </div>
+                          <div className="text-xs text-gray-600 dark:text-gray-300 leading-snug">
+                            {appt.providerName}
+                          </div>
+                          {appt.serviceLocationName && (
+                            <div className="text-xs text-gray-500 dark:text-gray-400 leading-snug">
+                              {appt.serviceLocationName}
+                            </div>
+                          )}
+                          {status && (
+                            <div className="text-xs font-medium leading-snug mt-0.5" style={{ color: statusColor }}>
+                              {status}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    // Month / grid view chip
+                    const timeStr = format(start, 'h:mm a');
+                    return (
+                      <div
+                        className="fc-event-main-frame cursor-pointer rounded border-l-2 sm:border-l-4 p-0.5 sm:p-1 shadow-sm min-h-0 overflow-hidden"
+                        style={{ borderColor: color, backgroundColor: `${color}1a` }}
+                      >
+                        <div className="text-[9px] sm:text-[10px] font-semibold leading-tight truncate" style={{ color }}>
+                          {timeStr}
+                        </div>
+                        <div className="text-[9px] sm:text-[10px] font-semibold text-gray-800 dark:text-white truncate leading-tight">
+                          {appt.patientName}
+                        </div>
+                        <div className="text-[9px] sm:text-[10px] text-gray-500 dark:text-gray-400 truncate leading-tight hidden sm:block">
+                          {appt.providerName}
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
+              </div>
             </div>
-          </>
-        )}
+
+            {/* Visit Type Legend */}
+            {visitTypeLegend.length > 0 && (
+              <div className="mt-4 pt-3 border-t border-gray-100 dark:border-white/[0.06]">
+                <h4 className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-widest">
+                  Visit Type Legend
+                </h4>
+                <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+                  {visitTypeLegend.map(({ name, color }) => (
+                    <div key={name} className="flex items-center gap-1.5">
+                      <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                      <span className="text-[11px] text-gray-600 dark:text-gray-400">{name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+        </div>
       </div>
 
-      {/* Right sidebar - Summary cards */}
-      <div className="flex-shrink-0 w-full lg:w-52 grid grid-cols-2 lg:grid-cols-1 gap-3 lg:space-y-0">
-        <div className="rounded-xl sm:rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/5 to-primary/10 dark:from-primary/10 dark:to-primary/5 p-3 sm:p-4 shadow-md">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl bg-primary/20 flex items-center justify-center shadow-inner shrink-0">
-              <FaCalendar className="text-primary text-base sm:text-lg" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-primary uppercase tracking-wide truncate">Today</div>
-              <div className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{stats.todayCount}</div>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-xl sm:rounded-2xl border border-success/15 bg-gradient-to-br from-success/5 to-success/10 dark:from-success/10 dark:to-success/5 p-3 sm:p-4 shadow-md">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl bg-success/20 flex items-center justify-center shadow-inner shrink-0">
-              <FaCalendar className="text-success text-base sm:text-lg" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-success uppercase tracking-wide truncate">Next 7 Days</div>
-              <div className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{stats.next7Count}</div>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-xl sm:rounded-2xl border border-info/15 bg-gradient-to-br from-info/5 to-info/10 dark:from-info/10 dark:to-info/5 p-3 sm:p-4 shadow-md">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl bg-info/20 flex items-center justify-center shadow-inner shrink-0">
-              <FaCalendar className="text-info text-base sm:text-lg" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-info uppercase tracking-wide truncate">Last 7 Days</div>
-              <div className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{stats.last7Count}</div>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-xl sm:rounded-2xl border border-warning/15 bg-gradient-to-br from-warning/5 to-warning/10 dark:from-warning/10 dark:to-warning/5 p-3 sm:p-4 shadow-md">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl bg-warning/20 flex items-center justify-center shadow-inner shrink-0">
-              <FaUser className="text-warning text-base sm:text-lg" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-warning uppercase tracking-wide truncate">Active Providers</div>
-              <div className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{stats.uniqueProviders}</div>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-xl sm:rounded-2xl border border-danger/15 bg-gradient-to-br from-danger/5 to-danger/10 dark:from-danger/10 dark:to-danger/5 p-3 sm:p-4 shadow-md">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl bg-danger/20 flex items-center justify-center shadow-inner shrink-0">
-              <FaMapMarkerAlt className="text-danger text-base sm:text-lg" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-danger uppercase tracking-wide truncate">Active Locations</div>
-              <div className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{stats.uniqueLocations}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Small modal for "+X more" - list of appointments for that day */}
+      {/* ── "+X more" day modal ───────────────────────────────────────────────── */}
       {moreModalDate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={closeMoreModal}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setMoreModalDate(null)}
+        >
           <div
             className="w-full max-w-sm rounded-2xl bg-white dark:bg-[#1b2e4b] shadow-2xl border border-primary/20 dark:border-primary/30 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
@@ -577,7 +853,7 @@ const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({
               <h3 className="font-semibold">{format(moreModalDate, 'MMMM d, yyyy')}</h3>
               <button
                 type="button"
-                onClick={closeMoreModal}
+                onClick={() => setMoreModalDate(null)}
                 className="p-1.5 rounded-lg hover:bg-white/20 transition-colors"
               >
                 <IconX className="w-5 h-5" />
@@ -586,19 +862,20 @@ const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({
             <div className="max-h-72 overflow-y-auto p-3 space-y-2">
               {appointmentsForMoreModal.map((appt) => {
                 const { start } = parseAppointmentDateTime(appt);
-                const timeStr = format(start, 'h:mm a');
                 return (
                   <button
                     key={appt._id}
                     type="button"
                     onClick={() => {
                       setDetailsAppointment(appt);
-                      closeMoreModal();
+                      setMoreModalDate(null);
                     }}
                     className="w-full text-left rounded-lg sm:rounded-xl p-2 sm:p-3 bg-gray-50 dark:bg-[#191e3a] hover:bg-primary/10 dark:hover:bg-primary/10 border border-transparent hover:border-primary/30 transition-all duration-200"
                   >
-                    <div className="text-xs sm:text-sm font-medium text-primary">{timeStr}</div>
-                    <div className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white break-words">{appt.patientName}</div>
+                    <div className="text-xs sm:text-sm font-medium text-primary">{format(start, 'h:mm a')}</div>
+                    <div className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white break-words">
+                      {appt.patientName}
+                    </div>
                     <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">{appt.providerName}</div>
                     <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">{appt.visitReasonName}</div>
                   </button>
@@ -609,76 +886,59 @@ const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({
         </div>
       )}
 
-      {/* Appointment Details Modal */}
+      {/* ── Appointment details modal ─────────────────────────────────────────── */}
       {detailsAppointment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setDetailsAppointment(null)}>
-          <div className="max-w-md w-full rounded-2xl overflow-hidden shadow-2xl border border-primary/20 bg-white dark:bg-[#1b2e4b]" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setDetailsAppointment(null)}
+        >
+          <div
+            className="max-w-md w-full rounded-2xl overflow-hidden shadow-2xl border border-primary/20 bg-white dark:bg-[#1b2e4b]"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="bg-gradient-to-r from-primary to-primary/80 text-white px-4 py-3 flex items-center justify-between">
               <h3 className="text-lg font-semibold">Appointment Details</h3>
-              <button type="button" className="p-1.5 rounded-lg hover:bg-white/20 transition-colors text-white" onClick={() => setDetailsAppointment(null)}>
+              <button
+                type="button"
+                className="p-1.5 rounded-lg hover:bg-white/20 transition-colors text-white"
+                onClick={() => setDetailsAppointment(null)}
+              >
                 <IconX className="w-5 h-5" />
               </button>
             </div>
             <div className="p-5 space-y-4">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <FaUser className="text-primary text-sm sm:text-base" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs text-gray-500 dark:text-gray-400">Patient</div>
-                  <div className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white break-words">{detailsAppointment.patientName}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <FaUser className="text-primary text-sm sm:text-base" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs text-gray-500 dark:text-gray-400">Provider</div>
-                  <div className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white break-words">{detailsAppointment.providerName}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <FaCalendar className="text-primary text-sm sm:text-base" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs text-gray-500 dark:text-gray-400">Date</div>
-                  <div className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white break-words">
-                    {format(parseAppointmentDateTime(detailsAppointment).start, 'EEEE, MMMM d, yyyy')}
+              {[
+                { icon: <FaUser />, label: 'Patient', value: detailsAppointment.patientName },
+                { icon: <FaUser />, label: 'Provider', value: detailsAppointment.providerName },
+                {
+                  icon: <FaCalendar />,
+                  label: 'Date',
+                  value: format(parseAppointmentDateTime(detailsAppointment).start, 'EEEE, MMMM d, yyyy'),
+                },
+                {
+                  icon: <FaCalendar />,
+                  label: 'Time',
+                  value: `${format(parseAppointmentDateTime(detailsAppointment).start, 'h:mm a')} – ${format(
+                    parseAppointmentDateTime(detailsAppointment).end,
+                    'h:mm a'
+                  )}`,
+                },
+                { icon: <FaMapMarkerAlt />, label: 'Location', value: detailsAppointment.serviceLocationName },
+                { icon: <FaBriefcase />, label: 'Visit Type', value: detailsAppointment.visitReasonName },
+              ].map(({ icon, label, value }) => (
+                <div key={label} className="flex items-center gap-2 sm:gap-3">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 text-primary text-sm sm:text-base">
+                    {icon}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">{label}</div>
+                    <div className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white break-words">
+                      {value || '—'}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <FaCalendar className="text-primary text-sm sm:text-base" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs text-gray-500 dark:text-gray-400">Time</div>
-                  <div className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
-                    {format(parseAppointmentDateTime(detailsAppointment).start, 'h:mm a')} -{' '}
-                    {format(parseAppointmentDateTime(detailsAppointment).end, 'h:mm a')}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <FaMapMarkerAlt className="text-primary text-sm sm:text-base" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs text-gray-500 dark:text-gray-400">Location</div>
-                  <div className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white break-words">{detailsAppointment.serviceLocationName}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <FaBriefcase className="text-primary text-sm sm:text-base" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs text-gray-500 dark:text-gray-400">Visit Types</div>
-                  <div className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white break-words">{detailsAppointment.visitReasonName}</div>
-                </div>
-              </div>
+              ))}
+
               <div className="border-t border-white-light dark:border-[#191e3a] pt-3 sm:pt-4">
                 <div className="flex items-center gap-2 mb-2">
                   <FaDollarSign className="text-gray-500 dark:text-gray-400 text-sm" />
@@ -704,7 +964,7 @@ const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 
