@@ -7,6 +7,7 @@ import 'react-perfect-scrollbar/dist/css/styles.css';
 
 // Tailwind css
 import './tailwind.css';
+import './lib/primereact-theme.css';
 import { syncDocumentDarkClass } from './theme/persistedDarkSync';
 
 // i18n (needs to be bundled)

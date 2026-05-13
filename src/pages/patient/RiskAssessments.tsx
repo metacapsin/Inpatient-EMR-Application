@@ -848,6 +848,11 @@ const PainAssessment = ({ encounterId }: { encounterId: string | null }) => {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+export interface RiskAssessmentsProps {
+    /** When true, omit the page title (e.g. nested under Nursing Flowsheet tabs). */
+    embedded?: boolean;
+}
+
 const TABS = [
     { id: 'fall-risk',       label: 'Fall Risk (Morse)' },
     { id: 'pressure-injury', label: 'Pressure Injury (Braden)' },
@@ -857,7 +862,7 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]['id'];
 
-const RiskAssessments = () => {
+const RiskAssessments = ({ embedded = false }: RiskAssessmentsProps) => {
     const { moduleRootClass } = useFacesheetChartLayout();
     const patientId = usePatientId();
     const [activeTab, setActiveTab] = useState<TabId>('fall-risk');
@@ -867,10 +872,11 @@ const RiskAssessments = () => {
 
     return (
         <div className={moduleRootClass}>
-            {/* Header */}
-            <div className="mb-5">
-                <h3 className="text-xl font-semibold">Risk Assessments</h3>
-            </div>
+            {!embedded ? (
+                <div className="mb-5">
+                    <h3 className="text-xl font-semibold">Risk Assessments</h3>
+                </div>
+            ) : null}
 
             {/* Tabs */}
             <div className="mb-5 border-b border-gray-200 dark:border-white/10 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
