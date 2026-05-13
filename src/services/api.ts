@@ -855,5 +855,13 @@ export const triageAPI = {
     }),
 };
 
+// Risk Assessment API
+export const riskAssessmentAPI = {
+  save: (data: Record<string, any>) =>
+    api.post('/api/RiskAssessment/save', data),
+  getLatest: (encounterId: string) =>
+    api.get(`/api/RiskAssessment/latest/${encounterId}`),
+};
+
 export default api;
 

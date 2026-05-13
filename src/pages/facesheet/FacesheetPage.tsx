@@ -27,6 +27,7 @@ const PreventiveScreening = lazy(() => import('../patient/PreventiveScreening'))
 const VisitorsContacts = lazy(() => import('../patient/VisitorsContacts'));
 const PatientLocation = lazy(() => import('../patient/PatientLocation'));
 const Adt = lazy(() => import('../patient/Adt'));
+const RiskAssessments = lazy(() => import('../patient/RiskAssessments'));
 
 function ModuleFallback() {
     return (
@@ -121,6 +122,7 @@ const FacesheetPage = () => {
                         <Route path="prescriptions" element={<Prescriptions />} />
                         <Route path="allergies" element={<Allergies />} />
                         <Route path="immunizations" element={<Immunizations />} />
+                        <Route path="risk-assessments" element={<RiskAssessments />} />
                         <Route path="labs" element={<Labs />} />
                         <Route path="lab-orders" element={<LabOrders />} />
                         <Route path="documents" element={<Documents />} />
