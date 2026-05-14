@@ -1,5 +1,3 @@
-import { Dropdown } from 'primereact/dropdown';
-import { MultiSelect } from 'primereact/multiselect';
 import {
     EXTREMITY_MOVEMENT_OPTIONS,
     LEVEL_OF_CONSCIOUSNESS_OPTIONS,
@@ -7,6 +5,12 @@ import {
     PUPIL_FINDING_OPTIONS,
 } from '../constants/clinicalOptions';
 import { ClinicalField } from '../components/ClinicalField';
+import {
+    FlowsheetLabeledDropdown,
+    FlowsheetOutlinedMultiSelect,
+    NFS_FLOAT_FIELD_LABEL,
+    NFS_SECTION_GRID_CLASS,
+} from '../components/FlowsheetStyledFields';
 import { fieldClinicalSeverity, gcsTotalSeverity } from '../utils/clinicalSeverity';
 import { gcsTotal } from '../types/nursingFlowsheet.types';
 import { useNursingFlowsheet } from '../state/NursingFlowsheetContext';
@@ -48,118 +52,106 @@ export default function NeurologicalSection() {
               : 'border-emerald-500/60 bg-emerald-50/80 text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100';
 
     return (
-        <div className="grid grid-cols-12 gap-x-2 gap-y-1">
+        <div className={NFS_SECTION_GRID_CLASS}>
             <div className="col-span-12 md:col-span-4">
-                <ClinicalField fieldId="loc" label="Level of consciousness">
-                    <Dropdown
-                        value={n.levelOfConsciousness}
-                        options={LEVEL_OF_CONSCIOUSNESS_OPTIONS}
-                        onChange={(ev) => patchDocument({ neurological: { ...n, levelOfConsciousness: ev.value ?? '' } })}
-                        disabled={isChartLocked}
-                        className="w-full !text-[12px]"
-                        placeholder="—"
-                    />
-                </ClinicalField>
+                <FlowsheetLabeledDropdown
+                    fieldId="loc"
+                    label="Level of consciousness"
+                    options={LEVEL_OF_CONSCIOUSNESS_OPTIONS}
+                    value={n.levelOfConsciousness}
+                    onChange={(v) => patchDocument({ neurological: { ...n, levelOfConsciousness: String(v) } })}
+                    disabled={isChartLocked}
+                />
             </div>
-            <div className="col-span-12 md:col-span-8">
-                <ClinicalField fieldId="neuro-orient" label="Orientation">
-                    <MultiSelect
+            <div className="col-span-12 md:col-span-4">
+                <ClinicalField fieldId="neuro-orient" label="Orientation" omitLabel>
+                    <FlowsheetOutlinedMultiSelect
+                        fieldId="neuro-orient"
+                        label="Orientation"
                         value={n.orientation}
                         options={NEURO_ORIENTATION_OPTIONS}
-                        onChange={(ev) => patchDocument({ neurological: { ...n, orientation: ev.value ?? [] } })}
-                        display="chip"
-                        className="w-full !text-[12px]"
+                        onChange={(next) => patchDocument({ neurological: { ...n, orientation: next } })}
                         disabled={isChartLocked}
-                    />
-                </ClinicalField>
-            </div>
-            <div className="col-span-12 md:col-span-6">
-                <ClinicalField fieldId="pupil-l" label="Left pupil">
-                    <Dropdown
-                        value={n.leftPupil}
-                        options={PUPIL_FINDING_OPTIONS}
-                        onChange={(ev) => patchDocument({ neurological: { ...n, leftPupil: ev.value ?? '' } })}
-                        disabled={isChartLocked}
-                        className="w-full !text-[12px]"
-                        placeholder="—"
-                    />
-                </ClinicalField>
-            </div>
-            <div className="col-span-12 md:col-span-6">
-                <ClinicalField fieldId="pupil-r" label="Right pupil">
-                    <Dropdown
-                        value={n.rightPupil}
-                        options={PUPIL_FINDING_OPTIONS}
-                        onChange={(ev) => patchDocument({ neurological: { ...n, rightPupil: ev.value ?? '' } })}
-                        disabled={isChartLocked}
-                        className="w-full !text-[12px]"
-                        placeholder="—"
                     />
                 </ClinicalField>
             </div>
             <div className="col-span-12 md:col-span-4">
-                <ClinicalField
+                <FlowsheetLabeledDropdown
+                    fieldId="pupil-l"
+                    label="Left pupil"
+                    options={PUPIL_FINDING_OPTIONS}
+                    value={n.leftPupil}
+                    onChange={(v) => patchDocument({ neurological: { ...n, leftPupil: String(v) } })}
+                    disabled={isChartLocked}
+                />
+            </div>
+            <div className="col-span-12 md:col-span-4">
+                <FlowsheetLabeledDropdown
+                    fieldId="pupil-r"
+                    label="Right pupil"
+                    options={PUPIL_FINDING_OPTIONS}
+                    value={n.rightPupil}
+                    onChange={(v) => patchDocument({ neurological: { ...n, rightPupil: String(v) } })}
+                    disabled={isChartLocked}
+                />
+            </div>
+            <div className="col-span-12 md:col-span-4">
+                <FlowsheetLabeledDropdown
                     fieldId="gcs-e"
                     label="GCS — Eye opening"
                     error={e['neurological.gcs']}
                     abnormal={fieldClinicalSeverity('neurological.gcsE', f) !== 'normal'}
-                >
-                    <Dropdown
-                        value={n.gcsE}
-                        options={GCS_E_OPTS}
-                        onChange={(ev) => patchDocument({ neurological: { ...n, gcsE: ev.value ?? null } })}
-                        disabled={isChartLocked}
-                        className="w-full !text-[12px]"
-                        placeholder="—"
-                    />
-                </ClinicalField>
+                    options={GCS_E_OPTS}
+                    value={n.gcsE ?? ''}
+                    onChange={(v) => patchDocument({ neurological: { ...n, gcsE: typeof v === 'number' ? v : Number(v) } })}
+                    disabled={isChartLocked}
+                />
             </div>
             <div className="col-span-12 md:col-span-4">
-                <ClinicalField fieldId="gcs-v" label="GCS — Verbal" abnormal={fieldClinicalSeverity('neurological.gcsV', f) !== 'normal'}>
-                    <Dropdown
-                        value={n.gcsV}
-                        options={GCS_V_OPTS}
-                        onChange={(ev) => patchDocument({ neurological: { ...n, gcsV: ev.value ?? null } })}
-                        disabled={isChartLocked}
-                        className="w-full !text-[12px]"
-                        placeholder="—"
-                    />
-                </ClinicalField>
+                <FlowsheetLabeledDropdown
+                    fieldId="gcs-v"
+                    label="GCS — Verbal"
+                    abnormal={fieldClinicalSeverity('neurological.gcsV', f) !== 'normal'}
+                    options={GCS_V_OPTS}
+                    value={n.gcsV ?? ''}
+                    onChange={(v) => patchDocument({ neurological: { ...n, gcsV: typeof v === 'number' ? v : Number(v) } })}
+                    disabled={isChartLocked}
+                />
             </div>
             <div className="col-span-12 md:col-span-4">
-                <ClinicalField fieldId="gcs-m" label="GCS — Motor" abnormal={fieldClinicalSeverity('neurological.gcsM', f) !== 'normal'}>
-                    <Dropdown
-                        value={n.gcsM}
-                        options={GCS_M_OPTS}
-                        onChange={(ev) => patchDocument({ neurological: { ...n, gcsM: ev.value ?? null } })}
-                        disabled={isChartLocked}
-                        className="w-full !text-[12px]"
-                        placeholder="—"
-                    />
-                </ClinicalField>
+                <FlowsheetLabeledDropdown
+                    fieldId="gcs-m"
+                    label="GCS — Motor"
+                    abnormal={fieldClinicalSeverity('neurological.gcsM', f) !== 'normal'}
+                    options={GCS_M_OPTS}
+                    value={n.gcsM ?? ''}
+                    onChange={(v) => patchDocument({ neurological: { ...n, gcsM: typeof v === 'number' ? v : Number(v) } })}
+                    disabled={isChartLocked}
+                />
             </div>
             <div className="col-span-12 md:col-span-4">
-                <ClinicalField fieldId="gcs-total" label="GCS total (auto)">
+                <ClinicalField fieldId="gcs-total" label="GCS total (auto)" omitLabel>
                     <div
-                        className={`flex h-[2.25rem] items-center rounded-md border px-2 text-[13px] font-semibold tabular-nums ${gcsBorder}`}
-                        aria-live="polite"
+                        className={`relative isolate flex h-8 min-h-8 items-center justify-center overflow-visible rounded-lg px-3 text-xs font-semibold shadow-sm tabular-nums ${gcsBorder}`}
                     >
-                        {total == null ? '—' : total}
+                        <span className={NFS_FLOAT_FIELD_LABEL}>GCS total (auto)</span>
+                        <div className="flex flex-1 items-center justify-center pt-[0.5625rem] tabular-nums" role="status" aria-live="polite">
+                            {total == null ? '—' : total}
+                        </div>
                     </div>
                 </ClinicalField>
             </div>
-            <div className="col-span-12 md:col-span-8">
-                <ClinicalField fieldId="ext-mov" label="Extremity movement">
-                    <Dropdown
-                        value={n.extremityMovement}
-                        options={EXTREMITY_MOVEMENT_OPTIONS}
-                        onChange={(ev) => patchDocument({ neurological: { ...n, extremityMovement: ev.value ?? '' } })}
-                        disabled={isChartLocked}
-                        className="w-full !text-[12px]"
-                        placeholder="—"
-                    />
-                </ClinicalField>
+            <div className="col-span-12 md:col-span-4">
+                <FlowsheetLabeledDropdown
+                    fieldId="ext-mov"
+                    label="Extremity movement"
+                    options={EXTREMITY_MOVEMENT_OPTIONS}
+                    value={n.extremityMovement}
+                    onChange={(v) => patchDocument({ neurological: { ...n, extremityMovement: String(v) } })}
+                    disabled={isChartLocked}
+                />
             </div>
+            <div className="col-span-12 md:col-span-4 max-md:hidden" aria-hidden />
         </div>
     );
 }

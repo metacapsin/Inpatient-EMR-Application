@@ -1,9 +1,10 @@
-import type {
-    FlowsheetAction,
-    FlowsheetRuntimeState,
-    FlowsheetUiState,
-    NursingFlowsheetDocument,
-    NursingFlowsheetPatch,
+import {
+    DEFAULT_PAIN_SECTION,
+    type FlowsheetAction,
+    type FlowsheetRuntimeState,
+    type FlowsheetUiState,
+    type NursingFlowsheetDocument,
+    type NursingFlowsheetPatch,
 } from '../types/nursingFlowsheet.types';
 
 const defaultUi: FlowsheetUiState = {
@@ -62,7 +63,16 @@ export function createFlowsheetReducer(initialDoc: NursingFlowsheetDocument) {
     function reducer(state: FlowsheetRuntimeState, action: FlowsheetAction): FlowsheetRuntimeState {
         switch (action.type) {
             case 'HYDRATE':
-                return { ...state, ...action.payload, document: action.payload.document ?? state.document };
+                return {
+                    ...state,
+                    ...action.payload,
+                    document: action.payload.document
+                        ? {
+                              ...action.payload.document,
+                              pain: { ...DEFAULT_PAIN_SECTION, ...action.payload.document.pain },
+                          }
+                        : state.document,
+                };
             case 'SET_LOADING':
                 return { ...state, isLoading: action.payload };
             case 'SET_LOAD_ERROR':

@@ -122,6 +122,13 @@ export function buildMockNursingFlowsheetDocument(args: {
             radiationWhere: '',
             aggravatingFactors: 'Movement',
             interventionGiven: 'PRN analgesic per protocol',
+            responseToIntervention: 'Partial Relief',
+            reassessmentPriority: 'routine',
+            reassessmentDue: (() => {
+                const d = new Date();
+                d.setMinutes(d.getMinutes() + 240);
+                return d;
+            })(),
         },
         musculoskeletal: {
             mobilityStatus: 'Bed Rest',

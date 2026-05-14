@@ -1,8 +1,5 @@
 import { Button } from 'primereact/button';
-import { Calendar } from 'primereact/calendar';
 import { Checkbox } from 'primereact/checkbox';
-import { Dropdown } from 'primereact/dropdown';
-import { InputText } from 'primereact/inputtext';
 import { Divider } from 'primereact/divider';
 import {
     IV_ACCESS_TYPE_OPTIONS,
@@ -11,6 +8,7 @@ import {
 } from '../constants/clinicalOptions';
 import type { IvAccessLine } from '../types/nursingFlowsheet.types';
 import { useNursingFlowsheet } from '../state/NursingFlowsheetContext';
+import { FlowsheetLabeledDropdown, FlowsheetOutlinedCalendar, FlowsheetOutlinedTextInput } from './FlowsheetStyledFields';
 
 function newLine(): IvAccessLine {
     return {
@@ -72,52 +70,52 @@ export function IvAccessTable() {
                         <tbody>
                             {lines.map((row, idx) => (
                                 <tr key={row.id} className="border-b border-gray-100 dark:border-white/5">
-                                    <td className="px-1 py-0.5 align-middle">
-                                        <Dropdown
-                                            value={row.accessType}
+                                    <td className="px-1 py-1 align-top">
+                                        <FlowsheetLabeledDropdown
+                                            fieldId={`iv-type-${row.id}`}
+                                            label="Access type"
                                             options={IV_ACCESS_TYPE_OPTIONS}
-                                            onChange={(e) => update(idx, { accessType: e.value ?? '' })}
-                                            className="w-full !text-[11px]"
+                                            value={row.accessType}
+                                            onChange={(v) => update(idx, { accessType: String(v) })}
                                             disabled={isChartLocked}
-                                            placeholder="Type"
                                         />
                                     </td>
-                                    <td className="px-1 py-0.5 align-middle">
-                                        <InputText
+                                    <td className="px-1 py-0.5 align-top">
+                                        <FlowsheetOutlinedTextInput
+                                            fieldId={`iv-site-${row.id}`}
+                                            label="Site location"
                                             value={row.siteLocation}
-                                            onChange={(e) => update(idx, { siteLocation: e.target.value })}
-                                            className="w-full !text-[11px]"
+                                            onChange={(v) => update(idx, { siteLocation: v })}
                                             disabled={isChartLocked}
                                             placeholder="e.g. R antecubital"
                                         />
                                     </td>
-                                    <td className="px-1 py-0.5 align-middle">
-                                        <Dropdown
-                                            value={row.gaugeFrench}
+                                    <td className="px-1 py-1 align-top">
+                                        <FlowsheetLabeledDropdown
+                                            fieldId={`iv-gf-${row.id}`}
+                                            label="Gauge / Fr"
                                             options={IV_GAUGE_FRENCH_OPTIONS}
-                                            onChange={(e) => update(idx, { gaugeFrench: e.value ?? '' })}
-                                            className="w-full !text-[11px]"
+                                            value={row.gaugeFrench}
+                                            onChange={(v) => update(idx, { gaugeFrench: String(v) })}
                                             disabled={isChartLocked}
                                         />
                                     </td>
-                                    <td className="px-1 py-0.5 align-middle">
-                                        <Calendar
+                                    <td className="px-1 py-1 align-top">
+                                        <FlowsheetOutlinedCalendar
+                                            fieldId={`iv-ins-${row.id}`}
+                                            label="Insertion"
                                             value={row.insertionDate}
-                                            onChange={(e) => update(idx, { insertionDate: (e.value as Date) ?? null })}
-                                            dateFormat="mm/dd/yy"
-                                            className="w-[132px] max-w-full"
-                                            inputClassName="!text-[11px]"
+                                            onChange={(v) => update(idx, { insertionDate: v })}
                                             disabled={isChartLocked}
-                                            panelClassName="nfs-flowsheet-cal-panel"
-                                            panelStyle={{ maxWidth: 'min(22rem, calc(100vw - 1.5rem))', width: 'min(22rem, calc(100vw - 1.5rem))' }}
                                         />
                                     </td>
-                                    <td className="px-1 py-0.5 align-middle">
-                                        <Dropdown
-                                            value={row.siteCondition}
+                                    <td className="px-1 py-1 align-top">
+                                        <FlowsheetLabeledDropdown
+                                            fieldId={`iv-site-${row.id}`}
+                                            label="Site condition"
                                             options={IV_SITE_CONDITION_OPTIONS}
-                                            onChange={(e) => update(idx, { siteCondition: e.value ?? '' })}
-                                            className="w-full !text-[11px]"
+                                            value={row.siteCondition}
+                                            onChange={(v) => update(idx, { siteCondition: String(v) })}
                                             disabled={isChartLocked}
                                         />
                                     </td>

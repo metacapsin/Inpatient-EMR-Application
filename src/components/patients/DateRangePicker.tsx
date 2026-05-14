@@ -1,4 +1,5 @@
 import { cn } from '../../lib/utils';
+import { NOTCHED_COMPACT_LABEL_CLASS } from '../../lib/notchedFieldLabels';
 import { format } from 'date-fns';
 import { Calendar } from 'lucide-react';
 import { useId, useRef } from 'react';
@@ -64,7 +65,7 @@ export function DateRangePicker({
   };
 
   return (
-    <div className={cn('relative min-w-[260px]', className)}>
+    <div className={cn('relative isolate min-w-[260px]', className)}>
       <div
         className={cn(
           'flex h-8 max-h-[32px] overflow-hidden rounded-lg border border-primary-200 bg-white shadow-sm',
@@ -107,10 +108,7 @@ export function DateRangePicker({
 
       <label
         htmlFor={id}
-        className={cn(
-          'absolute left-3 top-0 z-10 -translate-y-1/2 cursor-pointer bg-white px-1 text-xs font-bold text-dark',
-          'dark:bg-[#141210] dark:text-gray-200'
-        )}
+        className={NOTCHED_COMPACT_LABEL_CLASS}
       >
         {label}
       </label>

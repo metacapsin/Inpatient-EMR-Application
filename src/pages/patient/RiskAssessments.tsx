@@ -6,6 +6,11 @@ import { usePatientId } from '../../hooks/usePatientId';
 import { riskAssessmentAPI } from '../../services/api';
 import AppButton from '../../components/ui/AppButton';
 import NewDropdown from '../../components/ui/NewDropdown';
+import {
+    NOTCHED_DATE_LABEL_OVERLAY_CLASS,
+    NOTCHED_FIELD_FRAME_CLASS,
+    NOTCHED_FIELD_LABEL_OVERLAY_CLASS,
+} from '../../lib/notchedFieldLabels';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -60,10 +65,6 @@ const RADIO_INDICATOR_BASE =
     'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border bg-white dark:bg-[#141210]';
 const RADIO_INDICATOR_ACTIVE = 'border-primary';
 const RADIO_INDICATOR_IDLE = 'border-gray-300 dark:border-gray-600';
-const APPOINTMENT_FLOAT_LABEL =
-    'pointer-events-none absolute left-3 top-0 z-10 -translate-y-1/2 bg-white px-1 text-[12px] font-medium text-gray-500 dark:bg-[#141210] dark:text-gray-400';
-const APPOINTMENT_FIELD_FRAME =
-    'relative rounded-lg border border-gray-200/70 bg-white shadow-sm transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 dark:border-gray-600 dark:bg-[#141210]';
 const APPOINTMENT_FIELD_INPUT =
     'h-10 w-full border-0 bg-transparent px-3 pb-2 pt-[1.125rem] text-[14px] font-medium leading-tight text-gray-900 outline-none ring-0 placeholder:text-gray-400 dark:text-gray-100 dark:placeholder:text-gray-500';
 const APPOINTMENT_FIELD_INPUT_TIGHT =
@@ -74,8 +75,6 @@ const APPOINTMENT_CALENDAR_CLASS =
     'flex h-8 max-h-[32px] w-full overflow-hidden rounded-lg border border-primary-200 bg-white shadow-sm dark:border-primary-700 dark:bg-[#141210] [&_.p-button]:!h-8 [&_.p-button]:!max-h-[32px] [&_.p-button]:!w-10 [&_.p-button]:!shrink-0 [&_.p-button]:!rounded-none [&_.p-button]:!rounded-r-lg [&_.p-button]:!border-0 [&_.p-button]:!bg-primary [&_.p-button]:!px-0 [&_.p-button]:!text-white [&_.p-button]:!shadow-none [&_.p-button]:hover:!bg-primary-600 [&_.p-button-icon]:!h-3.5 [&_.p-button-icon]:!w-3.5';
 const APPOINTMENT_CALENDAR_INPUT =
     '!h-8 !min-h-0 !max-h-[32px] !min-w-0 !flex-1 !rounded-none !border-0 !bg-transparent !py-0 !pl-2.5 !pr-1.5 !text-xs !font-normal !leading-8 !text-slate-700 !shadow-none !outline-none !ring-0 placeholder:!text-slate-400 focus:!shadow-none focus:!outline-none focus:!ring-0 dark:!text-gray-200 dark:placeholder:!text-gray-500';
-const OUTLINED_DATE_LABEL =
-    'pointer-events-none absolute left-3 top-0 z-10 -translate-y-1/2 bg-white px-1 text-xs font-bold text-dark dark:bg-[#141210] dark:text-gray-200';
 
 const bradenTotal = (s: BradenScores) =>
     s.sensoryPerception + s.moisture + s.activity + s.mobility + s.nutrition + s.frictionShear;
@@ -824,8 +823,8 @@ const PainAssessment = ({ encounterId }: { encounterId: string | null }) => {
                         ))}
                     </svg>
                     <div className="flex-1">
-                        <div className={APPOINTMENT_FIELD_FRAME}>
-                            <span className={APPOINTMENT_FLOAT_LABEL}>Location</span>
+                        <div className={NOTCHED_FIELD_FRAME_CLASS}>
+                            <span className={NOTCHED_FIELD_LABEL_OVERLAY_CLASS}>Location</span>
                             <input
                                 type="text"
                                 value={data.location}
@@ -877,8 +876,8 @@ const PainAssessment = ({ encounterId }: { encounterId: string | null }) => {
 
             {/* 5. Intervention */}
             <div className="mb-5">
-                <div className={APPOINTMENT_FIELD_FRAME}>
-                    <span className={APPOINTMENT_FLOAT_LABEL}>Intervention Given</span>
+                <div className={NOTCHED_FIELD_FRAME_CLASS}>
+                    <span className={NOTCHED_FIELD_LABEL_OVERLAY_CLASS}>Intervention Given</span>
                     <textarea
                         rows={3}
                         value={data.intervention}
@@ -903,6 +902,7 @@ const PainAssessment = ({ encounterId }: { encounterId: string | null }) => {
                         value={data.response}
                         placeholder="Select..."
                         onChange={(value) => set('response', String(value) as PainRelief)}
+                        appendMenuToBody
                     />
                 </div>
             </div>
@@ -934,8 +934,8 @@ const PainAssessment = ({ encounterId }: { encounterId: string | null }) => {
                             </button>
                         ))}
                     </div>
-                    <div className="relative w-full min-w-[260px] sm:w-[340px]">
-                        <span className={OUTLINED_DATE_LABEL}>Re-assessment Due</span>
+                    <div className="relative isolate w-full min-w-[260px] sm:w-[340px]">
+                        <span className={NOTCHED_DATE_LABEL_OVERLAY_CLASS}>Re-assessment Due</span>
                         <Calendar
                             value={parseLocalDateTime(data.reassessmentDue)}
                             onChange={(e) => {
@@ -951,7 +951,7 @@ const PainAssessment = ({ encounterId }: { encounterId: string | null }) => {
                             className={APPOINTMENT_CALENDAR_CLASS}
                             inputClassName={APPOINTMENT_CALENDAR_INPUT}
                             panelClassName="risk-assessment-cal-panel"
-                            panelStyle={{ maxWidth: 'min(21rem, calc(100vw - 1.5rem))', width: 'min(21rem, calc(100vw - 1.5rem))' }}
+                            panelStyle={{ maxWidth: 'min(17rem, calc(100vw - 1.5rem))', width: 'min(17rem, calc(100vw - 1.5rem))' }}
                         />
                     </div>
                 </div>

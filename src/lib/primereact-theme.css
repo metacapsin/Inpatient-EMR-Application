@@ -13,23 +13,340 @@
 }
 
 .nursing-flowsheet-root .p-accordion .p-accordion-header .p-accordion-header-link {
-    padding: 0.45rem 0.75rem;
-    border-radius: 0.375rem;
-    background: linear-gradient(to bottom, rgb(255 255 255 / 0.92), rgb(249 250 251 / 0.95));
-    border: 1px solid rgb(229 231 235 / 0.9);
+    padding: 0.5rem 0.85rem;
+    border-radius: 0.5rem;
+    background: linear-gradient(to bottom, rgb(255 255 255 / 0.96), rgb(248 249 250 / 0.98));
+    border: 1px solid rgb(220 223 230 / 0.95);
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.8) inset;
 }
 
 .dark .nursing-flowsheet-root .p-accordion .p-accordion-header .p-accordion-header-link {
-    background: linear-gradient(to bottom, rgb(36 33 30 / 0.95), rgb(24 22 20 / 0.98));
-    border-color: rgb(255 255 255 / 0.08);
+    background: linear-gradient(to bottom, rgb(38 35 32 / 0.98), rgb(24 22 20 / 0.99));
+    border-color: rgb(255 255 255 / 0.1);
+    box-shadow: none;
 }
 
 .nursing-flowsheet-root .p-accordion .p-accordion-header:not(.p-disabled).p-highlight .p-accordion-header-link {
-    border-color: rgba(151, 112, 79, 0.35);
+    border-color: rgba(151, 112, 79, 0.42);
+    box-shadow: 0 0 0 1px rgba(151, 112, 79, 0.12);
 }
 
 .nursing-flowsheet-root .p-accordion .p-accordion-content {
-    padding: 0.5rem 0.65rem;
+    padding: 0.65rem 0.75rem 0.75rem;
+    overflow: visible;
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel {
+    z-index: 12000 !important;
+    border-radius: 0.75rem !important;
+    border: 1px solid rgb(229 231 235 / 0.95) !important;
+    background: rgb(255 255 255) !important;
+    box-shadow:
+        0 18px 44px -18px rgb(0 0 0 / 0.22),
+        0 0 0 1px rgb(0 0 0 / 0.04) !important;
+    padding: 0.25rem 0 !important;
+    overflow: visible;
+}
+
+.dark body .p-multiselect-panel.nfs-flowsheet-ms-panel {
+    border-color: rgb(255 255 255 / 0.12) !important;
+    background: rgb(20 18 16) !important;
+    box-shadow: 0 18px 44px -18px rgb(0 0 0 / 0.45), 0 0 0 1px rgb(0 0 0 / 0.2) !important;
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-header {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.45rem 0.5rem 0.35rem;
+    margin: 0 0.35rem 0.15rem;
+    border-radius: 0.5rem 0.5rem 0 0;
+    border-bottom: 1px solid rgb(235 233 228);
+    min-width: 0;
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-header .p-multiselect-select-all {
+    flex-shrink: 0;
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-header .p-checkbox {
+    flex-shrink: 0;
+    margin-right: 0.25rem;
+}
+
+.dark body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-header {
+    border-bottom-color: rgb(55 50 46);
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-header .p-checkbox .p-checkbox-box {
+    width: 1rem !important;
+    height: 1rem !important;
+    min-width: 1rem !important;
+    min-height: 1rem !important;
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-item {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.45rem;
+    border-radius: 0.5rem;
+    margin: 0.1rem 0.4rem;
+    padding: 0.4rem 0.65rem;
+    font-size: 0.875rem;
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-item.p-highlight {
+    background: rgb(235 228 216) !important;
+    color: rgb(55 48 40) !important;
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-item:not(.p-highlight):hover {
+    background: rgb(249 247 244) !important;
+}
+
+/* Item rows: global form `label { display:block }` should not collapse checkbox rows */
+body .p-multiselect-panel.nfs-flowsheet-ms-panel label {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.45rem !important;
+    margin-bottom: 0 !important;
+    width: 100%;
+    min-width: 0;
+    font-weight: 500;
+}
+
+/* Compact checkboxes — always show unchecked box; checked uses app primary brown */
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-checkbox {
+    width: 0.875rem !important;
+    height: 0.875rem !important;
+    flex-shrink: 0;
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-checkbox .p-checkbox-box {
+    width: 0.8125rem !important;
+    height: 0.8125rem !important;
+    min-width: 0.8125rem !important;
+    min-height: 0.8125rem !important;
+    border-radius: 0.125rem !important;
+    border-width: 1px !important;
+    border-style: solid !important;
+    border-color: rgb(186 176 164) !important;
+    background: rgb(255 255 255) !important;
+}
+
+.dark body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-checkbox .p-checkbox-box {
+    border-color: rgb(115 105 95) !important;
+    background: rgb(26 24 22) !important;
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-checkbox.p-highlight .p-checkbox-box {
+    background: rgb(151 112 79) !important;
+    border-color: rgb(118 86 60) !important;
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-checkbox.p-highlight .p-checkbox-icon {
+    color: rgb(255 255 255) !important;
+    font-size: 0.5rem !important;
+}
+
+.dark body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-item.p-highlight {
+    background: rgb(55 48 40) !important;
+    color: rgb(253 230 138) !important;
+}
+
+.dark body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-item:not(.p-highlight):hover {
+    background: rgb(40 36 32) !important;
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-filter-container {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgb(229 226 220);
+    background: rgb(250 249 247);
+}
+
+.dark body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-filter-container {
+    border-color: rgb(80 72 66);
+    background: rgb(30 27 25);
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-filter-container .p-multiselect-filter-icon {
+    flex-shrink: 0;
+    color: rgb(120 113 104);
+}
+
+.dark body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-filter-container .p-multiselect-filter-icon {
+    color: rgb(180 170 160);
+}
+
+/* Input carries class `p-multiselect-filter` (Prime); icon is a sibling after the input */
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-filter-container .p-inputtext.p-multiselect-filter {
+    flex: 1 1 auto;
+    min-width: 0 !important;
+    font-size: 0.8125rem !important;
+    padding: 0.35rem 0.45rem !important;
+    min-height: 2rem !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: rgb(55 48 40) !important;
+}
+
+.dark body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-filter-container .p-inputtext.p-multiselect-filter {
+    color: rgb(243 244 246) !important;
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-filter-container .p-inputtext.p-multiselect-filter::placeholder {
+    color: rgb(100 93 84) !important;
+    opacity: 1;
+}
+
+.dark body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-filter-container .p-inputtext.p-multiselect-filter::placeholder {
+    color: rgb(156 150 142) !important;
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-items-wrapper {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(151, 112, 79, 0.45) rgb(245 243 240);
+}
+
+.dark body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-items-wrapper {
+    scrollbar-color: rgba(251, 191, 36, 0.35) rgb(28 26 24);
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-items-wrapper::-webkit-scrollbar {
+    width: 6px;
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-items-wrapper::-webkit-scrollbar-thumb {
+    background: rgba(151, 112, 79, 0.45);
+    border-radius: 999px;
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-items-wrapper::-webkit-scrollbar-track {
+    background: rgb(248 246 243);
+    border-radius: 999px;
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-close {
+    flex-shrink: 0;
+    align-self: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.375rem;
+    color: rgb(107 100 92);
+}
+
+body .p-multiselect-panel.nfs-flowsheet-ms-panel .p-multiselect-close:hover {
+    background: rgb(243 241 236);
+    color: rgb(55 48 40);
+}
+
+.nursing-flowsheet-root .p-checkbox:not(.p-disabled) {
+    cursor: pointer;
+}
+
+.nursing-flowsheet-root .p-checkbox .p-checkbox-box {
+    width: 1.0625rem;
+    height: 1.0625rem;
+    min-width: 1.0625rem;
+    min-height: 1.0625rem;
+    border-radius: 0.2rem;
+    border-width: 1px;
+    border-color: rgb(186 176 164);
+    background: rgb(255 255 255);
+    transition:
+        border-color 0.15s ease,
+        background-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+.dark .nursing-flowsheet-root .p-checkbox .p-checkbox-box {
+    border-color: rgb(115 105 95);
+    background: rgb(26 24 22);
+}
+
+.nursing-flowsheet-root .p-checkbox:not(.p-disabled):hover .p-checkbox-box {
+    border-color: rgba(151, 112, 79, 0.55);
+    box-shadow: 0 0 0 2px rgba(151, 112, 79, 0.12);
+}
+
+.nursing-flowsheet-root .p-checkbox.p-highlight .p-checkbox-box {
+    background: rgb(151 112 79);
+    border-color: rgb(118 86 60);
+}
+
+.nursing-flowsheet-root .p-checkbox.p-highlight .p-checkbox-icon {
+    color: rgb(255 255 255);
+}
+
+.nursing-flowsheet-root .p-checkbox .p-checkbox-input {
+    width: 1.5rem;
+    height: 1.5rem;
+    margin: -0.2rem;
+}
+
+.nursing-flowsheet-root .nfs-flowsheet-ms-shell.nfs-flowsheet-ms-chips .nfs-flowsheet-multiselect-trigger.p-multiselect {
+    align-items: center !important;
+}
+
+.nursing-flowsheet-root .nfs-flowsheet-ms-shell.nfs-flowsheet-ms-chips .nfs-flowsheet-multiselect-trigger .p-multiselect-label-container {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 0.2rem;
+    padding-top: 0.1875rem;
+    padding-bottom: 0.1875rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(151, 112, 79, 0.35) transparent;
+}
+
+.nursing-flowsheet-root .nfs-flowsheet-ms-shell.nfs-flowsheet-ms-chips .nfs-flowsheet-multiselect-trigger .p-multiselect-token {
+    margin: 0 !important;
+    padding: 0.1rem 0.35rem 0.1rem 0.45rem !important;
+    border-radius: 0.3125rem !important;
+    font-size: 0.625rem !important;
+    font-weight: 600 !important;
+    line-height: 1.2 !important;
+    background: rgb(243 240 235) !important;
+    color: rgb(75 58 42) !important;
+    border: 1px solid rgba(151, 112, 79, 0.28) !important;
+}
+
+.dark .nursing-flowsheet-root .nfs-flowsheet-ms-shell.nfs-flowsheet-ms-chips .nfs-flowsheet-multiselect-trigger .p-multiselect-token {
+    background: rgb(45 40 36) !important;
+    color: rgb(253 230 208) !important;
+    border: 1px solid rgba(251, 191, 36, 0.22) !important;
+}
+
+.nursing-flowsheet-root .nfs-flowsheet-ms-shell.nfs-flowsheet-ms-chips .nfs-flowsheet-multiselect-trigger .p-multiselect-token .p-multiselect-token-icon {
+    margin-left: 0.15rem !important;
+    font-size: 0.65rem !important;
+    color: rgb(120 88 62) !important;
+}
+
+.nursing-flowsheet-root .nfs-flowsheet-ms-shell.nfs-flowsheet-ms-chips .nfs-flowsheet-multiselect-trigger .p-multiselect-token .p-multiselect-token-icon:hover {
+    color: rgb(91 60 38) !important;
+}
+
+.nursing-flowsheet-root .nfs-flowsheet-ms-shell .nfs-flowsheet-multiselect-in-frame.p-multiselect.p-focus {
+    box-shadow: none !important;
+    border-color: transparent !important;
+}
+
+.nursing-flowsheet-root .nfs-flowsheet-ms-shell .nfs-flowsheet-multiselect-in-frame.p-multiselect:not(.p-disabled):hover {
+    border-color: transparent !important;
 }
 
 .nursing-flowsheet-root .p-inputtext,
@@ -37,8 +354,8 @@
 .nursing-flowsheet-root .p-dropdown,
 .nursing-flowsheet-root .p-multiselect {
     min-height: 2rem;
-    padding-top: 0.25rem;
-    padding-bottom: 0.25rem;
+    padding-top: 0.1875rem;
+    padding-bottom: 0.1875rem;
 }
 
 /* Premium field chrome (dense clinical + refined edges) */
@@ -95,22 +412,115 @@ body .p-datepicker:not(.p-datepicker-inline) {
         0 0 0 1px rgb(0 0 0 / 0.06);
 }
 
-/* Nursing flowsheet: overlay panel width (Prime default can span ~full viewport) */
+/* Outlined shell: borderless Prime multiselect inside notched frame — fixed 32px row, match NewDropdown typography */
+.nursing-flowsheet-root .nfs-flowsheet-ms-shell {
+    display: flex;
+    align-items: center;
+    height: 2rem;
+    max-height: 2rem;
+    box-sizing: border-box;
+}
+
+.nursing-flowsheet-root .nfs-flowsheet-ms-shell .nfs-flowsheet-multiselect-trigger.p-multiselect {
+    min-height: 0 !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    width: 100%;
+    align-items: center;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+.nursing-flowsheet-root .nfs-flowsheet-ms-shell .nfs-flowsheet-multiselect-trigger .p-multiselect-label-container {
+    min-height: 0 !important;
+    height: 100%;
+    flex: 1 1 0%;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.nursing-flowsheet-root .nfs-flowsheet-ms-shell .nfs-flowsheet-multiselect-trigger .p-multiselect-label,
+.nursing-flowsheet-root .nfs-flowsheet-ms-shell .nfs-flowsheet-multiselect-trigger .p-multiselect-label.p-placeholder {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.75rem !important;
+    line-height: 1.25rem !important;
+    font-weight: 500;
+    padding-top: 0.125rem;
+    padding-bottom: 0.125rem;
+}
+
+.nursing-flowsheet-root .nfs-flowsheet-ms-shell .nfs-flowsheet-multiselect-trigger .p-multiselect-label.p-placeholder {
+    color: rgb(156 163 175) !important;
+}
+
+.nursing-flowsheet-root .nfs-flowsheet-ms-shell .nfs-flowsheet-multiselect-trigger .p-multiselect-label:not(.p-placeholder) {
+    color: rgb(17 24 39);
+}
+
+.dark .nursing-flowsheet-root .nfs-flowsheet-ms-shell .nfs-flowsheet-multiselect-trigger .p-multiselect-label.p-placeholder {
+    color: rgb(107 114 128) !important;
+}
+
+.nursing-flowsheet-root .nfs-flowsheet-ms-shell .nfs-flowsheet-multiselect-trigger .p-multiselect-trigger {
+    width: 1.75rem;
+    flex-shrink: 0;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: transparent;
+    color: rgb(156 163 175);
+}
+
+.nursing-flowsheet-root .nfs-flowsheet-ms-shell .nfs-flowsheet-multiselect-trigger .p-multiselect-trigger-icon {
+    width: 1rem !important;
+    height: 1rem !important;
+}
+
+.dark .nursing-flowsheet-root .nfs-flowsheet-ms-shell .nfs-flowsheet-multiselect-trigger .p-multiselect-label:not(.p-placeholder) {
+    color: rgb(243 244 246);
+}
+
+.nursing-flowsheet-root .nfs-flowsheet-multiselect-in-frame.p-multiselect,
+.nursing-flowsheet-root .nfs-flowsheet-multiselect-in-frame .p-multiselect-label-container {
+    border: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+}
+
+.nursing-flowsheet-root .nfs-flowsheet-outlined-num.p-inputnumber {
+    width: 100%;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+}
+
+.nursing-flowsheet-root .nfs-flowsheet-outlined-num .p-inputnumber-input {
+    width: 100%;
+}
 body .p-datepicker.nfs-flowsheet-cal-panel:not(.p-datepicker-inline),
 body .nfs-flowsheet-cal-panel.p-datepicker:not(.p-datepicker-inline) {
     min-width: 0 !important;
-    max-width: min(22rem, calc(100vw - 1.5rem)) !important;
-    width: min(22rem, calc(100vw - 1.5rem)) !important;
+    max-width: min(17rem, calc(100vw - 1.5rem)) !important;
+    width: min(17rem, calc(100vw - 1.5rem)) !important;
     box-sizing: border-box;
+    z-index: 12000 !important;
 }
 
 /* Risk assessment date/time picker: patient-list field chrome with compact Prime popup */
 body .p-datepicker.risk-assessment-cal-panel:not(.p-datepicker-inline),
 body .risk-assessment-cal-panel.p-datepicker:not(.p-datepicker-inline) {
     min-width: 0 !important;
-    width: min(21rem, calc(100vw - 1.5rem)) !important;
-    max-width: min(21rem, calc(100vw - 1.5rem)) !important;
+    width: min(17rem, calc(100vw - 1.5rem)) !important;
+    max-width: min(17rem, calc(100vw - 1.5rem)) !important;
     overflow: hidden;
+    z-index: 12000 !important;
     border: 1px solid rgb(229 231 235 / 0.95);
     border-radius: 0.25rem;
     background: rgb(255 255 255);

@@ -19,6 +19,10 @@ import { appointmentAPI } from '../../services/api';
 import { cn } from '../../lib/utils';
 import NewDropdown from '../ui/NewDropdown';
 import SearchableSelect from '../ui/SearchableSelect';
+import {
+  NOTCHED_FIELD_FRAME_CLASS,
+  NOTCHED_FIELD_LABEL_OVERLAY_CLASS,
+} from '../../lib/notchedFieldLabels';
 
 type DropdownOption = {
   id: string;
@@ -88,12 +92,6 @@ function parseSlots(payload: unknown): string[] {
     })
     .filter(Boolean);
 }
-
-const FORM_FLOAT_LABEL =
-  'pointer-events-none absolute left-3 top-0 z-10 -translate-y-1/2 bg-white px-1 text-[12px] font-medium text-gray-500 dark:bg-[#141210] dark:text-gray-400';
-
-const FORM_FIELD_FRAME =
-  'relative rounded-lg border border-gray-200/70 bg-white shadow-sm transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 dark:border-gray-600 dark:bg-[#141210]';
 
 const FORM_FIELD_INPUT =
   'h-10 w-full border-0 bg-transparent px-3 pb-2 pt-[1.125rem] text-[14px] font-medium text-gray-900 outline-none ring-0 placeholder:text-gray-400 dark:text-gray-100';
@@ -539,8 +537,8 @@ export default function BookAppointment() {
           </div>
 
           <div className="min-w-0">
-            <div className={FORM_FIELD_FRAME}>
-              <span className={FORM_FLOAT_LABEL}>Phone</span>
+            <div className={NOTCHED_FIELD_FRAME_CLASS}>
+              <span className={NOTCHED_FIELD_LABEL_OVERLAY_CLASS}>Phone</span>
               <input
                 type="tel"
                 className={FORM_FIELD_INPUT}
@@ -655,11 +653,11 @@ export default function BookAppointment() {
           <div className="mt-8 max-w-full md:max-w-xl">
             <div
               className={cn(
-                FORM_FIELD_FRAME,
+                NOTCHED_FIELD_FRAME_CLASS,
                 errors.otherReason && 'border-primary-600 focus-within:border-primary-600 focus-within:ring-primary/20'
               )}
             >
-              <span className={FORM_FLOAT_LABEL}>
+              <span className={NOTCHED_FIELD_LABEL_OVERLAY_CLASS}>
                 Other Reason <span className="text-primary-600">*</span>
               </span>
               <input
@@ -841,8 +839,8 @@ export default function BookAppointment() {
         ) : null}
 
         <div className="mt-10">
-          <div className={FORM_FIELD_FRAME}>
-            <span className={FORM_FLOAT_LABEL}>Notes (Optional)</span>
+          <div className={NOTCHED_FIELD_FRAME_CLASS}>
+            <span className={NOTCHED_FIELD_LABEL_OVERLAY_CLASS}>Notes (Optional)</span>
             <textarea
               className={FORM_TEXTAREA}
               placeholder="Add any notes for the doctor (optional)"

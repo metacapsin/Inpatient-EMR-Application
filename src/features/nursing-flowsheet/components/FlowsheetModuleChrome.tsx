@@ -34,7 +34,7 @@ export function FlowsheetModuleChrome({
 
     return (
         <div className="sticky top-0 z-20 border-b border-gray-200/90 bg-white/95 shadow-sm backdrop-blur-sm dark:border-white/10 dark:bg-[#141210]/95">
-            <div className="flex flex-wrap items-start justify-between gap-2 px-2 py-1.5 lg:px-3">
+            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2 px-3 py-2 lg:px-4">
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                     {loading && !patient ? (
                         <Skeleton width="16rem" height="1.25rem" className="!bg-gray-100 dark:!bg-white/10" />
@@ -68,7 +68,7 @@ export function FlowsheetModuleChrome({
                         </>
                     )}
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
                     <Button
                         type="button"
                         size="small"

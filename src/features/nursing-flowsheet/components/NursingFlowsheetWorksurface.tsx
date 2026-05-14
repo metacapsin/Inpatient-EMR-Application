@@ -1,17 +1,13 @@
 import { lazy, Suspense, useCallback, useState } from 'react';
 import { Accordion, AccordionTab } from 'primereact/accordion';
 import { Button } from 'primereact/button';
-import { Calendar } from 'primereact/calendar';
 import { Checkbox } from 'primereact/checkbox';
 import { Dialog } from 'primereact/dialog';
-import { Dropdown } from 'primereact/dropdown';
-import { InputText } from 'primereact/inputtext';
-import { InputNumber } from 'primereact/inputnumber';
-import { MultiSelect } from 'primereact/multiselect';
 import { Skeleton } from 'primereact/skeleton';
 import { Slider } from 'primereact/slider';
 import { Tag } from 'primereact/tag';
 import type { FacesheetPatient } from '../../../services/patient.service';
+import NewDropdown from '../../../components/ui/NewDropdown';
 import {
     ABDOMEN_APPEARANCE_OPTIONS,
     BEHAVIOR_OPTIONS,
@@ -35,6 +31,22 @@ import {
     URINE_COLOR_OPTIONS,
 } from '../constants/clinicalOptions';
 import { ClinicalField } from '../components/ClinicalField';
+import {
+    FlowsheetLabeledDropdown,
+    FlowsheetOutlinedCalendar,
+    FlowsheetOutlinedInputNumber,
+    FlowsheetOutlinedMultiSelect,
+    FlowsheetOutlinedTextInput,
+    NFS_OPTION_ACTIVE_CLASS,
+    NFS_OPTION_BASE_CLASS,
+    NFS_OPTION_IDLE_CLASS,
+    NFS_FLOAT_FIELD_LABEL,
+    NFS_SECTION_GRID_CLASS,
+    NFS_RADIO_INDICATOR_ACTIVE,
+    NFS_RADIO_INDICATOR_BASE,
+    NFS_RADIO_INDICATOR_IDLE,
+    reassessmentDueFromPriority,
+} from '../components/FlowsheetStyledFields';
 import { FlowsheetAmendDialog, FlowsheetCancelAmendButton } from '../components/FlowsheetAmendDialog';
 import { FlowsheetHistorySidebar } from '../components/FlowsheetHistorySidebar';
 import { FlowsheetModuleChrome } from '../components/FlowsheetModuleChrome';
@@ -119,7 +131,7 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
 
     const header = (title: string, idx: number) => (
         <div className="flex w-full items-center gap-2 pr-1" id={`nfs-acc-header-${idx}`}>
-            <span className="truncate text-left text-[12px] font-semibold tracking-tight text-gray-800 dark:text-gray-100">
+            <span className="truncate text-left text-[13px] font-bold tracking-tight text-gray-900 dark:text-gray-50">
                 {title}
             </span>
         </div>
@@ -168,74 +180,63 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                 <div className="mx-auto max-w-[1920px] px-2 py-2 lg:px-3">
                     <Accordion multiple activeIndex={activeIdx} onTabChange={onAccordionChange} className="!border-0 !bg-transparent">
                         <AccordionTab header={header('A · Shift info', 0)}>
-                            <div className="grid grid-cols-12 gap-x-2 gap-y-1">
+                            <div className="grid grid-cols-12 gap-x-2 gap-y-3 md:gap-y-0 [&>*]:min-w-0">
                                 <div className="col-span-12 md:col-span-3">
-                                    <ClinicalField fieldId="shift-date" label="Shift date" required error={err['shiftDate']}>
-                                        <Calendar
-                                            id="shift-date"
+                                    <ClinicalField fieldId="shift-date" label="Shift date" required error={err['shiftDate']} omitLabel>
+                                        <FlowsheetOutlinedCalendar
+                                            fieldId="shift-date"
+                                            label="Shift date"
                                             value={parseIsoDateOnly(d.shiftDate)}
-                                            onChange={(e) => {
-                                                const v = e.value as Date | null;
-                                                patchDocument({ shiftDate: v ? formatIsoDateOnly(v) : '' });
-                                            }}
+                                            onChange={(v) => patchDocument({ shiftDate: v ? formatIsoDateOnly(v) : '' })}
                                             disabled={isChartLocked}
-                                            className="w-full max-w-full"
-                                            inputClassName="!text-[12px]"
-                                            panelClassName="nfs-flowsheet-cal-panel"
-                                            panelStyle={{ maxWidth: 'min(22rem, calc(100vw - 1.5rem))', width: 'min(22rem, calc(100vw - 1.5rem))' }}
                                         />
                                     </ClinicalField>
                                 </div>
-                                <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="shift-type" label="Shift type" required error={err['shiftType']}>
-                                        <Dropdown
-                                            value={d.shiftType}
-                                            options={SHIFT_TYPE_OPTIONS}
-                                            onChange={(e) => patchDocument({ shiftType: e.value ?? '' })}
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                            placeholder="—"
-                                        />
-                                    </ClinicalField>
+                                <div className="col-span-12 md:col-span-3">
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="shift-type"
+                                        label="Shift type"
+                                        required
+                                        error={err['shiftType']}
+                                        options={SHIFT_TYPE_OPTIONS}
+                                        value={d.shiftType}
+                                        onChange={(v) => patchDocument({ shiftType: String(v) })}
+                                        disabled={isChartLocked}
+                                    />
                                 </div>
-                                <div className="col-span-12 md:col-span-5">
+                                <div className="col-span-12 md:col-span-3">
                                     <ClinicalField
                                         fieldId="assessed-by"
                                         label="Assessed by"
                                         required
                                         error={err['shiftInfo.primaryNurseDisplay']}
+                                        omitLabel
                                     >
-                                        <InputText
-                                            id="assessed-by"
+                                        <FlowsheetOutlinedTextInput
+                                            fieldId="assessed-by"
+                                            label="Assessed by"
                                             value={d.shiftInfo.primaryNurseDisplay}
-                                            onChange={(e) =>
-                                                patchDocument({ shiftInfo: { ...d.shiftInfo, primaryNurseDisplay: e.target.value } })
-                                            }
+                                            onChange={(v) => patchDocument({ shiftInfo: { ...d.shiftInfo, primaryNurseDisplay: v } })}
                                             disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
+                                            hasError={Boolean(err['shiftInfo.primaryNurseDisplay'])}
                                         />
                                     </ClinicalField>
                                 </div>
-                                <div className="col-span-12 md:col-span-6">
+                                <div className="col-span-12 md:col-span-3">
                                     <ClinicalField
                                         fieldId="assessed-at"
                                         label="Assessment date/time"
                                         required
                                         error={err['shiftInfo.assessedAt']}
+                                        omitLabel
                                     >
-                                        <Calendar
-                                            id="assessed-at"
+                                        <FlowsheetOutlinedCalendar
+                                            fieldId="assessed-at"
+                                            label="Assessment date/time"
                                             value={d.shiftInfo.assessedAt}
-                                            onChange={(e) =>
-                                                patchDocument({ shiftInfo: { ...d.shiftInfo, assessedAt: (e.value as Date) ?? null } })
-                                            }
+                                            onChange={(v) => patchDocument({ shiftInfo: { ...d.shiftInfo, assessedAt: v } })}
                                             showTime
-                                            hourFormat="12"
                                             disabled={isChartLocked}
-                                            className="w-full max-w-full"
-                                            inputClassName="!text-[12px]"
-                                            panelClassName="nfs-flowsheet-cal-panel"
-                                            panelStyle={{ maxWidth: 'min(22rem, calc(100vw - 1.5rem))', width: 'min(22rem, calc(100vw - 1.5rem))' }}
                                         />
                                     </ClinicalField>
                                 </div>
@@ -249,127 +250,124 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                         </AccordionTab>
 
                         <AccordionTab header={header('C · Cardiovascular', 2)}>
-                            <div className="grid grid-cols-12 gap-x-2 gap-y-1">
-                                <div className="col-span-12 md:col-span-2">
-                                    <ClinicalField fieldId="hr" label="Heart rate" abnormal={sev('cardiovascular.heartRate') !== 'normal'}>
-                                        <InputNumber
+                            <div className={NFS_SECTION_GRID_CLASS}>
+                                <div className="col-span-12 md:col-span-4">
+                                    <ClinicalField
+                                        fieldId="hr"
+                                        label="Heart rate"
+                                        abnormal={sev('cardiovascular.heartRate') !== 'normal'}
+                                        omitLabel
+                                    >
+                                        <FlowsheetOutlinedInputNumber
+                                            fieldId="hr"
+                                            label="Heart rate"
                                             value={d.cardiovascular.heartRate}
-                                            onValueChange={(e) =>
-                                                patchDocument({ cardiovascular: { ...d.cardiovascular, heartRate: e.value ?? null } })
+                                            onValueChange={(v) =>
+                                                patchDocument({ cardiovascular: { ...d.cardiovascular, heartRate: v } })
                                             }
                                             min={30}
                                             max={220}
                                             disabled={isChartLocked}
-                                            className="w-full"
-                                            inputClassName="!text-[12px]"
                                             useGrouping={false}
+                                            abnormal={sev('cardiovascular.heartRate') !== 'normal'}
                                         />
                                     </ClinicalField>
                                 </div>
                                 <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="rhythm" label="Heart rhythm">
-                                        <Dropdown
-                                            value={d.cardiovascular.heartRhythm}
-                                            options={HEART_RHYTHM_OPTIONS}
-                                            onChange={(e) => patchDocument({ cardiovascular: { ...d.cardiovascular, heartRhythm: e.value } })}
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                        />
-                                    </ClinicalField>
-                                </div>
-                                <div className="col-span-12 md:col-span-2">
-                                    <ClinicalField fieldId="pulse-ra" label="Peripheral pulses (RA)">
-                                        <Dropdown
-                                            value={d.cardiovascular.peripheralPulseRA}
-                                            options={PERIPHERAL_PULSE_GRADE_OPTIONS}
-                                            onChange={(e) =>
-                                                patchDocument({ cardiovascular: { ...d.cardiovascular, peripheralPulseRA: e.value ?? '' } })
-                                            }
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                            placeholder="—"
-                                        />
-                                    </ClinicalField>
-                                </div>
-                                <div className="col-span-12 md:col-span-2">
-                                    <ClinicalField fieldId="pulse-la" label="Peripheral pulses (LA)">
-                                        <Dropdown
-                                            value={d.cardiovascular.peripheralPulseLA}
-                                            options={PERIPHERAL_PULSE_GRADE_OPTIONS}
-                                            onChange={(e) =>
-                                                patchDocument({ cardiovascular: { ...d.cardiovascular, peripheralPulseLA: e.value ?? '' } })
-                                            }
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                            placeholder="—"
-                                        />
-                                    </ClinicalField>
-                                </div>
-                                <div className="col-span-12 md:col-span-2">
-                                    <ClinicalField fieldId="pulse-rl" label="Peripheral pulses (RL)">
-                                        <Dropdown
-                                            value={d.cardiovascular.peripheralPulseRL}
-                                            options={PERIPHERAL_PULSE_GRADE_OPTIONS}
-                                            onChange={(e) =>
-                                                patchDocument({ cardiovascular: { ...d.cardiovascular, peripheralPulseRL: e.value ?? '' } })
-                                            }
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                            placeholder="—"
-                                        />
-                                    </ClinicalField>
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="rhythm"
+                                        label="Heart rhythm"
+                                        options={HEART_RHYTHM_OPTIONS}
+                                        value={d.cardiovascular.heartRhythm}
+                                        onChange={(v) => patchDocument({ cardiovascular: { ...d.cardiovascular, heartRhythm: String(v) } })}
+                                        disabled={isChartLocked}
+                                    />
                                 </div>
                                 <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="cap-refill" label="Capillary refill" abnormal={sev('cardiovascular.capillaryRefill') !== 'normal'}>
-                                        <Dropdown
-                                            value={d.cardiovascular.capillaryRefill}
-                                            options={CAPILLARY_REFILL_OPTIONS}
-                                            onChange={(e) =>
-                                                patchDocument({ cardiovascular: { ...d.cardiovascular, capillaryRefill: e.value ?? '' } })
-                                            }
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                            placeholder="—"
-                                        />
-                                    </ClinicalField>
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="cap-refill"
+                                        label="Capillary refill"
+                                        abnormal={sev('cardiovascular.capillaryRefill') !== 'normal'}
+                                        options={CAPILLARY_REFILL_OPTIONS}
+                                        value={d.cardiovascular.capillaryRefill}
+                                        onChange={(v) =>
+                                            patchDocument({ cardiovascular: { ...d.cardiovascular, capillaryRefill: String(v) } })
+                                        }
+                                        disabled={isChartLocked}
+                                    />
                                 </div>
                                 <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="edema-dist" label="Edema">
-                                        <Dropdown
-                                            value={d.cardiovascular.edemaDistribution}
-                                            options={EDEMA_DISTRIBUTION_OPTIONS}
-                                            onChange={(e) =>
-                                                patchDocument({
-                                                    cardiovascular: {
-                                                        ...d.cardiovascular,
-                                                        edemaDistribution: e.value ?? '',
-                                                        edemaGrade:
-                                                            e.value === 'None' ? '' : d.cardiovascular.edemaGrade,
-                                                    },
-                                                })
-                                            }
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                            placeholder="—"
-                                        />
-                                    </ClinicalField>
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="pulse-ra"
+                                        label="Peripheral pulses (RA)"
+                                        options={PERIPHERAL_PULSE_GRADE_OPTIONS}
+                                        value={d.cardiovascular.peripheralPulseRA}
+                                        onChange={(v) =>
+                                            patchDocument({ cardiovascular: { ...d.cardiovascular, peripheralPulseRA: String(v) } })
+                                        }
+                                        disabled={isChartLocked}
+                                    />
+                                </div>
+                                <div className="col-span-12 md:col-span-4">
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="pulse-la"
+                                        label="Peripheral pulses (LA)"
+                                        options={PERIPHERAL_PULSE_GRADE_OPTIONS}
+                                        value={d.cardiovascular.peripheralPulseLA}
+                                        onChange={(v) =>
+                                            patchDocument({ cardiovascular: { ...d.cardiovascular, peripheralPulseLA: String(v) } })
+                                        }
+                                        disabled={isChartLocked}
+                                    />
+                                </div>
+                                <div className="col-span-12 md:col-span-4">
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="pulse-rl"
+                                        label="Peripheral pulses (RL)"
+                                        options={PERIPHERAL_PULSE_GRADE_OPTIONS}
+                                        value={d.cardiovascular.peripheralPulseRL}
+                                        onChange={(v) =>
+                                            patchDocument({ cardiovascular: { ...d.cardiovascular, peripheralPulseRL: String(v) } })
+                                        }
+                                        disabled={isChartLocked}
+                                    />
+                                </div>
+                                <div className="col-span-12 md:col-span-4">
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="edema-dist"
+                                        label="Edema"
+                                        options={EDEMA_DISTRIBUTION_OPTIONS}
+                                        value={d.cardiovascular.edemaDistribution}
+                                        onChange={(v) => {
+                                            const s = String(v);
+                                            patchDocument({
+                                                cardiovascular: {
+                                                    ...d.cardiovascular,
+                                                    edemaDistribution: s,
+                                                    edemaGrade: s === 'None' ? '' : d.cardiovascular.edemaGrade,
+                                                },
+                                            });
+                                        }}
+                                        disabled={isChartLocked}
+                                    />
                                 </div>
                                 {showEdemaGrade ? (
                                     <div className="col-span-12 md:col-span-4">
-                                        <ClinicalField fieldId="edema-grade" label="Edema grade (pitting)">
-                                            <Dropdown
-                                                value={d.cardiovascular.edemaGrade}
-                                                options={EDEMA_GRADE_OPTIONS}
-                                                onChange={(e) =>
-                                                    patchDocument({ cardiovascular: { ...d.cardiovascular, edemaGrade: e.value ?? '' } })
-                                                }
-                                                disabled={isChartLocked}
-                                                className="w-full !text-[12px]"
-                                                placeholder="—"
-                                            />
-                                        </ClinicalField>
+                                        <FlowsheetLabeledDropdown
+                                            fieldId="edema-grade"
+                                            label="Edema grade (pitting)"
+                                            options={EDEMA_GRADE_OPTIONS}
+                                            value={d.cardiovascular.edemaGrade}
+                                            onChange={(v) =>
+                                                patchDocument({ cardiovascular: { ...d.cardiovascular, edemaGrade: String(v) } })
+                                            }
+                                            disabled={isChartLocked}
+                                        />
                                     </div>
-                                ) : null}
+                                ) : (
+                                    <div className="col-span-12 md:col-span-4 max-md:hidden" aria-hidden />
+                                )}
+                                <div className="col-span-12 md:col-span-4 max-md:hidden" aria-hidden />
                             </div>
                         </AccordionTab>
 
@@ -380,75 +378,97 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                         </AccordionTab>
 
                         <AccordionTab header={header('E · GI / Abdomen', 4)}>
-                            <div className="grid grid-cols-12 gap-x-2 gap-y-1">
-                                <div className="col-span-12 md:col-span-3">
-                                    <ClinicalField fieldId="bowel-ruq" label="Bowel sounds (RUQ)">
-                                        <Dropdown
-                                            value={d.gastrointestinal.bowelSoundsRuq}
-                                            options={BOWEL_SOUND_OPTIONS}
-                                            onChange={(e) =>
-                                                patchDocument({ gastrointestinal: { ...d.gastrointestinal, bowelSoundsRuq: e.value } })
+                            <div className={NFS_SECTION_GRID_CLASS}>
+                                <div className="col-span-12 md:col-span-4">
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="bowel-ruq"
+                                        label="Bowel sounds (RUQ)"
+                                        options={BOWEL_SOUND_OPTIONS}
+                                        value={d.gastrointestinal.bowelSoundsRuq}
+                                        onChange={(v) =>
+                                            patchDocument({ gastrointestinal: { ...d.gastrointestinal, bowelSoundsRuq: String(v) } })
+                                        }
+                                        disabled={isChartLocked}
+                                    />
+                                </div>
+                                <div className="col-span-12 md:col-span-4">
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="bowel-luq"
+                                        label="Bowel sounds (LUQ)"
+                                        options={BOWEL_SOUND_OPTIONS}
+                                        value={d.gastrointestinal.bowelSoundsLuq}
+                                        onChange={(v) =>
+                                            patchDocument({ gastrointestinal: { ...d.gastrointestinal, bowelSoundsLuq: String(v) } })
+                                        }
+                                        disabled={isChartLocked}
+                                    />
+                                </div>
+                                <div className="col-span-12 md:col-span-4">
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="bowel-rlq"
+                                        label="Bowel sounds (RLQ)"
+                                        options={BOWEL_SOUND_OPTIONS}
+                                        value={d.gastrointestinal.bowelSoundsRlq}
+                                        onChange={(v) =>
+                                            patchDocument({ gastrointestinal: { ...d.gastrointestinal, bowelSoundsRlq: String(v) } })
+                                        }
+                                        disabled={isChartLocked}
+                                    />
+                                </div>
+                                <div className="col-span-12 md:col-span-4">
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="bowel-llq"
+                                        label="Bowel sounds (LLQ)"
+                                        options={BOWEL_SOUND_OPTIONS}
+                                        value={d.gastrointestinal.bowelSoundsLlq}
+                                        onChange={(v) =>
+                                            patchDocument({ gastrointestinal: { ...d.gastrointestinal, bowelSoundsLlq: String(v) } })
+                                        }
+                                        disabled={isChartLocked}
+                                    />
+                                </div>
+                                <div className="col-span-12 md:col-span-4">
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="abd-app"
+                                        label="Abdomen appearance"
+                                        options={ABDOMEN_APPEARANCE_OPTIONS}
+                                        value={d.gastrointestinal.abdomenAppearance}
+                                        onChange={(v) =>
+                                            patchDocument({ gastrointestinal: { ...d.gastrointestinal, abdomenAppearance: String(v) } })
+                                        }
+                                        disabled={isChartLocked}
+                                    />
+                                </div>
+                                <div className="col-span-12 md:col-span-4">
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="diet-tol"
+                                        label="Diet tolerance"
+                                        options={DIET_TOLERANCE_OPTIONS}
+                                        value={d.gastrointestinal.dietTolerance}
+                                        onChange={(v) =>
+                                            patchDocument({ gastrointestinal: { ...d.gastrointestinal, dietTolerance: String(v) } })
+                                        }
+                                        disabled={isChartLocked}
+                                    />
+                                </div>
+                                <div className="col-span-12 md:col-span-4">
+                                    <ClinicalField fieldId="lbm" label="Last bowel movement" omitLabel>
+                                        <FlowsheetOutlinedCalendar
+                                            fieldId="lbm"
+                                            label="Last bowel movement"
+                                            value={d.gastrointestinal.lastBm}
+                                            onChange={(v) =>
+                                                patchDocument({
+                                                    gastrointestinal: { ...d.gastrointestinal, lastBm: v },
+                                                })
                                             }
+                                            showTime
                                             disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
                                         />
                                     </ClinicalField>
                                 </div>
-                                <div className="col-span-12 md:col-span-3">
-                                    <ClinicalField fieldId="bowel-luq" label="Bowel sounds (LUQ)">
-                                        <Dropdown
-                                            value={d.gastrointestinal.bowelSoundsLuq}
-                                            options={BOWEL_SOUND_OPTIONS}
-                                            onChange={(e) =>
-                                                patchDocument({ gastrointestinal: { ...d.gastrointestinal, bowelSoundsLuq: e.value } })
-                                            }
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                        />
-                                    </ClinicalField>
-                                </div>
-                                <div className="col-span-12 md:col-span-3">
-                                    <ClinicalField fieldId="bowel-rlq" label="Bowel sounds (RLQ)">
-                                        <Dropdown
-                                            value={d.gastrointestinal.bowelSoundsRlq}
-                                            options={BOWEL_SOUND_OPTIONS}
-                                            onChange={(e) =>
-                                                patchDocument({ gastrointestinal: { ...d.gastrointestinal, bowelSoundsRlq: e.value } })
-                                            }
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                        />
-                                    </ClinicalField>
-                                </div>
-                                <div className="col-span-12 md:col-span-3">
-                                    <ClinicalField fieldId="bowel-llq" label="Bowel sounds (LLQ)">
-                                        <Dropdown
-                                            value={d.gastrointestinal.bowelSoundsLlq}
-                                            options={BOWEL_SOUND_OPTIONS}
-                                            onChange={(e) =>
-                                                patchDocument({ gastrointestinal: { ...d.gastrointestinal, bowelSoundsLlq: e.value } })
-                                            }
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                        />
-                                    </ClinicalField>
-                                </div>
-                                <div className="col-span-12 md:col-span-6">
-                                    <ClinicalField fieldId="abd-app" label="Abdomen appearance">
-                                        <Dropdown
-                                            value={d.gastrointestinal.abdomenAppearance}
-                                            options={ABDOMEN_APPEARANCE_OPTIONS}
-                                            onChange={(e) =>
-                                                patchDocument({ gastrointestinal: { ...d.gastrointestinal, abdomenAppearance: e.value } })
-                                            }
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                            placeholder="—"
-                                        />
-                                    </ClinicalField>
-                                </div>
-                                <div className="col-span-12 md:col-span-6 flex flex-col gap-1">
-                                    <div className="flex items-center gap-2">
+                                <div className="col-span-12 md:col-span-8 flex flex-col gap-1">
+                                    <div className="flex items-center gap-2.5 py-0.5">
                                         <Checkbox
                                             inputId="nausea-vom"
                                             checked={d.gastrointestinal.nauseaOrVomiting}
@@ -463,92 +483,73 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                                 })
                                             }
                                         />
-                                        <label htmlFor="nausea-vom" className="text-[11px] font-medium">
+                                        <label htmlFor="nausea-vom" className="text-xs font-medium text-gray-800 dark:text-gray-200 leading-snug">
                                             Nausea / vomiting
                                         </label>
                                     </div>
                                     {d.gastrointestinal.nauseaOrVomiting ? (
-                                        <ClinicalField fieldId="nv-detail" label="Episodes / last emesis">
-                                            <InputText
+                                        <ClinicalField fieldId="nv-detail" label="Episodes / last emesis" omitLabel>
+                                            <FlowsheetOutlinedTextInput
+                                                fieldId="nv-detail"
+                                                label="Episodes / last emesis"
                                                 value={d.gastrointestinal.nauseaVomitingDetail}
-                                                onChange={(e) =>
+                                                onChange={(v) =>
                                                     patchDocument({
-                                                        gastrointestinal: { ...d.gastrointestinal, nauseaVomitingDetail: e.target.value },
+                                                        gastrointestinal: { ...d.gastrointestinal, nauseaVomitingDetail: v },
                                                     })
                                                 }
                                                 disabled={isChartLocked}
-                                                className="w-full !text-[12px]"
                                                 placeholder="Count, last emesis time…"
                                             />
                                         </ClinicalField>
                                     ) : null}
                                 </div>
-                                <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="lbm" label="Last bowel movement">
-                                        <Calendar
-                                            value={d.gastrointestinal.lastBm}
-                                            onChange={(e) =>
-                                                patchDocument({
-                                                    gastrointestinal: { ...d.gastrointestinal, lastBm: (e.value as Date) ?? null },
-                                                })
-                                            }
-                                            showTime
-                                            hourFormat="12"
-                                            disabled={isChartLocked}
-                                            className="w-full max-w-full"
-                                            inputClassName="!text-[12px]"
-                                            panelClassName="nfs-flowsheet-cal-panel"
-                                            panelStyle={{ maxWidth: 'min(22rem, calc(100vw - 1.5rem))', width: 'min(22rem, calc(100vw - 1.5rem))' }}
-                                        />
-                                    </ClinicalField>
-                                </div>
-                                <div className="col-span-12 md:col-span-8">
-                                    <ClinicalField fieldId="diet-tol" label="Diet tolerance">
-                                        <Dropdown
-                                            value={d.gastrointestinal.dietTolerance}
-                                            options={DIET_TOLERANCE_OPTIONS}
-                                            onChange={(e) =>
-                                                patchDocument({ gastrointestinal: { ...d.gastrointestinal, dietTolerance: e.value } })
-                                            }
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                            placeholder="—"
-                                        />
-                                    </ClinicalField>
-                                </div>
                             </div>
                         </AccordionTab>
 
                         <AccordionTab header={header('F · Genitourinary', 5)}>
-                            <div className="grid grid-cols-12 gap-x-2 gap-y-1">
-                                <div className="col-span-12 md:col-span-3">
-                                    <ClinicalField fieldId="uo-4h" label="Urine output last 4h (mL)">
-                                        <InputNumber
+                            <div className={NFS_SECTION_GRID_CLASS}>
+                                <div className="col-span-12 md:col-span-4">
+                                    <ClinicalField fieldId="uo-4h" label="Urine output last 4h (mL)" omitLabel>
+                                        <FlowsheetOutlinedInputNumber
+                                            fieldId="uo-4h"
+                                            label="Urine output last 4h (mL)"
                                             value={d.genitourinary.urineOutputLast4hMl}
-                                            onValueChange={(e) =>
-                                                patchDocument({ genitourinary: { ...d.genitourinary, urineOutputLast4hMl: e.value ?? null } })
+                                            onValueChange={(v) =>
+                                                patchDocument({ genitourinary: { ...d.genitourinary, urineOutputLast4hMl: v } })
                                             }
                                             disabled={isChartLocked}
-                                            className="w-full"
-                                            inputClassName="!text-[12px]"
                                             useGrouping={false}
                                         />
                                     </ClinicalField>
                                 </div>
                                 <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="urine-color" label="Urine color">
-                                        <Dropdown
-                                            value={d.genitourinary.urineColor}
-                                            options={URINE_COLOR_OPTIONS}
-                                            onChange={(e) => patchDocument({ genitourinary: { ...d.genitourinary, urineColor: e.value ?? '' } })}
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                            placeholder="—"
-                                        />
-                                    </ClinicalField>
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="urine-color"
+                                        label="Urine color"
+                                        options={URINE_COLOR_OPTIONS}
+                                        value={d.genitourinary.urineColor}
+                                        onChange={(v) => patchDocument({ genitourinary: { ...d.genitourinary, urineColor: String(v) } })}
+                                        disabled={isChartLocked}
+                                    />
                                 </div>
-                                <div className="col-span-12 md:col-span-5 flex flex-col gap-1">
-                                    <div className="flex items-center gap-2">
+                                <div className="col-span-12 md:col-span-4 flex items-end pb-1">
+                                    <div className="flex items-center gap-2.5 py-0.5">
+                                        <Checkbox
+                                            inputId="bladder-dist"
+                                            checked={d.genitourinary.bladderDistension}
+                                            disabled={isChartLocked}
+                                            onChange={(e) =>
+                                                patchDocument({ genitourinary: { ...d.genitourinary, bladderDistension: e.checked ?? false } })
+                                            }
+                                        />
+                                        <label htmlFor="bladder-dist" className="text-xs font-medium text-gray-800 dark:text-gray-200 leading-snug">
+                                            Bladder distension
+                                        </label>
+                                    </div>
+                                </div>
+                                <div className="col-span-12 md:col-span-8 flex flex-col gap-1">
+                                    <div className="flex items-center gap-2.5 py-0.5">
                                         <Checkbox
                                             inputId="foley"
                                             checked={d.genitourinary.foleyCatheterPresent}
@@ -564,112 +565,84 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                                 })
                                             }
                                         />
-                                        <label htmlFor="foley" className="text-[11px] font-medium">
+                                        <label htmlFor="foley" className="text-xs font-medium text-gray-800 dark:text-gray-200 leading-snug">
                                             Foley catheter present
                                         </label>
                                     </div>
                                     {d.genitourinary.foleyCatheterPresent ? (
                                         <>
-                                            <ClinicalField
-                                                fieldId="foley-ins"
-                                                label="Insertion date"
-                                                error={err['genitourinary.foleyInsertionDate']}
-                                            >
-                                                <Calendar
+                                            <ClinicalField fieldId="foley-ins" label="Insertion date" error={err['genitourinary.foleyInsertionDate']} omitLabel>
+                                                <FlowsheetOutlinedCalendar
+                                                    fieldId="foley-ins"
+                                                    label="Insertion date"
                                                     value={d.genitourinary.foleyInsertionDate}
-                                                    onChange={(e) =>
+                                                    onChange={(v) =>
                                                         patchDocument({
                                                             genitourinary: {
                                                                 ...d.genitourinary,
-                                                                foleyInsertionDate: (e.value as Date) ?? null,
+                                                                foleyInsertionDate: v,
                                                             },
                                                         })
                                                     }
                                                     disabled={isChartLocked}
-                                                    className="w-full max-w-full"
-                                                    inputClassName="!text-[12px]"
-                                                    panelClassName="nfs-flowsheet-cal-panel"
-                                                    panelStyle={{
-                                                        maxWidth: 'min(22rem, calc(100vw - 1.5rem))',
-                                                        width: 'min(22rem, calc(100vw - 1.5rem))',
-                                                    }}
                                                 />
                                             </ClinicalField>
-                                            <ClinicalField fieldId="foley-ind" label="Indication">
-                                                <InputText
+                                            <ClinicalField fieldId="foley-ind" label="Indication" omitLabel>
+                                                <FlowsheetOutlinedTextInput
+                                                    fieldId="foley-ind"
+                                                    label="Indication"
                                                     value={d.genitourinary.foleyIndication}
-                                                    onChange={(e) =>
+                                                    onChange={(v) =>
                                                         patchDocument({
-                                                            genitourinary: { ...d.genitourinary, foleyIndication: e.target.value },
+                                                            genitourinary: { ...d.genitourinary, foleyIndication: v },
                                                         })
                                                     }
                                                     disabled={isChartLocked}
-                                                    className="w-full !text-[12px]"
                                                 />
                                             </ClinicalField>
                                         </>
                                     ) : null}
                                 </div>
-                                <div className="col-span-12 md:col-span-4 flex items-end pb-1">
-                                    <div className="flex items-center gap-2">
-                                        <Checkbox
-                                            inputId="bladder-dist"
-                                            checked={d.genitourinary.bladderDistension}
-                                            disabled={isChartLocked}
-                                            onChange={(e) =>
-                                                patchDocument({ genitourinary: { ...d.genitourinary, bladderDistension: e.checked ?? false } })
-                                            }
-                                        />
-                                        <label htmlFor="bladder-dist" className="text-[11px] font-medium">
-                                            Bladder distension
-                                        </label>
-                                    </div>
-                                </div>
+                                <div className="col-span-12 md:col-span-4 max-md:hidden" aria-hidden />
                             </div>
                         </AccordionTab>
 
                         <AccordionTab header={header('G · Integumentary / skin', 6)}>
-                            <div className="grid grid-cols-12 gap-x-2 gap-y-1">
+                            <div className={NFS_SECTION_GRID_CLASS}>
                                 <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="skin-color" label="Skin color">
-                                        <Dropdown
-                                            value={d.integumentary.skinColor}
-                                            options={SKIN_COLOR_OPTIONS}
-                                            onChange={(e) => patchDocument({ integumentary: { ...d.integumentary, skinColor: e.value ?? '' } })}
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                            placeholder="—"
-                                        />
-                                    </ClinicalField>
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="skin-color"
+                                        label="Skin color"
+                                        options={SKIN_COLOR_OPTIONS}
+                                        value={d.integumentary.skinColor}
+                                        onChange={(v) => patchDocument({ integumentary: { ...d.integumentary, skinColor: String(v) } })}
+                                        disabled={isChartLocked}
+                                    />
                                 </div>
                                 <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="skin-temp" label="Skin temperature">
-                                        <Dropdown
-                                            value={d.integumentary.skinTemperature}
-                                            options={SKIN_TEMPERATURE_OPTIONS}
-                                            onChange={(e) =>
-                                                patchDocument({ integumentary: { ...d.integumentary, skinTemperature: e.value ?? '' } })
-                                            }
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                            placeholder="—"
-                                        />
-                                    </ClinicalField>
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="skin-temp"
+                                        label="Skin temperature"
+                                        options={SKIN_TEMPERATURE_OPTIONS}
+                                        value={d.integumentary.skinTemperature}
+                                        onChange={(v) =>
+                                            patchDocument({ integumentary: { ...d.integumentary, skinTemperature: String(v) } })
+                                        }
+                                        disabled={isChartLocked}
+                                    />
                                 </div>
                                 <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="skin-turgor" label="Skin turgor">
-                                        <Dropdown
-                                            value={d.integumentary.skinTurgor}
-                                            options={SKIN_TURGOR_OPTIONS}
-                                            onChange={(e) => patchDocument({ integumentary: { ...d.integumentary, skinTurgor: e.value ?? '' } })}
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                            placeholder="—"
-                                        />
-                                    </ClinicalField>
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="skin-turgor"
+                                        label="Skin turgor"
+                                        options={SKIN_TURGOR_OPTIONS}
+                                        value={d.integumentary.skinTurgor}
+                                        onChange={(v) => patchDocument({ integumentary: { ...d.integumentary, skinTurgor: String(v) } })}
+                                        disabled={isChartLocked}
+                                    />
                                 </div>
-                                <div className="col-span-12 md:col-span-6 flex flex-col gap-1">
-                                    <div className="flex items-center gap-2">
+                                <div className="col-span-12 md:col-span-4 flex flex-col gap-1">
+                                    <div className="flex items-center gap-2.5 py-0.5">
                                         <Checkbox
                                             inputId="wound"
                                             checked={d.integumentary.woundOrIncisionPresent}
@@ -684,27 +657,28 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                                 })
                                             }
                                         />
-                                        <label htmlFor="wound" className="text-[11px] font-medium">
+                                        <label htmlFor="wound" className="text-xs font-medium text-gray-800 dark:text-gray-200 leading-snug">
                                             Wound / incision present
                                         </label>
                                     </div>
                                     {d.integumentary.woundOrIncisionPresent ? (
-                                        <ClinicalField fieldId="wound-det" label="Location, type, stage, size, dressing, drainage">
-                                            <InputText
+                                        <ClinicalField fieldId="wound-det" label="Location, type, stage, size, dressing, drainage" omitLabel>
+                                            <FlowsheetOutlinedTextInput
+                                                fieldId="wound-det"
+                                                label="Location, type, stage, size, dressing, drainage"
                                                 value={d.integumentary.woundOrIncisionDetail}
-                                                onChange={(e) =>
+                                                onChange={(v) =>
                                                     patchDocument({
-                                                        integumentary: { ...d.integumentary, woundOrIncisionDetail: e.target.value },
+                                                        integumentary: { ...d.integumentary, woundOrIncisionDetail: v },
                                                     })
                                                 }
                                                 disabled={isChartLocked}
-                                                className="w-full !text-[12px]"
                                             />
                                         </ClinicalField>
                                     ) : null}
                                 </div>
-                                <div className="col-span-12 md:col-span-6 flex flex-col gap-1">
-                                    <div className="flex items-center gap-2">
+                                <div className="col-span-12 md:col-span-4 flex flex-col gap-1">
+                                    <div className="flex items-center gap-2.5 py-0.5">
                                         <Checkbox
                                             inputId="pi"
                                             checked={d.integumentary.pressureInjuryPresent}
@@ -719,27 +693,28 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                                 })
                                             }
                                         />
-                                        <label htmlFor="pi" className="text-[11px] font-medium">
+                                        <label htmlFor="pi" className="text-xs font-medium text-gray-800 dark:text-gray-200 leading-snug">
                                             Pressure injury present (Braden Tab 2)
                                         </label>
                                     </div>
                                     {d.integumentary.pressureInjuryPresent ? (
-                                        <ClinicalField fieldId="pi-det" label="Stage 1–4 / Unstageable / DTI">
-                                            <InputText
+                                        <ClinicalField fieldId="pi-det" label="Stage 1–4 / Unstageable / DTI" omitLabel>
+                                            <FlowsheetOutlinedTextInput
+                                                fieldId="pi-det"
+                                                label="Stage 1–4 / Unstageable / DTI"
                                                 value={d.integumentary.pressureInjuryDetail}
-                                                onChange={(e) =>
+                                                onChange={(v) =>
                                                     patchDocument({
-                                                        integumentary: { ...d.integumentary, pressureInjuryDetail: e.target.value },
+                                                        integumentary: { ...d.integumentary, pressureInjuryDetail: v },
                                                     })
                                                 }
                                                 disabled={isChartLocked}
-                                                className="w-full !text-[12px]"
                                             />
                                         </ClinicalField>
                                     ) : null}
                                 </div>
-                                <div className="col-span-12 md:col-span-6 flex flex-col gap-1">
-                                    <div className="flex items-center gap-2">
+                                <div className="col-span-12 md:col-span-4 flex flex-col gap-1">
+                                    <div className="flex items-center gap-2.5 py-0.5">
                                         <Checkbox
                                             inputId="rash"
                                             checked={d.integumentary.rashPresent}
@@ -754,25 +729,26 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                                 })
                                             }
                                         />
-                                        <label htmlFor="rash" className="text-[11px] font-medium">
+                                        <label htmlFor="rash" className="text-xs font-medium text-gray-800 dark:text-gray-200 leading-snug">
                                             Rash present
                                         </label>
                                     </div>
                                     {d.integumentary.rashPresent ? (
-                                        <ClinicalField fieldId="rash-det" label="Location + description">
-                                            <InputText
+                                        <ClinicalField fieldId="rash-det" label="Location + description" omitLabel>
+                                            <FlowsheetOutlinedTextInput
+                                                fieldId="rash-det"
+                                                label="Location + description"
                                                 value={d.integumentary.rashDetail}
-                                                onChange={(e) =>
-                                                    patchDocument({ integumentary: { ...d.integumentary, rashDetail: e.target.value } })
+                                                onChange={(v) =>
+                                                    patchDocument({ integumentary: { ...d.integumentary, rashDetail: v } })
                                                 }
                                                 disabled={isChartLocked}
-                                                className="w-full !text-[12px]"
                                             />
                                         </ClinicalField>
                                     ) : null}
                                 </div>
-                                <div className="col-span-12 md:col-span-6 flex flex-col gap-1">
-                                    <div className="flex items-center gap-2">
+                                <div className="col-span-12 md:col-span-4 flex flex-col gap-1">
+                                    <div className="flex items-center gap-2.5 py-0.5">
                                         <Checkbox
                                             inputId="drain"
                                             checked={d.integumentary.surgicalDrainPresent}
@@ -787,41 +763,49 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                                 })
                                             }
                                         />
-                                        <label htmlFor="drain" className="text-[11px] font-medium">
+                                        <label htmlFor="drain" className="text-xs font-medium text-gray-800 dark:text-gray-200 leading-snug">
                                             Surgical drain
                                         </label>
                                     </div>
                                     {d.integumentary.surgicalDrainPresent ? (
-                                        <ClinicalField fieldId="drain-det" label="Type, output last shift (mL), color">
-                                            <InputText
+                                        <ClinicalField fieldId="drain-det" label="Type, output last shift (mL), color" omitLabel>
+                                            <FlowsheetOutlinedTextInput
+                                                fieldId="drain-det"
+                                                label="Type, output last shift (mL), color"
                                                 value={d.integumentary.surgicalDrainDetail}
-                                                onChange={(e) =>
+                                                onChange={(v) =>
                                                     patchDocument({
-                                                        integumentary: { ...d.integumentary, surgicalDrainDetail: e.target.value },
+                                                        integumentary: { ...d.integumentary, surgicalDrainDetail: v },
                                                     })
                                                 }
                                                 disabled={isChartLocked}
-                                                className="w-full !text-[12px]"
                                                 placeholder="JP / Hemovac / Penrose…"
                                             />
                                         </ClinicalField>
                                     ) : null}
                                 </div>
                                 <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="braden" label="Braden score (reference)" abnormal={sev('integumentary.bradenScore') !== 'normal'}>
-                                        <InputNumber
+                                    <ClinicalField
+                                        fieldId="braden"
+                                        label="Braden score (reference)"
+                                        abnormal={sev('integumentary.bradenScore') !== 'normal'}
+                                        omitLabel
+                                    >
+                                        <FlowsheetOutlinedInputNumber
+                                            fieldId="braden"
+                                            label="Braden score (reference)"
                                             value={d.integumentary.bradenScore}
-                                            onValueChange={(e) =>
-                                                patchDocument({ integumentary: { ...d.integumentary, bradenScore: e.value ?? null } })
+                                            onValueChange={(v) =>
+                                                patchDocument({ integumentary: { ...d.integumentary, bradenScore: v } })
                                             }
                                             min={6}
                                             max={23}
                                             disabled={isChartLocked}
-                                            className="w-full"
-                                            inputClassName="!text-[12px]"
+                                            abnormal={sev('integumentary.bradenScore') !== 'normal'}
                                         />
                                     </ClinicalField>
                                 </div>
+                                <div className="col-span-12 md:col-span-4 max-md:hidden" aria-hidden />
                             </div>
                         </AccordionTab>
 
@@ -830,15 +814,22 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                         </AccordionTab>
 
                         <AccordionTab header={header('I · Pain', 8)}>
-                            <div className="grid grid-cols-12 gap-x-2 gap-y-2">
+                            <div className={NFS_SECTION_GRID_CLASS}>
                                 <div className="col-span-12 md:col-span-8">
                                     <ClinicalField
                                         fieldId="pain-score"
                                         label="Pain score (0 = none, 10 = worst)"
                                         abnormal={sev('pain.intensity0to10') !== 'normal'}
+                                        omitLabel
                                     >
-                                        <div className={`rounded-lg border px-3 py-2 ${painSliderClass}`}>
+                                        <div
+                                            className={`relative isolate w-full min-w-0 overflow-visible rounded-lg border px-3 pb-2.5 pt-[1.125rem] shadow-sm ${painSliderClass}`}
+                                        >
+                                            <span id="pain-score-flow-lbl" className={NFS_FLOAT_FIELD_LABEL}>
+                                                Pain score (0–10)
+                                            </span>
                                             <Slider
+                                                aria-labelledby="pain-score-flow-lbl"
                                                 value={d.pain.intensity0to10 ?? 0}
                                                 onChange={(e) => {
                                                     const v = typeof e.value === 'number' ? e.value : Number(e.value);
@@ -859,29 +850,74 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                     </ClinicalField>
                                 </div>
                                 <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="pain-loc" label="Pain location">
-                                        <InputText
+                                    <ClinicalField fieldId="pain-loc" label="Pain location" omitLabel>
+                                        <FlowsheetOutlinedTextInput
+                                            fieldId="pain-loc"
+                                            label="Pain location"
                                             value={d.pain.location}
-                                            onChange={(e) => patchDocument({ pain: { ...d.pain, location: e.target.value } })}
+                                            onChange={(v) => patchDocument({ pain: { ...d.pain, location: v } })}
                                             disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
                                         />
                                     </ClinicalField>
                                 </div>
-                                <div className="col-span-12 md:col-span-8">
-                                    <ClinicalField fieldId="pain-qual" label="Pain quality">
-                                        <MultiSelect
+                                <div className="col-span-12 md:col-span-4">
+                                    <ClinicalField fieldId="pain-qual" label="Pain quality" omitLabel>
+                                        <FlowsheetOutlinedMultiSelect
+                                            fieldId="pain-qual"
+                                            label="Pain quality"
                                             value={d.pain.quality}
                                             options={PAIN_QUALITY_OPTIONS}
-                                            onChange={(e) => patchDocument({ pain: { ...d.pain, quality: e.value ?? [] } })}
-                                            display="chip"
-                                            className="w-full !text-[12px]"
+                                            onChange={(next) => patchDocument({ pain: { ...d.pain, quality: next } })}
                                             disabled={isChartLocked}
                                         />
                                     </ClinicalField>
                                 </div>
+                                <div className="col-span-12 md:col-span-4">
+                                    <ClinicalField fieldId="aggrav" label="Aggravating factors" omitLabel>
+                                        <FlowsheetOutlinedTextInput
+                                            fieldId="aggrav"
+                                            label="Aggravating factors"
+                                            value={d.pain.aggravatingFactors}
+                                            onChange={(v) => patchDocument({ pain: { ...d.pain, aggravatingFactors: v } })}
+                                            disabled={isChartLocked}
+                                        />
+                                    </ClinicalField>
+                                </div>
+                                <div className="col-span-12 md:col-span-4">
+                                    <ClinicalField fieldId="pain-intv" label="Intervention given" error={err['pain.interventionGiven']} omitLabel>
+                                        <FlowsheetOutlinedTextInput
+                                            fieldId="pain-intv"
+                                            label="Intervention given"
+                                            value={d.pain.interventionGiven}
+                                            onChange={(v) => patchDocument({ pain: { ...d.pain, interventionGiven: v } })}
+                                            disabled={isChartLocked}
+                                            hasError={Boolean(err['pain.interventionGiven'])}
+                                        />
+                                    </ClinicalField>
+                                </div>
+                                <div className="col-span-12 md:col-span-4">
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="pain-response"
+                                        label="Response to Intervention"
+                                        options={[
+                                            { value: 'Complete Relief', label: 'Complete Relief' },
+                                            { value: 'Partial Relief', label: 'Partial Relief' },
+                                            { value: 'No Relief', label: 'No Relief' },
+                                        ]}
+                                        value={d.pain.responseToIntervention}
+                                        onChange={(v) =>
+                                            patchDocument({
+                                                pain: {
+                                                    ...d.pain,
+                                                    responseToIntervention: String(v) as (typeof d.pain)['responseToIntervention'],
+                                                },
+                                            })
+                                        }
+                                        disabled={isChartLocked}
+                                    />
+                                </div>
                                 <div className="col-span-12 md:col-span-4 flex flex-col gap-1">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2.5 py-0.5">
                                         <Checkbox
                                             inputId="radiation"
                                             checked={d.pain.radiation}
@@ -896,75 +932,107 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                                 })
                                             }
                                         />
-                                        <label htmlFor="radiation" className="text-[11px] font-medium">
+                                        <label htmlFor="radiation" className="text-xs font-medium text-gray-800 dark:text-gray-200 leading-snug">
                                             Radiation
                                         </label>
                                     </div>
                                     {d.pain.radiation ? (
-                                        <InputText
+                                        <FlowsheetOutlinedTextInput
+                                            fieldId="pain-rad-where"
+                                            label="Radiates to"
                                             value={d.pain.radiationWhere}
-                                            onChange={(e) => patchDocument({ pain: { ...d.pain, radiationWhere: e.target.value } })}
+                                            onChange={(v) => patchDocument({ pain: { ...d.pain, radiationWhere: v } })}
                                             disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
                                             placeholder="Where?"
                                         />
                                     ) : null}
                                 </div>
-                                <div className="col-span-12 md:col-span-6">
-                                    <ClinicalField fieldId="aggrav" label="Aggravating factors">
-                                        <InputText
-                                            value={d.pain.aggravatingFactors}
-                                            onChange={(e) => patchDocument({ pain: { ...d.pain, aggravatingFactors: e.target.value } })}
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                        />
-                                    </ClinicalField>
-                                </div>
-                                <div className="col-span-12 md:col-span-6">
-                                    <ClinicalField fieldId="pain-intv" label="Intervention given" error={err['pain.interventionGiven']}>
-                                        <InputText
-                                            value={d.pain.interventionGiven}
-                                            onChange={(e) => patchDocument({ pain: { ...d.pain, interventionGiven: e.target.value } })}
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                        />
-                                    </ClinicalField>
+                                <div className="col-span-12 md:col-span-4 max-md:hidden" aria-hidden />
+                                <div className="col-span-12">
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <div className="flex flex-wrap gap-2">
+                                            {(['STAT', 'routine'] as const).map((p) => (
+                                                <button
+                                                    key={p}
+                                                    type="button"
+                                                    disabled={isChartLocked}
+                                                    onClick={() =>
+                                                        patchDocument({
+                                                            pain: {
+                                                                ...d.pain,
+                                                                reassessmentPriority: p,
+                                                                reassessmentDue: reassessmentDueFromPriority(p),
+                                                            },
+                                                        })
+                                                    }
+                                                    className={`flex items-center gap-2 ${NFS_OPTION_BASE_CLASS} ${
+                                                        d.pain.reassessmentPriority === p ? NFS_OPTION_ACTIVE_CLASS : NFS_OPTION_IDLE_CLASS
+                                                    } ${isChartLocked ? 'pointer-events-none opacity-50' : ''}`}
+                                                >
+                                                    <span
+                                                        className={`${NFS_RADIO_INDICATOR_BASE} ${
+                                                            d.pain.reassessmentPriority === p
+                                                                ? NFS_RADIO_INDICATOR_ACTIVE
+                                                                : NFS_RADIO_INDICATOR_IDLE
+                                                        }`}
+                                                        aria-hidden
+                                                    >
+                                                        {d.pain.reassessmentPriority === p ? (
+                                                            <span className="h-2 w-2 rounded-full bg-primary" />
+                                                        ) : null}
+                                                    </span>
+                                                    {p === 'STAT' ? 'STAT (+1h)' : 'Routine (+4h)'}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="min-w-0 flex-1 basis-[min(100%,340px)]">
+                                            <ClinicalField fieldId="pain-reax-due" label="Re-assessment due" omitLabel>
+                                                <FlowsheetOutlinedCalendar
+                                                    fieldId="pain-reax-due"
+                                                    label="Re-assessment Due"
+                                                    value={d.pain.reassessmentDue}
+                                                    onChange={(v) => patchDocument({ pain: { ...d.pain, reassessmentDue: v } })}
+                                                    showTime
+                                                    disabled={isChartLocked}
+                                                />
+                                            </ClinicalField>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </AccordionTab>
 
                         <AccordionTab header={header('J · Musculoskeletal', 9)}>
-                            <div className="grid grid-cols-12 gap-x-2 gap-y-1">
+                            <div className={NFS_SECTION_GRID_CLASS}>
                                 <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="mob" label="Mobility status">
-                                        <Dropdown
-                                            value={d.musculoskeletal.mobilityStatus}
-                                            options={MOBILITY_STATUS_OPTIONS}
-                                            onChange={(e) =>
-                                                patchDocument({ musculoskeletal: { ...d.musculoskeletal, mobilityStatus: e.value } })
-                                            }
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                        />
-                                    </ClinicalField>
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="mob"
+                                        label="Mobility status"
+                                        options={MOBILITY_STATUS_OPTIONS}
+                                        value={d.musculoskeletal.mobilityStatus}
+                                        onChange={(v) =>
+                                            patchDocument({ musculoskeletal: { ...d.musculoskeletal, mobilityStatus: String(v) } })
+                                        }
+                                        disabled={isChartLocked}
+                                    />
                                 </div>
                                 <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="gait" label="Gait">
-                                        <Dropdown
-                                            value={d.musculoskeletal.gait}
-                                            options={GAIT_OPTIONS}
-                                            onChange={(e) => patchDocument({ musculoskeletal: { ...d.musculoskeletal, gait: e.value } })}
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                        />
-                                    </ClinicalField>
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="gait"
+                                        label="Gait"
+                                        options={GAIT_OPTIONS}
+                                        value={d.musculoskeletal.gait}
+                                        onChange={(v) => patchDocument({ musculoskeletal: { ...d.musculoskeletal, gait: String(v) } })}
+                                        disabled={isChartLocked}
+                                    />
                                 </div>
-                                <div className="col-span-12 md:col-span-2">
-                                    <ClinicalField fieldId="morse" label="Morse fall score">
-                                        <InputNumber
+                                <div className="col-span-12 md:col-span-4">
+                                    <ClinicalField fieldId="morse" label="Morse fall score" omitLabel>
+                                        <FlowsheetOutlinedInputNumber
+                                            fieldId="morse"
+                                            label="Morse fall score"
                                             value={d.musculoskeletal.morseFallScore}
-                                            onValueChange={(e) => {
-                                                const v = e.value ?? null;
+                                            onValueChange={(v) => {
                                                 const msk = { ...d.musculoskeletal, morseFallScore: v };
                                                 if (v != null && v >= 45) msk.fallPrecautionsActive = true;
                                                 patchDocument({ musculoskeletal: msk });
@@ -972,13 +1040,12 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                             min={0}
                                             max={125}
                                             disabled={isChartLocked}
-                                            className="w-full"
-                                            inputClassName="!text-[12px]"
+                                            useGrouping={false}
                                         />
                                     </ClinicalField>
                                 </div>
-                                <div className="col-span-12 md:col-span-2 flex items-end pb-1">
-                                    <div className="flex items-center gap-2">
+                                <div className="col-span-12 md:col-span-4 flex items-end pb-1">
+                                    <div className="flex items-center gap-2.5 py-0.5">
                                         <Checkbox
                                             inputId="fall-prec"
                                             checked={d.musculoskeletal.fallPrecautionsActive}
@@ -989,62 +1056,60 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                                 })
                                             }
                                         />
-                                        <label htmlFor="fall-prec" className="text-[11px] font-medium leading-snug">
+                                        <label htmlFor="fall-prec" className="text-xs font-medium text-gray-800 dark:text-gray-200 leading-snug">
                                             Fall precautions (auto if Morse ≥45)
                                         </label>
                                     </div>
                                 </div>
+                                <div className="col-span-12 md:col-span-4 max-md:hidden" aria-hidden />
+                                <div className="col-span-12 md:col-span-4 max-md:hidden" aria-hidden />
                             </div>
                         </AccordionTab>
 
                         <AccordionTab header={header('K · Psychosocial', 10)}>
-                            <div className="grid grid-cols-12 gap-x-2 gap-y-1">
+                            <div className={NFS_SECTION_GRID_CLASS}>
                                 <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="mood" label="Mood / affect">
-                                        <Dropdown
-                                            value={d.psychosocial.moodAffect}
-                                            options={MOOD_AFFECT_OPTIONS}
-                                            onChange={(e) => patchDocument({ psychosocial: { ...d.psychosocial, moodAffect: e.value ?? '' } })}
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                            placeholder="—"
-                                        />
-                                    </ClinicalField>
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="mood"
+                                        label="Mood / affect"
+                                        options={MOOD_AFFECT_OPTIONS}
+                                        value={d.psychosocial.moodAffect}
+                                        onChange={(v) => patchDocument({ psychosocial: { ...d.psychosocial, moodAffect: String(v) } })}
+                                        disabled={isChartLocked}
+                                    />
                                 </div>
                                 <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="behavior" label="Behavior">
-                                        <Dropdown
-                                            value={d.psychosocial.behavior}
-                                            options={BEHAVIOR_OPTIONS}
-                                            onChange={(e) => patchDocument({ psychosocial: { ...d.psychosocial, behavior: e.value ?? '' } })}
-                                            disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
-                                            placeholder="—"
-                                        />
-                                    </ClinicalField>
+                                    <FlowsheetLabeledDropdown
+                                        fieldId="behavior"
+                                        label="Behavior"
+                                        options={BEHAVIOR_OPTIONS}
+                                        value={d.psychosocial.behavior}
+                                        onChange={(v) => patchDocument({ psychosocial: { ...d.psychosocial, behavior: String(v) } })}
+                                        disabled={isChartLocked}
+                                    />
                                 </div>
                                 <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="safety-risk" label="Safety risk">
-                                        <MultiSelect
+                                    <ClinicalField fieldId="safety-risk" label="Safety risk" omitLabel>
+                                        <FlowsheetOutlinedMultiSelect
+                                            fieldId="safety-risk"
+                                            label="Safety risk"
                                             value={d.psychosocial.safetyRisk}
                                             options={SAFETY_RISK_OPTIONS}
-                                            onChange={(e) => patchDocument({ psychosocial: { ...d.psychosocial, safetyRisk: e.value ?? [] } })}
-                                            display="chip"
-                                            className="w-full !text-[12px]"
+                                            onChange={(next) => patchDocument({ psychosocial: { ...d.psychosocial, safetyRisk: next } })}
                                             disabled={isChartLocked}
                                         />
                                     </ClinicalField>
                                 </div>
                                 <div className="col-span-12">
-                                    <ClinicalField fieldId="edu" label="Patient education provided">
-                                        <MultiSelect
+                                    <ClinicalField fieldId="edu" label="Patient education provided" omitLabel>
+                                        <FlowsheetOutlinedMultiSelect
+                                            fieldId="edu"
+                                            label="Patient education provided"
                                             value={d.psychosocial.patientEducationProvided}
                                             options={PATIENT_EDUCATION_OPTIONS}
-                                            onChange={(e) =>
-                                                patchDocument({ psychosocial: { ...d.psychosocial, patientEducationProvided: e.value ?? [] } })
+                                            onChange={(next) =>
+                                                patchDocument({ psychosocial: { ...d.psychosocial, patientEducationProvided: next } })
                                             }
-                                            display="chip"
-                                            className="w-full !text-[12px]"
                                             disabled={isChartLocked}
                                         />
                                     </ClinicalField>
@@ -1053,7 +1118,7 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                         </AccordionTab>
 
                         <AccordionTab header={header('L · Signature', 11)}>
-                            <div className="grid grid-cols-12 gap-x-2 gap-y-2">
+                            <div className={NFS_SECTION_GRID_CLASS}>
                                 <div className="col-span-12 flex flex-wrap items-center gap-3">
                                     <div className="flex min-w-0 max-w-full items-center gap-2">
                                         <Checkbox
@@ -1075,53 +1140,61 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                     ) : null}
                                 </div>
                                 <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="signed-by-ro" label="Signed by">
-                                        <InputText
+                                    <ClinicalField fieldId="signed-by-ro" label="Signed by" omitLabel>
+                                        <FlowsheetOutlinedTextInput
+                                            fieldId="signed-by-ro"
+                                            label="Signed by"
                                             readOnly
                                             value={state.document.signedAt ? (state.document.signedByName ?? '') : d.shiftInfo.primaryNurseDisplay}
-                                            className="w-full !bg-gray-100 !text-[12px] dark:!bg-white/5"
+                                            onChange={() => {}}
                                         />
                                     </ClinicalField>
                                 </div>
                                 <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="creds" label="Credentials" error={err['signerCredentials']}>
-                                        <InputText
+                                    <ClinicalField fieldId="creds" label="Credentials" error={err['signerCredentials']} omitLabel>
+                                        <FlowsheetOutlinedTextInput
+                                            fieldId="creds"
+                                            label="Credentials"
                                             value={d.signerCredentials ?? ''}
-                                            onChange={(e) => patchDocument({ signerCredentials: e.target.value || null })}
+                                            onChange={(v) => patchDocument({ signerCredentials: v || null })}
                                             readOnly={Boolean(state.document.signedAt)}
                                             disabled={isChartLocked}
-                                            className="w-full !text-[12px]"
                                             placeholder="RN, LVN, CNA…"
+                                            hasError={Boolean(err['signerCredentials'])}
                                         />
                                     </ClinicalField>
                                 </div>
                                 <div className="col-span-12 md:col-span-4">
-                                    <ClinicalField fieldId="signed-dt" label="Signed date/time">
-                                        <InputText
+                                    <ClinicalField fieldId="signed-dt" label="Signed date/time" omitLabel>
+                                        <FlowsheetOutlinedTextInput
+                                            fieldId="signed-dt"
+                                            label="Signed date/time"
                                             readOnly
                                             value={
                                                 state.document.signedAt
                                                     ? new Date(state.document.signedAt).toLocaleString()
                                                     : '— Not signed —'
                                             }
-                                            className="w-full !bg-gray-100 !text-[12px] dark:!bg-white/5"
+                                            onChange={() => {}}
                                         />
                                     </ClinicalField>
                                 </div>
-                                <div className="col-span-12 md:col-span-6">
-                                    <ClinicalField fieldId="sig-status" label="Electronic signature status">
-                                        <InputText
+                                <div className="col-span-12 md:col-span-4">
+                                    <ClinicalField fieldId="sig-status" label="Electronic signature status" omitLabel>
+                                        <FlowsheetOutlinedTextInput
+                                            fieldId="sig-status"
+                                            label="Electronic signature status"
                                             readOnly
                                             value={
                                                 state.document.signedAt
                                                     ? `Locked ${new Date(state.document.signedAt).toLocaleString()}`
                                                     : 'Unsigned draft'
                                             }
-                                            className="w-full !bg-gray-100 !text-[12px] dark:!bg-white/5"
+                                            onChange={() => {}}
                                         />
                                     </ClinicalField>
                                 </div>
-                                <div className="col-span-12 md:col-span-6 flex items-end">
+                                <div className="col-span-12 md:col-span-8 flex items-end">
                                     <p className="text-[10px] leading-snug text-gray-500 dark:text-gray-400">
                                         Co-sign and break-glass policies are enforced server-side in production. This UI captures intent only.
                                     </p>
@@ -1213,7 +1286,16 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                 <p className="mb-3 text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">
                     In production this opens your scheduling / staffing feed. Here it is informational only.
                 </p>
-                <Dropdown className="w-full !text-[12px]" placeholder="Select shift instance" disabled />
+                <NewDropdown
+                    label="Shift instance"
+                    fieldSize="md"
+                    options={[{ value: 'demo', label: 'Demo shift (placeholder)' }]}
+                    value="demo"
+                    placeholder="Select..."
+                    onChange={() => {}}
+                    disabled
+                    appendMenuToBody
+                />
             </Dialog>
 
             <Dialog
@@ -1279,14 +1361,11 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                 <p className="mb-3 text-[12px] leading-relaxed text-gray-700 dark:text-gray-300">
                     By continuing, you confirm this head-to-toe reflects your professional assessment for this patient and shift.
                 </p>
-                <label htmlFor="signer" className="mb-1.5 block text-[12px] font-semibold text-gray-800 dark:text-gray-100">
-                    Signer display name
-                </label>
-                <InputText
-                    id="signer"
+                <FlowsheetOutlinedTextInput
+                    fieldId="signer"
+                    label="Signer display name"
                     value={signerName}
-                    onChange={(e) => setSignerName(e.target.value)}
-                    className="w-full !text-[13px]"
+                    onChange={(v) => setSignerName(v)}
                     placeholder="e.g. Jordan Lee, RN"
                 />
             </Dialog>
