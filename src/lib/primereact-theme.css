@@ -104,6 +104,159 @@ body .nfs-flowsheet-cal-panel.p-datepicker:not(.p-datepicker-inline) {
     box-sizing: border-box;
 }
 
+/* Risk assessment date/time picker: patient-list field chrome with compact Prime popup */
+body .p-datepicker.risk-assessment-cal-panel:not(.p-datepicker-inline),
+body .risk-assessment-cal-panel.p-datepicker:not(.p-datepicker-inline) {
+    min-width: 0 !important;
+    width: min(21rem, calc(100vw - 1.5rem)) !important;
+    max-width: min(21rem, calc(100vw - 1.5rem)) !important;
+    overflow: hidden;
+    border: 1px solid rgb(229 231 235 / 0.95);
+    border-radius: 0.25rem;
+    background: rgb(255 255 255);
+    padding: 0.375rem 0.55rem;
+    box-shadow:
+        0 18px 44px -18px rgb(0 0 0 / 0.22),
+        0 0 0 1px rgb(0 0 0 / 0.04);
+}
+
+body .risk-assessment-cal-panel .p-datepicker-header {
+    min-height: 1.75rem;
+    border: 0;
+    padding: 0 0 0.15rem;
+    background: transparent;
+}
+
+body .risk-assessment-cal-panel .p-datepicker-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: rgb(17 24 39);
+    font-size: 0.875rem;
+    font-weight: 700;
+    line-height: 1.25rem;
+}
+
+body .risk-assessment-cal-panel .p-datepicker-month {
+    margin-right: 0.25rem;
+}
+
+body .risk-assessment-cal-panel .p-datepicker-prev,
+body .risk-assessment-cal-panel .p-datepicker-next {
+    width: 1.5rem;
+    height: 1.5rem;
+    color: rgb(75 85 99);
+}
+
+body .risk-assessment-cal-panel table {
+    margin: 0;
+    font-size: 0.875rem;
+}
+
+body .risk-assessment-cal-panel table th {
+    padding: 0.18rem 0.25rem;
+    color: rgb(31 41 55);
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+body .risk-assessment-cal-panel table td {
+    padding: 0.025rem 0.25rem;
+}
+
+body .risk-assessment-cal-panel table td > span {
+    width: 1.55rem;
+    height: 1.55rem;
+    border-radius: 0.125rem;
+    color: rgb(17 24 39);
+    font-size: 0.875rem;
+}
+
+body .risk-assessment-cal-panel table td.p-datepicker-other-month > span {
+    color: rgb(107 114 128);
+    opacity: 0.75;
+}
+
+body .risk-assessment-cal-panel table td > span:not(.p-disabled):not(.p-highlight):hover {
+    background: rgb(243 244 246);
+}
+
+body .risk-assessment-cal-panel table td > span.p-highlight {
+    background: rgb(151 112 79);
+    color: rgb(255 255 255);
+}
+
+body .risk-assessment-cal-panel .p-timepicker {
+    margin-top: 0.25rem;
+    border-top: 1px solid rgb(229 231 235);
+    padding: 0.25rem 0 0.1rem;
+}
+
+body .risk-assessment-cal-panel .p-timepicker button {
+    width: 1.5rem;
+    height: 0.9rem;
+    color: rgb(75 85 99);
+}
+
+body .risk-assessment-cal-panel .p-timepicker span {
+    font-size: 0.875rem;
+    color: rgb(75 85 99);
+}
+
+body .risk-assessment-cal-panel .p-datepicker-buttonbar {
+    border-top: 0;
+    padding: 0.1rem 0 0;
+}
+
+body .risk-assessment-cal-panel .p-datepicker-buttonbar .p-button {
+    padding: 0;
+    background: transparent;
+    border: 0;
+    color: rgb(151 112 79);
+    font-size: 0.75rem;
+    font-weight: 500;
+    box-shadow: none;
+}
+
+.dark body .p-datepicker.risk-assessment-cal-panel:not(.p-datepicker-inline),
+.dark body .risk-assessment-cal-panel.p-datepicker:not(.p-datepicker-inline) {
+    border-color: rgb(255 255 255 / 0.12);
+    background: rgb(20 18 16);
+    box-shadow:
+        0 18px 44px -18px rgb(0 0 0 / 0.5),
+        0 0 0 1px rgb(255 255 255 / 0.06);
+}
+
+.dark body .risk-assessment-cal-panel .p-datepicker-title,
+.dark body .risk-assessment-cal-panel table td > span {
+    color: rgb(229 231 235);
+}
+
+.dark body .risk-assessment-cal-panel table th,
+.dark body .risk-assessment-cal-panel .p-datepicker-prev,
+.dark body .risk-assessment-cal-panel .p-datepicker-next,
+.dark body .risk-assessment-cal-panel .p-timepicker button,
+.dark body .risk-assessment-cal-panel .p-timepicker span {
+    color: rgb(209 213 219);
+}
+
+.dark body .risk-assessment-cal-panel table td.p-datepicker-other-month > span {
+    color: rgb(156 163 175);
+}
+
+.dark body .risk-assessment-cal-panel table td > span:not(.p-disabled):not(.p-highlight):hover {
+    background: rgb(255 255 255 / 0.08);
+}
+
+.dark body .risk-assessment-cal-panel table td > span.p-highlight {
+    background: rgb(151 112 79);
+    color: rgb(255 255 255);
+}
+
+.dark body .risk-assessment-cal-panel .p-timepicker {
+    border-top-color: rgb(255 255 255 / 0.12);
+}
+
 /* Nursing / chart modals — compact chrome, no oversized content well (portaled to body) */
 body .p-dialog.nfs-chart-dialog {
     border-radius: 1rem;
