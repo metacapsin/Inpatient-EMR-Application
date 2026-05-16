@@ -13,7 +13,7 @@ import {
 import { ClinicalField, type ClinicalFieldProps } from './ClinicalField';
 
 /** Standard head-to-toe section grid: three fields per row on md+, extra row gap so notched labels do not overlap the row above. */
-export const NFS_SECTION_GRID_CLASS = 'grid grid-cols-12 gap-x-2.5 gap-y-5 [&>*]:min-w-0';
+export const NFS_SECTION_GRID_CLASS = 'grid grid-cols-12 gap-x-2.5 gap-y-5 [&>*]:min-w-0 mt-2';
 
 /** Notched label on control border — same tokens as Shift date / shared notched fields. */
 export const NFS_FLOAT_FIELD_LABEL = NOTCHED_FIELD_LABEL_CLASS;

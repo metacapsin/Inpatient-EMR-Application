@@ -73,17 +73,17 @@ export function IvAccessTable() {
                                     <td className="px-1 py-1 align-top">
                                         <FlowsheetLabeledDropdown
                                             fieldId={`iv-type-${row.id}`}
-                                            label="Access type"
+                                            label=""
                                             options={IV_ACCESS_TYPE_OPTIONS}
                                             value={row.accessType}
                                             onChange={(v) => update(idx, { accessType: String(v) })}
                                             disabled={isChartLocked}
                                         />
                                     </td>
-                                    <td className="px-1 py-0.5 align-top">
+                                    <td className="px-1 py-1 align-top">
                                         <FlowsheetOutlinedTextInput
                                             fieldId={`iv-site-${row.id}`}
-                                            label="Site location"
+                                            label=""
                                             value={row.siteLocation}
                                             onChange={(v) => update(idx, { siteLocation: v })}
                                             disabled={isChartLocked}
@@ -93,7 +93,7 @@ export function IvAccessTable() {
                                     <td className="px-1 py-1 align-top">
                                         <FlowsheetLabeledDropdown
                                             fieldId={`iv-gf-${row.id}`}
-                                            label="Gauge / Fr"
+                                            label=""
                                             options={IV_GAUGE_FRENCH_OPTIONS}
                                             value={row.gaugeFrench}
                                             onChange={(v) => update(idx, { gaugeFrench: String(v) })}
@@ -103,7 +103,7 @@ export function IvAccessTable() {
                                     <td className="px-1 py-1 align-top">
                                         <FlowsheetOutlinedCalendar
                                             fieldId={`iv-ins-${row.id}`}
-                                            label="Insertion"
+                                            label=""
                                             value={row.insertionDate}
                                             onChange={(v) => update(idx, { insertionDate: v })}
                                             disabled={isChartLocked}
@@ -112,7 +112,7 @@ export function IvAccessTable() {
                                     <td className="px-1 py-1 align-top">
                                         <FlowsheetLabeledDropdown
                                             fieldId={`iv-site-${row.id}`}
-                                            label="Site condition"
+                                            label=""
                                             options={IV_SITE_CONDITION_OPTIONS}
                                             value={row.siteCondition}
                                             onChange={(v) => update(idx, { siteCondition: String(v) })}

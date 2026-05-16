@@ -180,7 +180,7 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                 <div className="mx-auto max-w-[1920px] px-2 py-2 lg:px-3">
                     <Accordion multiple activeIndex={activeIdx} onTabChange={onAccordionChange} className="!border-0 !bg-transparent">
                         <AccordionTab header={header('A · Shift info', 0)}>
-                            <div className="grid grid-cols-12 gap-x-2 gap-y-3 md:gap-y-0 [&>*]:min-w-0">
+                            <div className="grid grid-cols-12 gap-x-2 gap-y-3 md:gap-y-0 [&>*]:min-w-0 mt-2">
                                 <div className="col-span-12 md:col-span-3">
                                     <ClinicalField fieldId="shift-date" label="Shift date" required error={err['shiftDate']} omitLabel>
                                         <FlowsheetOutlinedCalendar
@@ -548,7 +548,7 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                         </label>
                                     </div>
                                 </div>
-                                <div className="col-span-12 md:col-span-8 flex flex-col gap-1">
+                                <div className="col-span-12 md:col-span-8 flex flex-col gap-3">
                                     <div className="flex items-center gap-2.5 py-0.5">
                                         <Checkbox
                                             inputId="foley"
@@ -641,7 +641,7 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                         disabled={isChartLocked}
                                     />
                                 </div>
-                                <div className="col-span-12 md:col-span-4 flex flex-col gap-1">
+                                <div className="col-span-12 md:col-span-4 flex flex-col gap-4">
                                     <div className="flex items-center gap-2.5 py-0.5">
                                         <Checkbox
                                             inputId="wound"
@@ -677,7 +677,7 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                         </ClinicalField>
                                     ) : null}
                                 </div>
-                                <div className="col-span-12 md:col-span-4 flex flex-col gap-1">
+                                <div className="col-span-12 md:col-span-4 flex flex-col gap-4">
                                     <div className="flex items-center gap-2.5 py-0.5">
                                         <Checkbox
                                             inputId="pi"
@@ -713,7 +713,7 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                         </ClinicalField>
                                     ) : null}
                                 </div>
-                                <div className="col-span-12 md:col-span-4 flex flex-col gap-1">
+                                <div className="col-span-12 md:col-span-4 flex flex-col gap-4">
                                     <div className="flex items-center gap-2.5 py-0.5">
                                         <Checkbox
                                             inputId="rash"
@@ -747,7 +747,7 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                         </ClinicalField>
                                     ) : null}
                                 </div>
-                                <div className="col-span-12 md:col-span-4 flex flex-col gap-1">
+                                <div className="col-span-12 md:col-span-4 flex flex-col gap-4">
                                     <div className="flex items-center gap-2.5 py-0.5">
                                         <Checkbox
                                             inputId="drain"
