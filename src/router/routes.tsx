@@ -14,6 +14,7 @@ const DischargeReadinessPage = lazy(() => import('../pages/inpatient/DischargeRe
 const MedicationManagementPage = lazy(() => import('../pages/inpatient/medication-management/MedicationManagementPage'));
 const FacesheetPage = lazy(() => import('../pages/facesheet/FacesheetPage'));
 const HealthMonitoring = lazy(() => import('../pages/patient/HealthSummary'));
+const StaffSchedulingPage = lazy(() => import('../pages/staff-scheduling/StaffSchedulingPage'));
 const AppointmentList = lazy(() => import('../pages/appointments/AppointmentList'));
 const AppointmentCalendarPage = lazy(() => import('../pages/appointments/AppointmentCalendarPage'));
 const AddAppointment = lazy(() => import('../pages/appointments/AddAppointment'));
@@ -118,6 +119,11 @@ const routes = [
     {
         path: '/app/appointments',
         element: guard(<AppointmentList />),
+        layout: 'default' as const,
+    },
+    {
+        path: '/app/staff-scheduling',
+        element: guard(<StaffSchedulingPage />),
         layout: 'default' as const,
     },
     {

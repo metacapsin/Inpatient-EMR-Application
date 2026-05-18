@@ -11,6 +11,7 @@ import IconMinus from '../Icon/IconMinus';
 import IconMenuDashboard from '../Icon/Menu/IconMenuDashboard';
 import IconMenuUsers from '../Icon/Menu/IconMenuUsers';
 import IconMenuCalendar from '../Icon/Menu/IconMenuCalendar';
+import IconMenuContacts from '../Icon/Menu/IconMenuContacts';
 import IconMenuPages from '../Icon/Menu/IconMenuPages';
 import mdCareLogo from '../../assets/images/mdcare-logo.png';
 import mdCareLogoDark from '../../assets/images/mdcare-logo_dark.png';
@@ -96,6 +97,15 @@ const Sidebar = () => {
                                             <div className="flex items-center">
                                                 <IconMenuCalendar className="group-hover:!text-primary shrink-0" />
                                                 <span className={`ltr:pl-3 rtl:pr-3 ${linkClass}`}>Appointments</span>
+                                            </div>
+                                        </NavLink>
+                                    </li>
+
+                                    <li className="nav-item">
+                                        <NavLink to="/app/staff-scheduling" className="group">
+                                            <div className="flex items-center">
+                                                <IconMenuContacts className="group-hover:!text-primary shrink-0" />
+                                                <span className={`ltr:pl-3 rtl:pr-3 ${linkClass}`}>Staff scheduling</span>
                                             </div>
                                         </NavLink>
                                     </li>

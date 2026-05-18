@@ -1,4 +1,6 @@
-import { lazy, Suspense, useCallback, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import { Accordion, AccordionTab } from 'primereact/accordion';
 import { Button } from 'primereact/button';
 import { Checkbox } from 'primereact/checkbox';
@@ -7,6 +9,14 @@ import { Skeleton } from 'primereact/skeleton';
 import { Slider } from 'primereact/slider';
 import { Tag } from 'primereact/tag';
 import type { FacesheetPatient } from '../../../services/patient.service';
+import { getPatientPlacement } from '../../../services/rooms.service';
+import {
+    flowsheetShiftLabelForType,
+    formatShiftOptionLabel,
+    getMyShiftsForWard,
+} from '../../../services/staffScheduling.service';
+import type { StaffShift } from '../../../types/staffScheduling.types';
+import type { IRootState } from '../../../store';
 import NewDropdown from '../../../components/ui/NewDropdown';
 import {
     ABDOMEN_APPEARANCE_OPTIONS,
@@ -88,11 +98,18 @@ export interface NursingFlowsheetWorksurfaceProps {
 }
 
 export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatient }: NursingFlowsheetWorksurfaceProps) {
+    const navigate = useNavigate();
+    const authUser = useSelector((s: IRootState) => s.auth.user);
     const { state, dispatch, patchDocument, persistDraftNow, signDocument, openHistory, isChartLocked } = useNursingFlowsheet();
     const d = state.document;
     const err = state.validationErrors;
     const [amendOpen, setAmendOpen] = useState(false);
     const [shiftDialog, setShiftDialog] = useState(false);
+    const [scheduleShifts, setScheduleShifts] = useState<StaffShift[]>([]);
+    const [scheduleWardId, setScheduleWardId] = useState('');
+    const [scheduleWardName, setScheduleWardName] = useState('');
+    const [selectedScheduleShiftId, setSelectedScheduleShiftId] = useState('');
+    const [scheduleShiftsLoading, setScheduleShiftsLoading] = useState(false);
     const [encDialog, setEncDialog] = useState(false);
     const [signOpen, setSignOpen] = useState(false);
     const [signConfirmOpen, setSignConfirmOpen] = useState(false);
@@ -110,6 +127,45 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
     const toggleHistory = useCallback(() => {
         dispatch({ type: 'SET_UI', payload: { historyDrawerVisible: !state.ui.historyDrawerVisible } });
     }, [dispatch, state.ui.historyDrawerVisible]);
+
+    useEffect(() => {
+        if (!shiftDialog) return;
+        const userId = authUser?.id ?? authUser?.email ?? 'staff-1';
+        const dateYmd = d.shiftDate || formatIsoDateOnly(new Date());
+        setScheduleShiftsLoading(true);
+        setSelectedScheduleShiftId('');
+        void (async () => {
+            try {
+                const placement = patient?.id ? await getPatientPlacement(String(patient.id)) : null;
+                const wardId = placement?.wardId ?? '2';
+                setScheduleWardId(wardId);
+                const { getWards } = await import('../../../services/rooms.service');
+                const wards = await getWards();
+                const ward = wards.find((w) => String(w.id) === String(wardId));
+                setScheduleWardName(ward?.name ?? wardId);
+                const rows = await getMyShiftsForWard(String(userId), wardId, dateYmd);
+                setScheduleShifts(rows);
+                if (rows[0]) setSelectedScheduleShiftId(rows[0].id);
+            } finally {
+                setScheduleShiftsLoading(false);
+            }
+        })();
+    }, [shiftDialog, authUser, patient?.id, d.shiftDate]);
+
+    const applyScheduledShift = useCallback(() => {
+        const shift = scheduleShifts.find((s) => s.id === selectedScheduleShiftId);
+        if (!shift) return;
+        const shiftDay = formatIsoDateOnly(new Date(shift.startAt));
+        patchDocument({
+            shiftDate: shiftDay,
+            shiftType: flowsheetShiftLabelForType(shift.shiftTypeId),
+            shiftInfo: {
+                ...d.shiftInfo,
+                assessedAt: new Date(),
+            },
+        });
+        setShiftDialog(false);
+    }, [scheduleShifts, selectedScheduleShiftId, patchDocument, d.shiftInfo]);
 
     useNursingFlowsheetKeyboard({
         onSaveNow: persistDraftNow,
@@ -1268,7 +1324,9 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                         </span>
                         <div className="min-w-0 space-y-0.5">
                             <h2 className="text-base font-semibold leading-tight text-gray-900 dark:text-white">Switch scheduled shift</h2>
-                            <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Demo — scheduling integration</p>
+                            <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                                {scheduleWardName ? `${scheduleWardName} · staff schedule` : 'Staff schedule'}
+                            </p>
                         </div>
                     </div>
                 }
@@ -1278,22 +1336,48 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                 draggable={false}
                 resizable={false}
                 footer={
-                    <div className="flex justify-end gap-3">
+                    <div className="flex flex-wrap justify-end gap-3">
+                        <Button
+                            type="button"
+                            label="Full schedule"
+                            size="small"
+                            severity="secondary"
+                            text
+                            onClick={() => {
+                                setShiftDialog(false);
+                                const qs = scheduleWardId ? `?wardId=${encodeURIComponent(scheduleWardId)}` : '';
+                                navigate(`/app/staff-scheduling${qs}`);
+                            }}
+                        />
                         <Button type="button" label="Close" size="small" severity="secondary" outlined onClick={() => setShiftDialog(false)} />
+                        <Button
+                            type="button"
+                            label="Apply shift"
+                            size="small"
+                            disabled={!selectedScheduleShiftId || scheduleShiftsLoading}
+                            onClick={applyScheduledShift}
+                        />
                     </div>
                 }
             >
                 <p className="mb-3 text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">
-                    In production this opens your scheduling / staffing feed. Here it is informational only.
+                    Select a shift assigned to you on this ward for {d.shiftDate || 'today'}.
                 </p>
                 <NewDropdown
                     label="Shift instance"
                     fieldSize="md"
-                    options={[{ value: 'demo', label: 'Demo shift (placeholder)' }]}
-                    value="demo"
+                    options={
+                        scheduleShifts.length
+                            ? scheduleShifts.map((s) => ({
+                                  value: s.id,
+                                  label: formatShiftOptionLabel(s, scheduleWardName || 'Ward'),
+                              }))
+                            : [{ value: '', label: scheduleShiftsLoading ? 'Loading…' : 'No shifts found' }]
+                    }
+                    value={selectedScheduleShiftId}
                     placeholder="Select..."
-                    onChange={() => {}}
-                    disabled
+                    onChange={(v) => setSelectedScheduleShiftId(String(v))}
+                    disabled={scheduleShiftsLoading || scheduleShifts.length === 0}
                     appendMenuToBody
                 />
             </Dialog>

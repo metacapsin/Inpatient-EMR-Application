@@ -16,6 +16,8 @@ interface ImportMetaEnv {
   readonly VITE_USE_MOCK_FACILITY?: string;
   /** When not "false", medication management (MAR, PRN/STAT, dispense, discharge meds) uses in-memory mock APIs. Set to "false" to call EMR backend routes. */
   readonly VITE_MEDICATION_API_MOCK?: string;
+  /** When not "false", staff scheduling uses in-memory mock APIs. */
+  readonly VITE_STAFF_SCHEDULING_MOCK?: string;
 }
 
 interface ImportMeta {
