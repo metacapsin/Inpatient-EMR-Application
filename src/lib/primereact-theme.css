@@ -514,8 +514,31 @@ body .nfs-flowsheet-cal-panel.p-datepicker:not(.p-datepicker-inline) {
 }
 
 /* Risk assessment date/time picker: patient-list field chrome with compact Prime popup */
-body .p-datepicker.risk-assessment-cal-panel:not(.p-datepicker-inline),
-body .risk-assessment-cal-panel.p-datepicker:not(.p-datepicker-inline) {
+/* I&O date fields: width set inline to match trigger; quick-action footer below calendar */
+body .p-datepicker.io-tracking-cal-panel:not(.p-datepicker-inline),
+body .io-tracking-cal-panel.p-datepicker:not(.p-datepicker-inline) {
+    min-width: 0 !important;
+    max-width: calc(100vw - 1.5rem) !important;
+    box-sizing: border-box;
+    z-index: 12001 !important;
+    overflow: hidden;
+    border: 1px solid rgb(229 231 235 / 0.95);
+    border-radius: 0.25rem;
+    background: rgb(255 255 255);
+    padding: 0.375rem 0.55rem;
+    box-shadow:
+        0 18px 44px -18px rgb(0 0 0 / 0.22),
+        0 0 0 1px rgb(0 0 0 / 0.04);
+}
+
+body .io-tracking-cal-panel .io-cal-quick-actions {
+    margin: 0.35rem -0.55rem -0.375rem;
+    width: calc(100% + 1.1rem);
+    box-sizing: border-box;
+}
+
+body .p-datepicker.risk-assessment-cal-panel:not(.p-datepicker-inline):not(.io-tracking-cal-panel),
+body .risk-assessment-cal-panel.p-datepicker:not(.p-datepicker-inline):not(.io-tracking-cal-panel) {
     min-width: 0 !important;
     width: min(17rem, calc(100vw - 1.5rem)) !important;
     max-width: min(17rem, calc(100vw - 1.5rem)) !important;

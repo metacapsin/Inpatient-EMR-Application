@@ -195,6 +195,7 @@ type FlowsheetOutlinedInputNumberProps = {
     label: string;
     value: number | null;
     onValueChange: (value: number | null) => void;
+    onBlur?: () => void;
     disabled?: boolean;
     min?: number;
     max?: number;
@@ -209,6 +210,7 @@ export function FlowsheetOutlinedInputNumber({
     label,
     value,
     onValueChange,
+    onBlur,
     disabled,
     min,
     max,
@@ -232,6 +234,7 @@ export function FlowsheetOutlinedInputNumber({
                 inputId={fieldId}
                 value={value}
                 onValueChange={(e) => onValueChange(e.value ?? null)}
+                onBlur={onBlur}
                 disabled={disabled}
                 min={min}
                 max={max}

@@ -17,6 +17,7 @@ import type { NursingFlowsheetDocument } from '../../features/nursing-flowsheet/
 import { flowsheetDraftStorageKey, readDraftFromStorage } from '../../features/nursing-flowsheet/utils/draftStorage';
 import { getNursingFlowsheet, normalizeServerDocumentToClient } from '../../services/nursingFlowsheet.service';
 import RiskAssessments from '../patient/RiskAssessments';
+import { IoTrackingTab } from '../../features/io-tracking/components/IoTrackingTab';
 
 function FlowsheetToastMount() {
     const { toastRef } = useNursingFlowsheet();
@@ -29,7 +30,8 @@ export default function NursingFlowsheetPage() {
     const encounter = useSelector((s: IRootState) => (patientId ? selectAdtEncounter(s, patientId) : null));
     const encounterId = encounter?.encounterId?.trim() ?? '';
     const [searchParams, setSearchParams] = useSearchParams();
-    const hubTabIndex = searchParams.get('sub') === 'risk' ? 1 : 0;
+    const hubSub = searchParams.get('sub');
+    const hubTabIndex = hubSub === 'risk' ? 1 : hubSub === 'io' ? 2 : 0;
 
     const flowsheetQuery = useQuery({
         queryKey: ['nursingFlowsheet', patientId, encounterId],
@@ -96,7 +98,8 @@ export default function NursingFlowsheetPage() {
                     <TabView
                         activeIndex={hubTabIndex}
                         onTabChange={(e) => {
-                            if (e.index === 1) setSearchParams({ sub: 'risk' }, { replace: true });
+                            if (e.index === 2) setSearchParams({ sub: 'io' }, { replace: true });
+                            else if (e.index === 1) setSearchParams({ sub: 'risk' }, { replace: true });
                             else setSearchParams({}, { replace: true });
                         }}
                         className="nfs-nursing-hub-tabview p-tabview flex min-h-0 flex-1 flex-col !border-0 !bg-transparent"
@@ -109,6 +112,11 @@ export default function NursingFlowsheetPage() {
                         <TabPanel header="Risk Assessments">
                             <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-y-auto overflow-x-hidden px-2 py-2 lg:px-3 [scrollbar-width:thin]">
                                 <RiskAssessments embedded />
+                            </div>
+                        </TabPanel>
+                        <TabPanel header="I&O Tracking">
+                            <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden">
+                                <IoTrackingTab patientId={patientId} encounterId={encounterId} />
                             </div>
                         </TabPanel>
                     </TabView>

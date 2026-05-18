@@ -12,6 +12,7 @@ import { hasValidAdtBedForDischarge } from '../../services/adt.service';
 import { AdtPatientWorkflowModal } from '../adt/AdtPatientWorkflowModal';
 import { EncounterStatusBadge } from './EncounterStatusBadge';
 import { EncounterActionButtons } from './EncounterActionButtons';
+import { IoHeaderBadge } from './IoHeaderBadge';
 import type { EncounterHeaderAdtModalState, EncounterStatusVariant } from './encounterHeaderTypes';
 
 const HEADER_VALUE_BADGE_CLASS =
@@ -120,6 +121,7 @@ export function EncounterHeader({ patient, patientListHref = '/app/patients/list
                                 {patient.fullName}
                             </h1>
                             <EncounterStatusBadge variant={status.variant} label={status.label} />
+                            {admitted ? <IoHeaderBadge /> : null}
                         </div>
                         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
                             <span className="flex shrink-0 items-center gap-1.5">

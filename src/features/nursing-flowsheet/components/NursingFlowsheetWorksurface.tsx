@@ -64,6 +64,7 @@ import { IvAccessTable } from '../components/IvAccessTable';
 import { fieldClinicalSeverity } from '../utils/clinicalSeverity';
 import { useNursingFlowsheet } from '../state/NursingFlowsheetContext';
 import { useNursingFlowsheetKeyboard } from '../hooks/useNursingFlowsheetKeyboard';
+import { emitGuUrineOutputUpdate } from '../../io-tracking/clinical/guUrineBridge';
 
 const NeurologicalSection = lazy(() => import('../sections/NeurologicalSection'));
 const RespiratorySection = lazy(() => import('../sections/RespiratorySection'));
@@ -574,6 +575,17 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                             onValueChange={(v) =>
                                                 patchDocument({ genitourinary: { ...d.genitourinary, urineOutputLast4hMl: v } })
                                             }
+                                            onBlur={() => {
+                                                const ml = d.genitourinary.urineOutputLast4hMl;
+                                                if (ml == null || ml <= 0 || !encounterId.trim() || !patient?.id) return;
+                                                emitGuUrineOutputUpdate({
+                                                    encounterId,
+                                                    patientId: patient.id,
+                                                    urineOutputLast4hMl: ml,
+                                                    urineColor: d.genitourinary.urineColor,
+                                                    foleyPresent: d.genitourinary.foleyCatheterPresent,
+                                                });
+                                            }}
                                             disabled={isChartLocked}
                                             useGrouping={false}
                                         />
