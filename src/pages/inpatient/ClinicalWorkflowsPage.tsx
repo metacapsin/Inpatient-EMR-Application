@@ -37,6 +37,7 @@ import { listActiveEncounters, type ActiveEncounterRow } from '../../services/ad
 import NewDropdown from '@/components/ui/NewDropdown';
 import SearchableSelect from '@/components/ui/SearchableSelect';
 import AppButton from '@/components/ui/AppButton';
+import { InpatientRadiologyQuickWorkflow } from '../../features/clinical-workflows/components/InpatientRadiologyQuickWorkflow';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
@@ -118,7 +119,7 @@ function ClinicalWorkflowsPage() {
     const [vitals, setVitals] = useState<InpatientVitalRow[]>([]);
     const [chartVitalType, setChartVitalType] = useState<string>('HR');
 
-    const [orderTab, setOrderTab] = useState<' Ordes' | 'lab' | 'imaging'| 'pro'>('medication');
+    const [orderTab, setOrderTab] = useState<' Ordes' | 'lab' | 'radiology' | 'pro'>('medication');
     const [orderPriority, setOrderPriority] = useState<'routine' | 'urgent' | 'stat'>('routine');
     const [orderJson, setOrderJson] = useState('');
     const [orders, setOrders] = useState<CpoeOrderRow[]>([]);
@@ -820,7 +821,7 @@ function ClinicalWorkflowsPage() {
                 {tab === 'orders' && (
                     <div className="mt-4">
                         <div className="mb-4 flex flex-wrap gap-2">
-                            {(['medication Orders', 'lab', 'imaging' , 'Procredures','History'] as const).map((t) => (
+                            {(['medication Orders', 'lab', 'radiology', 'Procredures', 'History'] as const).map((t) => (
                                 <button
                                     key={t}
                                     type="button"
@@ -831,7 +832,13 @@ function ClinicalWorkflowsPage() {
                                 </button>
                             ))}
                         </div>
-                        {showOrders ? (
+                        {orderTab === 'radiology' ? (
+                            <InpatientRadiologyQuickWorkflow
+                                patientId={patientId}
+                                encounterId={encounterId}
+                                canPlaceOrders={showOrders}
+                            />
+                        ) : showOrders ? (
                             <>
                                 <label className="text-xs text-gray-500">Priority</label>
                                 <div className="w-28">
@@ -859,6 +866,7 @@ function ClinicalWorkflowsPage() {
                         ) : (
                             <p className="text-sm text-gray-500">Only ordering providers can create new orders. You may still track status if your role allows.</p>
                         )}
+                        {orderTab !== 'radiology' ? (
                         <ul className="mt-4 space-y-2">
                             {orders.map((o) => (
                                 <li
@@ -890,13 +898,14 @@ function ClinicalWorkflowsPage() {
                                 </li>
                             ))}
                         </ul>
+                        ) : null}
                     </div>
                 )}
 
                 {tab === 'Result' && (
     <div className="mt-4 space-y-4">
         <div className="flex gap-2">
-       {(['Lab Result', 'Imaging Report',] as const).map((t) => (
+       {(['Lab Result', 'Radiology Report'] as const).map((t) => (
                                 <button
                                     key={t}
                                     type="button"

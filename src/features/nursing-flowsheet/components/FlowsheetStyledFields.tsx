@@ -1,3 +1,4 @@
+import { useCallback, useRef, useState } from 'react';
 import { classNames } from 'primereact/utils';
 import { Calendar } from 'primereact/calendar';
 import { InputNumber } from 'primereact/inputnumber';
@@ -62,7 +63,7 @@ export type FlowsheetOutlinedCalendarProps = {
     placeholder?: string;
 };
 
-/** Datepicker popup uses same panel chrome as Risk Assessments tab (`risk-assessment-cal-panel` in theme CSS). */
+/** Datepicker popup width matches the field shell (`io-tracking-cal-panel` + inline width on show). */
 export function FlowsheetOutlinedCalendar({
     fieldId,
     label,
@@ -74,8 +75,21 @@ export function FlowsheetOutlinedCalendar({
     dateFormat = showTime ? 'mm/dd/y' : 'mm/dd/yy',
     placeholder = showTime ? 'MM/DD/YY HH:MM' : 'MM/DD/YY',
 }: FlowsheetOutlinedCalendarProps) {
+    const shellRef = useRef<HTMLDivElement>(null);
+    const [panelWidth, setPanelWidth] = useState<number | undefined>();
+
+    const syncPanelWidth = useCallback(() => {
+        const w = shellRef.current?.getBoundingClientRect().width;
+        if (w && w > 0) setPanelWidth(Math.round(w));
+    }, []);
+
+    const panelStyle =
+        panelWidth != null
+            ? { width: panelWidth, minWidth: panelWidth, maxWidth: panelWidth }
+            : undefined;
+
     return (
-        <div className="relative isolate w-full min-w-0">
+        <div ref={shellRef} className="relative isolate w-full min-w-0">
             <label htmlFor={fieldId} className={NFS_OUTLINED_DATE_LABEL}>
                 {label}
             </label>
@@ -93,8 +107,9 @@ export function FlowsheetOutlinedCalendar({
                 appendTo={typeof document !== 'undefined' ? document.body : undefined}
                 className={NFS_APPOINTMENT_CALENDAR_CLASS}
                 inputClassName={NFS_APPOINTMENT_CALENDAR_INPUT}
-                panelClassName="risk-assessment-cal-panel"
-                panelStyle={{ maxWidth: 'min(17rem, calc(100vw - 1.5rem))', width: 'min(17rem, calc(100vw - 1.5rem))' }}
+                panelClassName="io-tracking-cal-panel risk-assessment-cal-panel"
+                panelStyle={panelStyle}
+                onShow={syncPanelWidth}
             />
         </div>
     );

@@ -28,6 +28,7 @@ const VisitorsContacts = lazy(() => import('../patient/VisitorsContacts'));
 const PatientLocation = lazy(() => import('../patient/PatientLocation'));
 const Adt = lazy(() => import('../patient/Adt'));
 const NursingFlowsheetPage = lazy(() => import('./NursingFlowsheetPage'));
+const Radiology = lazy(() => import('../patient/Radiology'));
 
 function ModuleFallback() {
     return (
@@ -126,6 +127,8 @@ const FacesheetPage = () => {
                         <Route path="clinical/nursing-flowsheet" element={<NursingFlowsheetPage />} />
                         <Route path="labs" element={<Labs />} />
                         <Route path="lab-orders" element={<LabOrders />} />
+                        <Route path="radiology" element={<Radiology />} />
+                        <Route path="clinical/unified-orders" element={<Navigate to="../../radiology" replace />} />
                         <Route path="documents" element={<Documents />} />
                         <Route path="notes" element={<Notes />} />
                         <Route path="preventive-screening" element={<PreventiveScreening />} />
