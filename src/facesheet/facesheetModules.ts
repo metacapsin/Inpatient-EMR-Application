@@ -70,3 +70,15 @@ export function facesheetModulesByGroup(): { group: FacesheetModuleGroupId; titl
         items: FACESHEET_MODULES.filter((m) => m.group === group),
     })).filter((g) => g.items.length > 0);
 }
+
+const MODULES_BY_PATH_LENGTH = [...FACESHEET_MODULES].sort((a, b) => b.path.length - a.path.length);
+
+/** Resolve active chart module from `/app/facesheet/:id/...` pathname. */
+export function resolveFacesheetModuleFromPath(pathname: string): FacesheetModuleDef | null {
+    const match = pathname.match(/^\/app\/facesheet\/[^/]+\/(.+?)\/?$/);
+    if (!match?.[1]) return null;
+    const sub = match[1];
+    return (
+        MODULES_BY_PATH_LENGTH.find((m) => sub === m.path || sub.startsWith(`${m.path}/`)) ?? null
+    );
+}

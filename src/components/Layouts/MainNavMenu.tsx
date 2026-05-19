@@ -16,7 +16,7 @@ import {
     PATIENT_SUB_LINKS,
 } from './mainNavConfig';
 
-const linkClass = 'text-black dark:text-[#506690] dark:group-hover:text-white-dark';
+const linkClass = 'text-emr-text dark:text-gray-300 dark:group-hover:text-white-dark';
 
 type MainNavMenuProps = {
     variant: 'sidebar' | 'top';
@@ -26,17 +26,15 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
     const { t } = useTranslation();
     const { pathname } = useLocation();
     const dispatch = useDispatch();
-    const [patientsOpen, setPatientsOpen] = useState(() => isPatientsSectionActive(pathname));
+    /** Patient List submenu open by default; other groups collapsed until user expands. */
+    const [patientsOpen, setPatientsOpen] = useState(true);
     const [patientsHover, setPatientsHover] = useState(false);
-    const [appointmentsOpen, setAppointmentsOpen] = useState(() => isAppointmentsSectionActive(pathname));
+    const [appointmentsOpen, setAppointmentsOpen] = useState(false);
     const [appointmentsHover, setAppointmentsHover] = useState(false);
 
     useEffect(() => {
         if (isPatientsSectionActive(pathname)) {
             setPatientsOpen(true);
-        }
-        if (isAppointmentsSectionActive(pathname)) {
-            setAppointmentsOpen(true);
         }
     }, [pathname]);
 
@@ -48,10 +46,10 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
 
     const topItemClass = ({ isActive }: { isActive: boolean }) =>
         [
-            'group flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-semibold transition-colors',
+            'group flex h-9 items-center gap-1.5 rounded-md px-2.5 text-[13px] font-semibold transition-colors duration-150',
             isActive
-                ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-200'
-                : 'text-gray-700 hover:bg-primary/5 hover:text-primary dark:text-gray-300 dark:hover:bg-primary/10',
+                ? 'bg-emr-active text-emr-accent dark:bg-primary/15 dark:text-primary-200'
+                : 'text-emr-text hover:bg-emr-hover hover:text-emr-accent dark:text-gray-300 dark:hover:bg-white/5',
         ].join(' ');
 
     if (variant === 'top') {
@@ -74,8 +72,8 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
                             className={[
                                 'group flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-semibold transition-colors',
                                 isAppointmentsSectionActive(pathname) || appointmentsHover
-                                    ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-200'
-                                    : 'text-gray-700 hover:bg-primary/5 hover:text-primary dark:text-gray-300 dark:hover:bg-primary/10',
+                                    ? 'bg-emr-active text-emr-accent dark:bg-primary/15 dark:text-primary-200'
+                                    : 'text-emr-text hover:bg-emr-hover hover:text-emr-accent dark:text-gray-300 dark:hover:bg-white/5',
                             ].join(' ')}
                             aria-expanded={appointmentsHover}
                             aria-haspopup="true"
@@ -89,7 +87,7 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
                         </button>
                         <ul
                             className={[
-                                'absolute left-0 top-full z-50 mt-1 min-w-[200px] rounded-lg border border-primary-100/60 bg-white py-1.5 shadow-lg dark:border-primary-900/40 dark:bg-[#141210]',
+                                'absolute left-0 top-full z-50 mt-1 min-w-[200px] rounded-md border border-emr-border bg-emr-topnav py-1 dark:border-white/10 dark:bg-[#141210]',
                                 'transition-all duration-150',
                                 appointmentsHover ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
                             ].join(' ')}
@@ -103,8 +101,8 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
                                             [
                                                 'block px-3 py-2 text-[13px] font-medium transition-colors',
                                                 isActive
-                                                    ? 'bg-primary/10 text-primary'
-                                                    : 'text-gray-700 hover:bg-primary/5 hover:text-primary dark:text-gray-300 dark:hover:bg-primary/10',
+                                                    ? 'bg-emr-active font-medium text-emr-accent'
+                                                    : 'text-emr-text hover:bg-emr-hover hover:text-emr-accent dark:text-gray-300 dark:hover:bg-white/5',
                                             ].join(' ')
                                         }
                                         onClick={() => setAppointmentsHover(false)}
@@ -131,8 +129,8 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
                             className={[
                                 'group flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-semibold transition-colors',
                                 isPatientsSectionActive(pathname) || patientsHover
-                                    ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-200'
-                                    : 'text-gray-700 hover:bg-primary/5 hover:text-primary dark:text-gray-300 dark:hover:bg-primary/10',
+                                    ? 'bg-emr-active text-emr-accent dark:bg-primary/15 dark:text-primary-200'
+                                    : 'text-emr-text hover:bg-emr-hover hover:text-emr-accent dark:text-gray-300 dark:hover:bg-white/5',
                             ].join(' ')}
                             aria-expanded={patientsHover}
                             aria-haspopup="true"
@@ -146,7 +144,7 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
                         </button>
                         <ul
                             className={[
-                                'absolute left-0 top-full z-50 mt-1 min-w-[240px] rounded-lg border border-primary-100/60 bg-white py-1.5 shadow-lg dark:border-primary-900/40 dark:bg-[#141210]',
+                                'absolute left-0 top-full z-50 mt-1 min-w-[240px] rounded-md border border-emr-border bg-emr-topnav py-1 dark:border-white/10 dark:bg-[#141210]',
                                 'transition-all duration-150',
                                 patientsHover ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
                             ].join(' ')}
@@ -160,8 +158,8 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
                                             [
                                                 'block px-3 py-2 text-[13px] font-medium transition-colors',
                                                 isActive
-                                                    ? 'bg-primary/10 text-primary'
-                                                    : 'text-gray-700 hover:bg-primary/5 hover:text-primary dark:text-gray-300 dark:hover:bg-primary/10',
+                                                    ? 'bg-emr-active font-medium text-emr-accent'
+                                                    : 'text-emr-text hover:bg-emr-hover hover:text-emr-accent dark:text-gray-300 dark:hover:bg-white/5',
                                             ].join(' ')
                                         }
                                         onClick={() => setPatientsHover(false)}

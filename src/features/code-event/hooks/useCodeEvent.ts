@@ -7,6 +7,9 @@ import {
     updateCodeEventTeam,
     updateCodeEventTimeline,
 } from '../../../services/codeEventService';
+import { DEFAULT_CODE_EVENT_UNIT_ID } from '../config/codeEventMock.config';
+import { activeCodeEventsQueryKey } from './useActiveCodeEvents';
+import { patientActiveCodeQueryKey } from './usePatientActiveCodeEvent';
 import type {
     CloseCodeEventPayload,
     CodeEventRecord,
@@ -82,6 +85,10 @@ export function useCodeEvent(eventId: string | undefined) {
             if (!eventId) return null;
             const updated = await closeCodeEvent(eventId, payload);
             queryClient.setQueryData(codeEventQueryKey(eventId), updated);
+            void queryClient.invalidateQueries({ queryKey: activeCodeEventsQueryKey(DEFAULT_CODE_EVENT_UNIT_ID) });
+            if (updated.patientId) {
+                void queryClient.invalidateQueries({ queryKey: patientActiveCodeQueryKey(updated.patientId) });
+            }
             invalidate();
             return updated;
         },

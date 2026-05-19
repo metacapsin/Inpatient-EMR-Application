@@ -34,9 +34,9 @@ const Sidebar = () => {
     return (
         <div className={semidark ? 'dark' : ''}>
             <nav
-                className={`sidebar fixed bottom-0 top-0 z-[50] h-full min-h-screen w-[200px] border-r border-primary-100/30 shadow-[5px_0_25px_0_rgba(151,112,79,0.08)] transition-all duration-300 dark:border-primary-900/20 lg:hidden ${semidark ? 'text-white-dark' : ''} ${themeConfig.sidebar ? 'z-[50]' : 'z-10'}`}
+                className={`sidebar fixed bottom-0 top-0 z-[50] h-full min-h-screen w-[200px] border-r border-emr-border bg-emr-sidebar transition-all duration-300 lg:hidden ${semidark ? 'text-white-dark' : ''} ${themeConfig.sidebar ? 'z-[50]' : 'z-10'}`}
             >
-                <div className="h-full bg-white dark:bg-black">
+                <div className="h-full bg-emr-sidebar dark:bg-black">
                     <div className="flex items-center justify-between px-4 py-3">
                         <NavLink to="/app/dashboard" className="main-logo flex shrink-0 items-center">
                             <img className="h-8 w-auto object-contain dark:hidden" src={mdCareLogo} alt="MD Care" />

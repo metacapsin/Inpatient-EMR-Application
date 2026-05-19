@@ -192,8 +192,8 @@ const Header = () => {
         <header
             className={`app-layout-header z-40 ${themeConfig.semidark && themeConfig.menu === 'horizontal' ? 'dark' : ''}`}
         >
-            <div className="shadow-sm">
-                <div className="relative flex w-full min-w-0 items-center gap-2 bg-white px-3 py-2 dark:bg-black sm:px-4 lg:gap-3 lg:px-5 lg:py-2.5">
+            <div className="app-layout-header-bar">
+                <div className="relative flex h-12 w-full min-w-0 items-center gap-2 px-3 sm:px-4 lg:gap-3 lg:px-5">
                     <HeaderTopBar />
 
                     <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5 lg:gap-2 rtl:space-x-reverse dark:text-[#d0d2d6]">

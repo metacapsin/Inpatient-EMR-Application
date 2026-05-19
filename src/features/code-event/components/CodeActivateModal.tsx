@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-hot-toast';
 import { AppModal } from '../../../components/shared/AppModal';
@@ -13,6 +14,8 @@ import { fromDatetimeLocalValue, isWithinCalledAtEditWindow, toDatetimeLocalValu
 import { CALLED_AT_EDIT_WINDOW_MS, CODE_EVENT_TYPES } from '../constants/codeEventOptions';
 import type { CodeEventType } from '../../../types/codeEvent';
 import { DEFAULT_CODE_EVENT_UNIT_ID } from '../config/codeEventMock.config';
+import { activeCodeEventsQueryKey } from '../hooks/useActiveCodeEvents';
+import { patientActiveCodeQueryKey } from '../hooks/usePatientActiveCodeEvent';
 import { getPatientsList, type PatientListItem } from '../../../services/patient.service';
 import { listActiveEncounters, type ActiveEncounterRow } from '../../../services/adt.service';
 
@@ -38,6 +41,7 @@ const fieldClass =
 
 export function CodeActivateModal({ open, onClose, context, onActivated }: Props) {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const user = useSelector((s: IRootState) => s.auth.user);
     const calledBy = providerSignUserIdFromUser(user);
     const calledByName = providerDisplayNameFromUser(user) || 'Clinical user';
@@ -152,6 +156,9 @@ export function CodeActivateModal({ open, onClose, context, onActivated }: Props
                     patientId,
                 });
             }
+            const unitId = context?.unitId ?? DEFAULT_CODE_EVENT_UNIT_ID;
+            void queryClient.invalidateQueries({ queryKey: activeCodeEventsQueryKey(unitId) });
+            void queryClient.invalidateQueries({ queryKey: patientActiveCodeQueryKey(patientId) });
             toast.success(`${eventType} activated`);
             onActivated?.(record.id);
             onClose();
@@ -175,10 +182,10 @@ export function CodeActivateModal({ open, onClose, context, onActivated }: Props
         announceToUnit,
         patientLabel,
         context,
-        announceToUnit,
         onActivated,
         onClose,
         navigate,
+        queryClient,
     ]);
 
     return (

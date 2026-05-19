@@ -23,11 +23,11 @@ export function useFacesheetChartLayout() {
             isFacesheet,
             /** Replaces `panel h-[calc(100vh-120px)] overflow-y-auto` on module roots */
             moduleRootClass: isFacesheet
-                ? 'w-full min-w-0 max-w-none overflow-visible [height:auto]'
+                ? 'w-full min-w-0 max-w-none min-h-0 overflow-visible [height:auto]'
                 : 'panel h-[calc(100vh-120px)] overflow-y-auto',
             /** Replaces a plain outer `panel` (Labs, Notes, Lab Orders) */
             moduleSurfaceClass: isFacesheet
-                ? 'w-full min-w-0 max-w-none overflow-visible [height:auto]'
+                ? 'w-full min-w-0 max-w-none min-h-0 overflow-visible [height:auto]'
                 : 'panel',
         }),
         [isFacesheet]

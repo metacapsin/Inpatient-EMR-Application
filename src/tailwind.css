@@ -22,16 +22,50 @@
     }
 
     body {
-        @apply bg-[#f8f6f4] font-nunito;
+        @apply bg-emr-canvas font-nunito text-emr-text;
     }
 
     body.dark {
         @apply bg-[#0f0d0b];
     }
 
-    /* Panel - equal shadow from all sides, visible border */
+    /* Panel — flat enterprise surface (no floating card elevation) */
     .panel {
-        @apply relative rounded-xl bg-white p-5 border-2 border-primary-200 dark:border-primary-800 dark:bg-[#141210] shadow-[0_0_15px_rgba(151,112,79,0.08)] dark:shadow-[0_0_20px_rgba(151,112,79,0.12)];
+        @apply relative rounded-lg border border-emr-border bg-white p-5 dark:border-white/10 dark:bg-[#141210];
+        box-shadow: none;
+    }
+
+    /* Facesheet / chart workspace — canvas + module card */
+    .facesheet-module-surface {
+        @apply flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden border-l border-emr-border bg-emr-canvas [overscroll-behavior:contain] dark:border-white/10 dark:bg-[#0f0d0b];
+        box-shadow: none;
+    }
+
+    .facesheet-module-canvas {
+        @apply flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4;
+    }
+
+    .facesheet-module-card {
+        @apply flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-emr-border bg-white dark:border-white/10 dark:bg-[#141210];
+        box-shadow: none;
+    }
+
+    .facesheet-module-card-body {
+        @apply flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3 sm:px-5 sm:pb-5 sm:pt-4;
+    }
+
+    .facesheet-module-route {
+        @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden;
+    }
+
+    /* Direct route root (flowsheet, radiology tabs) — fill card height */
+    .facesheet-module-route-root {
+        @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
+    }
+
+    /* Hide legacy in-page breadcrumbs only (card header shows Patient / Module) */
+    .facesheet-module-route .chart-module-legacy-breadcrumb {
+        display: none;
     }
     /*
      * Top app bar only: do not target every <header> in the app (e.g. facesheet EncounterHeader,
@@ -55,11 +89,11 @@
 
     .sidebar .nav-item > button,
     .sidebar .nav-item > a {
-        @apply mb-1 flex items-center justify-between overflow-hidden whitespace-nowrap rounded-lg p-2.5 text-gray-600 hover:bg-primary/5 hover:text-primary dark:text-gray-400 dark:hover:bg-primary/10 dark:hover:text-primary-200 w-full transition-colors duration-200;
+        @apply mb-0.5 flex h-9 items-center justify-between overflow-hidden whitespace-nowrap rounded-md px-2.5 py-2 text-[13px] text-emr-text hover:bg-emr-hover hover:text-emr-accent dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-primary-200 w-full transition-colors duration-150;
     }
     .sidebar .nav-item > button.active,
     .sidebar .nav-item > a.active {
-        @apply bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-200;
+        @apply border-l-2 border-emr-accent bg-emr-active font-semibold text-emr-accent ltr:-ml-px rtl:-mr-px dark:border-primary dark:bg-primary/15 dark:text-primary-200;
     }
 
     .sidebar .nav-item > button.active > div > span,
@@ -69,12 +103,26 @@
 
     .sidebar ul.sub-menu li button,
     .sidebar ul.sub-menu li a {
-        @apply flex items-center px-9 py-2.5 before:h-0.5 before:w-2 before:rounded before:bg-primary-200 hover:bg-primary/5
-      hover:text-primary hover:before:!bg-primary ltr:before:mr-2 rtl:before:ml-2 dark:before:bg-primary-600 dark:hover:bg-primary/10 dark:hover:text-primary-200;
+        @apply flex h-8 items-center py-2 pl-8 pr-2.5 text-[13px] before:h-0.5 before:w-1.5 before:rounded before:bg-emr-border hover:bg-emr-hover
+      hover:text-emr-accent hover:before:!bg-emr-accent ltr:before:mr-2 rtl:before:ml-2 dark:before:bg-white/20 dark:hover:bg-white/5 dark:hover:text-primary-200;
     }
     .sidebar ul.sub-menu li button.active,
     .sidebar ul.sub-menu li a.active {
-        @apply text-primary before:bg-primary;
+        @apply border-l-2 border-emr-accent bg-emr-active font-semibold text-emr-accent before:bg-emr-accent dark:bg-primary/10 dark:text-primary-200;
+    }
+
+    /* App shell: premium top bar */
+    header.app-layout-header > div {
+        box-shadow: none !important;
+    }
+    header.app-layout-header .app-layout-header-bar {
+        @apply border-b border-emr-border bg-emr-topnav;
+    }
+
+    /* Facesheet chart rail */
+    .facesheet-chart-nav {
+        @apply bg-emr-sidebar;
+        box-shadow: none !important;
     }
 
     .sidebar .nav-item a div:first-child svg,
@@ -189,17 +237,13 @@
         @apply lg:w-[calc(100%-70px)] lg:ltr:ml-[70px] lg:rtl:mr-[70px];
     }
 
-    /* Facesheet: chart rail width matches main sidebar; main content margin matches (collapsible menu otherwise uses 70px) */
+    /* Facesheet: full-width content under top nav; chart rail is inline in FacesheetPage */
     @media (min-width: 1024px) {
-        .main-container.facesheet-shell .facesheet-chart-nav.sidebar {
-            width: 200px !important;
-        }
-        .main-container.facesheet-shell .facesheet-chart-nav.sidebar:hover {
-            width: 200px !important;
-        }
-        .main-section.collapsible-vertical:not(.toggle-sidebar) .main-container.facesheet-shell .main-content {
-            width: calc(100% - 200px) !important;
-            margin-inline-start: 200px !important;
+        .main-section.collapsible-vertical .main-container.facesheet-shell .main-content,
+        .main-container.facesheet-shell .main-content {
+            width: 100% !important;
+            margin-inline-start: 0 !important;
+            margin-inline-end: 0 !important;
         }
     }
     .collapsible-vertical .sidebar .collapse-icon,

@@ -383,7 +383,7 @@ const Vitals: React.FC = () => {
 
   return (
     <div className={moduleRootClass}>
-        <div className="mb-5">
+        <div className="chart-module-legacy-breadcrumb mb-5">
           <ul className="flex items-center gap-2 text-sm">
             <li><a href="#" className="text-primary hover:underline">Patient</a></li>
             <li>/</li>

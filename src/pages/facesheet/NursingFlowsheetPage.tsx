@@ -90,7 +90,7 @@ export default function NursingFlowsheetPage() {
     }
 
     return (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="facesheet-module-route-root">
             <NursingFlowsheetProvider key={`${patientId}:${encounterId}`} initialDocument={loadedDocument}>
                 <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                     <DraftBootstrap draftOpen={draftOpen} draftPreview={draftPreview} onCloseDraft={() => setDraftOpen(false)} />

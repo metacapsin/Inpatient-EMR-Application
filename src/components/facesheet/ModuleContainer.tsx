@@ -1,15 +1,21 @@
 import type { PropsWithChildren } from 'react';
+import { FacesheetModuleBreadcrumb } from './FacesheetModuleBreadcrumb';
 
 /**
- * Facesheet module card: fills space below encounter header; this region scrolls (not the whole window).
+ * Facesheet module workspace: canvas padding + enterprise card.
+ * Route content must fill remaining height (flex chain for TabView / flowsheet modules).
  */
 export function ModuleContainer({ children }: PropsWithChildren) {
     return (
-        <section
-            className="panel flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden [overscroll-behavior:contain]"
-            aria-label="Clinical module"
-        >
-            {children}
+        <section className="facesheet-module-surface" aria-label="Clinical module">
+            <div className="facesheet-module-canvas">
+                <article className="facesheet-module-card">
+                    <FacesheetModuleBreadcrumb />
+                    <div className="facesheet-module-card-body">
+                        <div className="facesheet-module-route">{children}</div>
+                    </div>
+                </article>
+            </div>
         </section>
     );
 }

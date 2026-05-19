@@ -10,6 +10,7 @@ import { EncounterHeader } from '../../components/facesheet/EncounterHeader';
 import { ModuleContainer } from '../../components/facesheet/ModuleContainer';
 import { FacesheetModuleTabs } from '../../components/facesheet/FacesheetModuleTabs';
 import { FacesheetEmptyState } from '../../components/facesheet/FacesheetEmptyState';
+import { FacesheetChartNav } from '../../components/Layouts/FacesheetChartNav';
 
 const Demographic = lazy(() => import('../patient/Demographic'));
 const Vitals = lazy(() => import('../patient/Vitals'));
@@ -96,11 +97,14 @@ const FacesheetPage = () => {
     }
 
     return (
-        <div className="mx-auto flex h-full min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-2 overflow-hidden text-gray-900 dark:text-gray-100">
+        <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden text-gray-900 dark:text-gray-100">
             {patient ? (
-                <div className="z-20 flex shrink-0 flex-col gap-2">
+                <div className="flex shrink-0 flex-col">
                     <EncounterHeader patient={patient} />
-                    <FacesheetModuleTabs base={base} className="lg:hidden" />
+                    <FacesheetModuleTabs
+                        base={base}
+                        className="shrink-0 border-b border-emr-border bg-emr-sidebar px-2 py-2 dark:border-white/10 lg:hidden"
+                    />
                 </div>
             ) : (
                 <FacesheetEmptyState
@@ -109,8 +113,10 @@ const FacesheetPage = () => {
                 />
             )}
 
-            <ModuleContainer>
-                <Suspense fallback={<ModuleFallback />}>
+            <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden border-t border-emr-border dark:border-white/10">
+                <FacesheetChartNav />
+                <ModuleContainer>
+                    <Suspense fallback={<ModuleFallback />}>
                     <Routes>
                         <Route index element={<Navigate to="demographic" replace />} />
                         <Route path="demographic" element={<Demographic />} />
@@ -136,7 +142,8 @@ const FacesheetPage = () => {
                         <Route path="*" element={<Navigate to="demographic" replace />} />
                     </Routes>
                 </Suspense>
-            </ModuleContainer>
+                </ModuleContainer>
+            </div>
         </div>
     );
 };
