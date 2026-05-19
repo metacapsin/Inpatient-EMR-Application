@@ -29,7 +29,13 @@ export default function Radiology() {
 
     return (
         <div className={`${moduleRootClass} flex min-h-0 flex-1 flex-col overflow-hidden`}>
-            <RadiologyPageHeader encounterHint={encounterHint} />
+            <RadiologyPageHeader
+                encounterHint={encounterHint}
+                codeEventContext={{
+                    patientId: patientId.trim(),
+                    encounterId: session?.encounterId?.trim() || undefined,
+                }}
+            />
             <RadiologyModule patientId={patientId.trim()} />
         </div>
     );

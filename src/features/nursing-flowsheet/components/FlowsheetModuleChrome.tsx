@@ -5,6 +5,7 @@ import { Skeleton } from 'primereact/skeleton';
 import type { FacesheetPatient } from '../../../services/patient.service';
 import { formatPatientHeaderBedLine } from '../../../types/patientLocation';
 import { useNursingFlowsheet } from '../state/NursingFlowsheetContext';
+import { CodeHeaderButton } from '../../code-event/components/CodeHeaderButton';
 
 export interface FlowsheetModuleChromeProps {
     patient: FacesheetPatient | null;
@@ -69,6 +70,18 @@ export function FlowsheetModuleChrome({
                     )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                    {patient?.id ? (
+                        <CodeHeaderButton
+                            size="sm"
+                            context={{
+                                patientId: patient.id,
+                                encounterId: encounterId || undefined,
+                                patientName: patient.fullName,
+                                patientMrn: patient.mrn,
+                                location: bed !== '—' ? bed : undefined,
+                            }}
+                        />
+                    ) : null}
                     <Button
                         type="button"
                         size="small"

@@ -1,4 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useActiveCodeEvents } from '../features/code-event/hooks/useActiveCodeEvents';
+import { IpdCodeAlertStrip } from '../features/code-event/components/IpdCodeAlertStrip';
+import { IpdActiveCodeBadges } from '../features/code-event/components/IpdActiveCodeBadges';
+import { CodeActivateButton } from '../features/code-event/components/CodeActivateButton';
+import { CodeActivateModal } from '../features/code-event/components/CodeActivateModal';
+import { connectCodeEventWebSocket, disconnectCodeEventWebSocket } from '../features/code-event/utils/codeEventBroadcast';
+import { DEFAULT_CODE_EVENT_UNIT_ID } from '../features/code-event/config/codeEventMock.config';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -32,6 +39,13 @@ const Dashboard: React.FC = () => {
     const queryClient = useQueryClient();
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [transferOpen, setTransferOpen] = useState(false);
+    const [codeModalOpen, setCodeModalOpen] = useState(false);
+    const { events: activeCodeEvents } = useActiveCodeEvents(DEFAULT_CODE_EVENT_UNIT_ID);
+
+    useEffect(() => {
+        connectCodeEventWebSocket(DEFAULT_CODE_EVENT_UNIT_ID);
+        return () => disconnectCodeEventWebSocket();
+    }, []);
 
     const dashboardQuery = useQuery({
         queryKey: ['ipdDashboard'],
@@ -132,10 +146,18 @@ const Dashboard: React.FC = () => {
 
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-3 sm:gap-4">
-            <div className="shrink-0">
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tracking-tight">In-Patient Dashboard</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Real-time hospital operations overview</p>
+            <div className="shrink-0 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tracking-tight">In-Patient Dashboard</h1>
+                        <IpdActiveCodeBadges events={activeCodeEvents} />
+                    </div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Real-time hospital operations overview</p>
+                </div>
+                <CodeActivateButton label="Activate Code" size="md" onClick={() => setCodeModalOpen(true)} />
             </div>
+
+            <IpdCodeAlertStrip events={activeCodeEvents} />
 
             <IpdKpiRow kpis={payload.kpis} loading={dashboardQuery.isFetching && !dashboardQuery.isLoading} />
 
@@ -168,6 +190,21 @@ const Dashboard: React.FC = () => {
                 patientLabel={selectedRow?.patientName ? `Patient: ${selectedRow.patientName}` : 'Transfer'}
                 onClose={() => !transferMutation.isPending && setTransferOpen(false)}
                 onConfirm={onTransferConfirm}
+            />
+
+            <CodeActivateModal
+                open={codeModalOpen}
+                onClose={() => setCodeModalOpen(false)}
+                context={
+                    selectedRow?.patientId && selectedRow.encounterId
+                        ? {
+                              patientId: selectedRow.patientId,
+                              encounterId: selectedRow.encounterId,
+                              patientName: selectedRow.patientName ?? undefined,
+                              location: [selectedRow.ward, selectedRow.room, selectedRow.bed].filter(Boolean).join(' · '),
+                          }
+                        : undefined
+                }
             />
         </div>
     );

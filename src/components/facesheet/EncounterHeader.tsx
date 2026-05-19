@@ -153,6 +153,13 @@ export function EncounterHeader({ patient, patientListHref = '/app/patients/list
                         bedsFetchError={bedsQuery.isError}
                         onOpenAdt={setAdtModal}
                         onStartDischarge={goDischargeReadiness}
+                        codeEventContext={{
+                            patientId: patient.id,
+                            encounterId: session?.encounterId?.trim() || undefined,
+                            patientName: patient.fullName,
+                            patientMrn: patient.mrn,
+                            location: bedDisplay !== '—' ? bedDisplay : undefined,
+                        }}
                     />
                 </div>
             </header>

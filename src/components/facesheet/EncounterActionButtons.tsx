@@ -1,9 +1,12 @@
 import { ArrowRightLeft, DoorOpen, UserPlus } from 'lucide-react';
 import type { EncounterHeaderAdtModalState } from './encounterHeaderTypes';
+import { CodeHeaderButton } from '../../features/code-event/components/CodeHeaderButton';
+import type { CodeActivateContext } from '../../features/code-event/components/CodeActivateModal';
 
 export interface EncounterActionButtonsProps {
     admitted: boolean;
     dischargeInitiated: boolean;
+    codeEventContext?: CodeActivateContext;
     /** Encounter has a non-null bed assignment in workspace state (required to begin discharge). */
     bedReadyForDischarge: boolean;
     /** When true, transfer is disabled (no listed available beds after a successful fetch). */
@@ -22,6 +25,7 @@ export function EncounterActionButtons({
     bedsFetchError,
     onOpenAdt,
     onStartDischarge,
+    codeEventContext,
 }: EncounterActionButtonsProps) {
     const transferDisabled =
         !admitted || dischargeInitiated || (transferBlockedNoBeds && !bedsFetchError);
@@ -49,6 +53,7 @@ export function EncounterActionButtons({
 
     return (
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {codeEventContext?.patientId ? <CodeHeaderButton context={codeEventContext} size="sm" /> : null}
             <button
                 type="button"
                 title={transferTitle}

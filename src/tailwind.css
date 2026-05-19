@@ -86,6 +86,11 @@
         @apply transition-all duration-300 lg:ltr:ml-[200px] lg:rtl:mr-[200px];
     }
 
+    /* Desktop: main nav in header — hide sidebar, full-width content */
+    .main-section.main-topnav-layout .main-container.main-topnav:not(.facesheet-shell) .main-content {
+        @apply lg:ltr:ml-0 lg:rtl:mr-0;
+    }
+
     /* Horizontal layouts */
     .horizontal .horizontal-menu {
         @apply hidden shadow-md lg:flex;

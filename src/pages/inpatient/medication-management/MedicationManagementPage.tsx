@@ -9,6 +9,7 @@ import { PrnStatTab } from './PrnStatTab';
 import { PharmacyTab } from './PharmacyTab';
 import { DischargeMedsTab } from './DischargeMedsTab';
 import SearchableSelect from '@/components/ui/SearchableSelect';
+import { CodeHeaderButton } from '../../../features/code-event/components/CodeHeaderButton';
 import type { IRootState } from '../../../store';
 import { selectAdtEncounter } from '../../../store/adtEncounterSlice';
 
@@ -135,7 +136,18 @@ export default function MedicationManagementPage() {
     return (
         <div className="space-y-4">
             <div className="panel p-6">
-                <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Medication management</h1>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Medication management</h1>
+                    {patientId ? (
+                        <CodeHeaderButton
+                            size="sm"
+                            context={{
+                                patientId,
+                                encounterId: encounterId || adtSession?.encounterId?.trim() || undefined,
+                            }}
+                        />
+                    ) : null}
+                </div>
                 <p className="mt-2 max-w-3xl text-sm text-gray-600 dark:text-gray-400">
                     MAR, PRN/STAT, pharmacy dispensing, and discharge medications. Discharge medication documents are saved per{' '}
                     <strong>encounter</strong> (inpatient admission). Select a patient, then an active encounter, before using the

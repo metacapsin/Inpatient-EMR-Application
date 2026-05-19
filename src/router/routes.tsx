@@ -12,6 +12,7 @@ const LiveBedBoardPage = lazy(() => import('../pages/bed-board/LiveBedBoardPage'
 const ClinicalWorkflowsPage = lazy(() => import('../pages/inpatient/ClinicalWorkflowsPage'));
 const DischargeReadinessPage = lazy(() => import('../pages/inpatient/DischargeReadinessPage'));
 const MedicationManagementPage = lazy(() => import('../pages/inpatient/medication-management/MedicationManagementPage'));
+const CodeEventPage = lazy(() => import('../pages/inpatient/CodeEventPage'));
 const FacesheetPage = lazy(() => import('../pages/facesheet/FacesheetPage'));
 const HealthMonitoring = lazy(() => import('../pages/patient/HealthSummary'));
 const StaffSchedulingPage = lazy(() => import('../pages/staff-scheduling/StaffSchedulingPage'));
@@ -99,6 +100,11 @@ const routes = [
     {
         path: '/app/inpatient/medication-management',
         element: guard(<MedicationManagementPage />),
+        layout: 'default' as const,
+    },
+    {
+        path: '/app/inpatient/code-event/:eventId',
+        element: guard(<CodeEventPage />),
         layout: 'default' as const,
     },
     {

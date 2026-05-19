@@ -76,7 +76,7 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
                 {/* END APP SETTING LAUNCHER */}
 
                 <div
-                    className={`${themeConfig.navbar} main-container text-black dark:text-white-dark min-h-screen${isFacesheet ? ' facesheet-shell' : ''}`}
+                    className={`${themeConfig.navbar} main-container text-black dark:text-white-dark min-h-screen${isFacesheet ? ' facesheet-shell' : ' main-topnav'}`}
                 >
                     {/* BEGIN SIDEBAR */}
                     {isFacesheet ? <FacesheetSidebar /> : <Sidebar />}
