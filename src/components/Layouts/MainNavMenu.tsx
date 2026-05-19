@@ -9,7 +9,12 @@ import IconMenuCalendar from '../Icon/Menu/IconMenuCalendar';
 import IconMenuContacts from '../Icon/Menu/IconMenuContacts';
 import IconMenuPages from '../Icon/Menu/IconMenuPages';
 import { toggleSidebar } from '../../store/themeConfigSlice';
-import { isPatientsSectionActive, PATIENT_SUB_LINKS } from './mainNavConfig';
+import {
+    APPOINTMENT_SUB_LINKS,
+    isAppointmentsSectionActive,
+    isPatientsSectionActive,
+    PATIENT_SUB_LINKS,
+} from './mainNavConfig';
 
 const linkClass = 'text-black dark:text-[#506690] dark:group-hover:text-white-dark';
 
@@ -23,10 +28,15 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
     const dispatch = useDispatch();
     const [patientsOpen, setPatientsOpen] = useState(() => isPatientsSectionActive(pathname));
     const [patientsHover, setPatientsHover] = useState(false);
+    const [appointmentsOpen, setAppointmentsOpen] = useState(() => isAppointmentsSectionActive(pathname));
+    const [appointmentsHover, setAppointmentsHover] = useState(false);
 
     useEffect(() => {
         if (isPatientsSectionActive(pathname)) {
             setPatientsOpen(true);
+        }
+        if (isAppointmentsSectionActive(pathname)) {
+            setAppointmentsOpen(true);
         }
     }, [pathname]);
 
@@ -54,11 +64,56 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
                             <span>{t('dashboard')}</span>
                         </NavLink>
                     </li>
-                    <li>
-                        <NavLink to="/app/appointments" className={topItemClass}>
-                            <IconMenuCalendar className="h-4 w-4 shrink-0 opacity-70 group-hover:opacity-100" />
+                    <li
+                        className="relative"
+                        onMouseEnter={() => setAppointmentsHover(true)}
+                        onMouseLeave={() => setAppointmentsHover(false)}
+                    >
+                        <button
+                            type="button"
+                            className={[
+                                'group flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-semibold transition-colors',
+                                isAppointmentsSectionActive(pathname) || appointmentsHover
+                                    ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-200'
+                                    : 'text-gray-700 hover:bg-primary/5 hover:text-primary dark:text-gray-300 dark:hover:bg-primary/10',
+                            ].join(' ')}
+                            aria-expanded={appointmentsHover}
+                            aria-haspopup="true"
+                            onClick={() => setAppointmentsHover((o) => !o)}
+                        >
+                            <IconMenuCalendar className="h-4 w-4 shrink-0 opacity-70" />
                             <span>Appointments</span>
-                        </NavLink>
+                            <IconCaretDown
+                                className={`h-3.5 w-3.5 shrink-0 opacity-50 transition-transform ${appointmentsHover ? 'rotate-180' : ''}`}
+                            />
+                        </button>
+                        <ul
+                            className={[
+                                'absolute left-0 top-full z-50 mt-1 min-w-[200px] rounded-lg border border-primary-100/60 bg-white py-1.5 shadow-lg dark:border-primary-900/40 dark:bg-[#141210]',
+                                'transition-all duration-150',
+                                appointmentsHover ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
+                            ].join(' ')}
+                        >
+                            {APPOINTMENT_SUB_LINKS.map((item) => (
+                                <li key={item.to}>
+                                    <NavLink
+                                        to={item.to}
+                                        end={item.to === '/app/appointments'}
+                                        className={({ isActive }) =>
+                                            [
+                                                'block px-3 py-2 text-[13px] font-medium transition-colors',
+                                                isActive
+                                                    ? 'bg-primary/10 text-primary'
+                                                    : 'text-gray-700 hover:bg-primary/5 hover:text-primary dark:text-gray-300 dark:hover:bg-primary/10',
+                                            ].join(' ')
+                                        }
+                                        onClick={() => setAppointmentsHover(false)}
+                                    >
+                                        {item.label}
+                                    </NavLink>
+                                </li>
+                            ))}
+                        </ul>
                     </li>
                     <li>
                         <NavLink to="/app/staff-scheduling" className={topItemClass}>
@@ -138,13 +193,33 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
                     </div>
                 </NavLink>
             </li>
-            <li className="nav-item">
-                <NavLink to="/app/appointments" className="group" onClick={closeMobileSidebar}>
-                    <div className="flex items-center">
-                        <IconMenuCalendar className="shrink-0 group-hover:!text-primary" />
-                        <span className={`ltr:pl-3 rtl:pr-3 ${linkClass}`}>Appointments</span>
+            <li className="menu nav-item">
+                <button
+                    type="button"
+                    className={`group ${appointmentsOpen ? 'active' : ''}`}
+                    onClick={() => setAppointmentsOpen((o) => !o)}
+                >
+                    <div className="flex w-full items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center">
+                            <IconMenuCalendar className="shrink-0 text-black/50 group-hover:!text-primary dark:text-white/50" />
+                            <span className={`ltr:pl-3 rtl:pr-3 ${linkClass}`}>Appointments</span>
+                        </div>
+                        <IconCaretDown
+                            className={`h-4 w-4 shrink-0 text-black/40 transition-transform dark:text-white/40 ${appointmentsOpen ? 'rotate-180' : ''}`}
+                        />
                     </div>
-                </NavLink>
+                </button>
+                {appointmentsOpen && (
+                    <ul className="sub-menu">
+                        {APPOINTMENT_SUB_LINKS.map((item) => (
+                            <li key={item.to}>
+                                <NavLink to={item.to} end={item.to === '/app/appointments'} onClick={closeMobileSidebar}>
+                                    {item.label}
+                                </NavLink>
+                            </li>
+                        ))}
+                    </ul>
+                )}
             </li>
             <li className="nav-item">
                 <NavLink to="/app/staff-scheduling" className="group" onClick={closeMobileSidebar}>

@@ -1,4 +1,15 @@
 /** Same routes/labels as the main app sidebar — no extra items. */
+export const APPOINTMENT_SUB_LINKS = [
+    { to: '/app/appointments', label: 'Appointments list' },
+    { to: '/app/appointments/calendar', label: 'Calendar view' },
+] as const;
+
+const APPOINTMENT_ACTIVE_PREFIX = '/app/appointments';
+
+export function isAppointmentsSectionActive(pathname: string): boolean {
+    return pathname === APPOINTMENT_ACTIVE_PREFIX || pathname.startsWith(`${APPOINTMENT_ACTIVE_PREFIX}/`);
+}
+
 export const PATIENT_SUB_LINKS = [
     { to: '/app/patients/list', label: 'Patient List' },
     { to: '/app/bed-board', label: 'Bed board' },
