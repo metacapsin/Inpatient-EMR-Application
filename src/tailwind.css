@@ -116,7 +116,16 @@
         box-shadow: none !important;
     }
     header.app-layout-header .app-layout-header-bar {
-        @apply border-b border-emr-border bg-emr-topnav;
+        @apply border-b border-emr-border/80 bg-emr-topnav/95 backdrop-blur-md backdrop-saturate-150;
+        box-shadow:
+            0 1px 0 rgba(255, 255, 255, 0.65) inset,
+            0 1px 3px rgba(31, 41, 55, 0.04);
+    }
+    .dark header.app-layout-header .app-layout-header-bar,
+    header.app-layout-header.dark .app-layout-header-bar {
+        border-color: rgb(255 255 255 / 0.1);
+        background-color: rgb(20 18 16 / 0.92);
+        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
     }
 
     /* Facesheet chart rail */

@@ -15,6 +15,8 @@ import IconMailDot from '../Icon/IconMailDot';
 import IconInfoCircle from '../Icon/IconInfoCircle';
 import IconLogout from '../Icon/IconLogout';
 import { HeaderTopBar } from './HeaderTopBar';
+import { HeaderGlobalSearch } from './HeaderGlobalSearch';
+import { emrHeaderUtilityBtnClass } from '../../styles/emrLayoutClasses';
 
 const Header = () => {
     const location = useLocation();
@@ -193,15 +195,24 @@ const Header = () => {
             className={`app-layout-header z-40 ${themeConfig.semidark && themeConfig.menu === 'horizontal' ? 'dark' : ''}`}
         >
             <div className="app-layout-header-bar">
-                <div className="relative flex h-12 w-full min-w-0 items-center gap-2 px-3 sm:px-4 lg:gap-3 lg:px-5">
+                <div className="relative flex h-11 w-full min-w-0 items-center gap-2 px-3 sm:px-4 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(220px,400px)_auto] lg:items-center lg:gap-4 lg:px-5">
                     <HeaderTopBar />
 
-                    <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5 lg:gap-2 rtl:space-x-reverse dark:text-[#d0d2d6]">
+                    <div className="hidden min-w-0 justify-center lg:flex">
+                        <HeaderGlobalSearch className="w-full max-w-[400px]" />
+                    </div>
+
+                    <div
+                        className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1 lg:ml-0 rtl:space-x-reverse dark:text-[#d0d2d6]"
+                        role="toolbar"
+                        aria-label="Application utilities"
+                    >
                         <div>
                             {themeConfig.theme === 'light' ? (
                                 <button
                                     type="button"
-                                    className="flex items-center rounded-full bg-white-light/40 p-2 hover:bg-white-light/90 hover:text-primary dark:bg-dark/40 dark:hover:bg-dark/60"
+                                    className={emrHeaderUtilityBtnClass}
+                                    aria-label="Switch to dark theme"
                                     onClick={() => {
                                         dispatch(toggleTheme('dark'));
                                     }}
@@ -212,7 +223,8 @@ const Header = () => {
                             {themeConfig.theme === 'dark' && (
                                 <button
                                     type="button"
-                                    className="flex items-center rounded-full bg-white-light/40 p-2 hover:bg-white-light/90 hover:text-primary dark:bg-dark/40 dark:hover:bg-dark/60"
+                                    className={emrHeaderUtilityBtnClass}
+                                    aria-label="Switch to system theme"
                                     onClick={() => {
                                         dispatch(toggleTheme('system'));
                                     }}
@@ -223,7 +235,8 @@ const Header = () => {
                             {themeConfig.theme === 'system' && (
                                 <button
                                     type="button"
-                                    className="flex items-center rounded-full bg-white-light/40 p-2 hover:bg-white-light/90 hover:text-primary dark:bg-dark/40 dark:hover:bg-dark/60"
+                                    className={emrHeaderUtilityBtnClass}
+                                    aria-label="Switch to light theme"
                                     onClick={() => {
                                         dispatch(toggleTheme('light'));
                                     }}
@@ -232,16 +245,17 @@ const Header = () => {
                                 </button>
                             )}
                         </div>
+                        <span className="mx-0.5 hidden h-5 w-px shrink-0 bg-emr-border/80 sm:block dark:bg-white/10" aria-hidden />
                         <div className="dropdown shrink-0">
                             <Dropdown
                                 offset={[0, 8]}
                                 placement={`${isRtl ? 'bottom-start' : 'bottom-end'}`}
-                                btnClassName="relative block rounded-full bg-white-light/40 p-2 hover:bg-white-light/90 hover:text-primary dark:bg-dark/40 dark:hover:bg-dark/60"
+                                btnClassName={emrHeaderUtilityBtnClass}
                                 button={
                                     <>
                                         <IconMailDot />
                                         {unreadNotifications.length > 0 && (
-                                            <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-white bg-danger px-1.5 text-[10px] font-bold text-white dark:border-black">
+                                            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border border-white bg-emr-danger px-1 text-[9px] font-bold leading-none text-white shadow-sm dark:border-[#141210]">
                                                 {unreadNotifications.length > 99 ? '99+' : unreadNotifications.length}
                                             </span>
                                         )}
@@ -375,25 +389,26 @@ const Header = () => {
                         </div>
                         <NavLink
                             to="/app/ai-assistant"
-                            className="flex shrink-0 items-center justify-center rounded-full bg-white-light/40 p-2 hover:bg-white-light/90 hover:text-primary dark:bg-dark/40 dark:hover:bg-dark/60"
+                            className={emrHeaderUtilityBtnClass}
                             title="AI Assistant"
+                            aria-label="AI Assistant"
                         >
-                            <IconSparkles className="h-5 w-5" />
+                            <IconSparkles className="h-4 w-4" />
                         </NavLink>
                         <div className="dropdown flex shrink-0">
                             <Dropdown
                                 offset={[0, 8]}
                                 placement={`${isRtl ? 'bottom-start' : 'bottom-end'}`}
-                                btnClassName="group relative block"
+                                btnClassName="group relative ml-0.5 flex h-8 w-8 items-center justify-center rounded-lg ring-1 ring-emr-border/60 transition-all hover:ring-emr-accent/30 dark:ring-white/10"
                                 button={
                                     isValidImage ? (
                                         <img
-                                            className="h-9 w-9 rounded-full object-cover saturate-50 group-hover:saturate-100"
+                                            className="h-7 w-7 rounded-md object-cover ring-1 ring-white/80 transition group-hover:ring-emr-accent/40 dark:ring-black/40"
                                             src={profilePhoto}
                                             alt="userProfile"
                                         />
                                     ) : (
-                                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary font-semibold text-white">
+                                        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-[11px] font-bold text-white shadow-sm">
                                             {getInitial(displayName)}
                                         </div>
                                     )
@@ -435,6 +450,10 @@ const Header = () => {
                             </Dropdown>
                         </div>
                     </div>
+                </div>
+
+                <div className="border-t border-emr-border/70 px-3 py-2 lg:hidden dark:border-white/10">
+                    <HeaderGlobalSearch id="header-global-search-mobile" />
                 </div>
             </div>
         </header>
