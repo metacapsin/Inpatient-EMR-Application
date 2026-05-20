@@ -23,6 +23,7 @@ import { useCanEditPatientLocation } from '../../../hooks/useCanEditPatientLocat
 import { DEFAULT_ROOM_TYPE, ROOM_TYPES } from '../../../constants/facility';
 import IconSearch from '@/components/Icon/IconSearch';
 import AppButton from '@/components/ui/AppButton';
+import { FacilityManagementNav } from '../../../components/evs/FacilityManagementNav';
 
 type TabId = 'wards' | 'rooms' | 'beds';
 
@@ -372,6 +373,8 @@ const FacilitySettingsPage = () => {
                     </div>
                 </div>
             </div>
+
+            <FacilityManagementNav />
 
             {!canEdit ? (
                 <div className="mb-6 rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-3 text-sm text-gray-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200">

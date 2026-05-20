@@ -10,7 +10,6 @@ interface DropdownOption {
   value: string | number;
   label: string;
 }
-
 type NewDropdownVariant = "default" | "outlined";
 
 interface NewDropdownProps {
@@ -39,12 +38,17 @@ interface NewDropdownProps {
    * `overflow: auto/hidden` ancestors (e.g. nursing flowsheet scroll + accordion).
    */
   appendMenuToBody?: boolean;
+  /** Open the menu above (`top`) or below (`bottom`, default) the trigger. */
+  menuPlacement?: "top" | "bottom";
   /** When set with `label` omitted, associates the trigger with an external label (e.g. flowsheet above-field labels). */
   ariaLabelledBy?: string;
 }
 
 const MENU_CLASSES =
   "max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl shadow-gray-900/10 dark:border-gray-700 dark:bg-gray-950 dark:shadow-black/40";
+
+/** Extra gap when opening above a notched label (`-translate-y-1/2` on the border). */
+const NOTCHED_LABEL_MENU_CLEARANCE_PX = 10;
 
 export default function NewDropdown({
   id,
@@ -59,6 +63,7 @@ export default function NewDropdown({
   disabled = false,
   className = "",
   appendMenuToBody = false,
+  menuPlacement = "bottom",
   ariaLabelledBy,
 }: NewDropdownProps) {
   const [open, setOpen] = useState(false);
@@ -71,12 +76,20 @@ export default function NewDropdown({
 
   const selectedOption = options.find((opt) => opt.value === value);
 
+  const notchedClearance =
+    isOutlined && Boolean(label) && menuPlacement === "top" ? NOTCHED_LABEL_MENU_CLEARANCE_PX : 0;
+
   const updateMenuPosition = () => {
     const el = triggerRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
+    const gap = 4;
+    const menuHeight = menuPortalRef.current?.getBoundingClientRect().height ?? 0;
     setMenuBox({
-      top: r.bottom + 4,
+      top:
+        menuPlacement === "top"
+          ? Math.max(gap, r.top - notchedClearance - menuHeight - gap)
+          : r.bottom + gap,
       left: r.left,
       width: Math.max(r.width, 160),
     });
@@ -88,13 +101,22 @@ export default function NewDropdown({
       return;
     }
     updateMenuPosition();
+    const menuEl = menuPortalRef.current;
+    let ro: ResizeObserver | undefined;
+    if (menuEl && menuPlacement === "top") {
+      ro = new ResizeObserver(() => updateMenuPosition());
+      ro.observe(menuEl);
+    } else if (menuPlacement === "top") {
+      requestAnimationFrame(updateMenuPosition);
+    }
     window.addEventListener("scroll", updateMenuPosition, true);
     window.addEventListener("resize", updateMenuPosition);
     return () => {
+      ro?.disconnect();
       window.removeEventListener("scroll", updateMenuPosition, true);
       window.removeEventListener("resize", updateMenuPosition);
     };
-  }, [open, appendMenuToBody, disabled]);
+  }, [open, appendMenuToBody, disabled, menuPlacement, options.length, notchedClearance]);
 
   useEffect(() => {
     if (!open) return;
@@ -199,12 +221,21 @@ export default function NewDropdown({
     ? NOTCHED_FIELD_LABEL_OVERLAY_CLASS
     : NOTCHED_COMPACT_LABEL_OVERLAY_CLASS;
 
+  const inlineMenuPositionClass =
+    menuPlacement === "top"
+      ? isOutlined && label
+        ? "bottom-full mb-3"
+        : "bottom-full mb-1"
+      : isOutlined
+        ? "top-full mt-1"
+        : "top-full mt-2";
+
   const renderMenu = (mode: "inline" | "portal") => (
     <div
       ref={mode === "portal" ? menuPortalRef : undefined}
       className={
         mode === "inline"
-          ? `absolute left-0 right-0 z-[12000] ${isOutlined ? "top-full mt-1" : "top-full mt-2"} ${MENU_CLASSES}`
+          ? `absolute left-0 right-0 z-[12000] ${inlineMenuPositionClass} ${MENU_CLASSES}`
           : MENU_CLASSES
       }
       style={
@@ -269,16 +300,21 @@ export default function NewDropdown({
   );
 
   const portalMenu =
-    open && !disabled && appendMenuToBody && menuBox && typeof document !== "undefined"
+    open && !disabled && appendMenuToBody && typeof document !== "undefined"
       ? createPortal(renderMenu("portal"), document.body)
       : null;
+
+  const notchedLabelClassWhenOpen =
+    open && menuPlacement === "top"
+      ? `${notchedLabelClass} z-[12001]`
+      : notchedLabelClass;
 
   if (isOutlined && label) {
     return (
       <>
         <div className={`relative isolate w-full ${className}`.trim()} ref={dropdownRef}>
           {inner}
-          <span className={notchedLabelClass}>{label}</span>
+          <span className={notchedLabelClassWhenOpen}>{label}</span>
         </div>
         {portalMenu}
       </>

@@ -14,18 +14,15 @@ type ListRow =
     | { kind: 'noResults' };
 
 const DEFAULT_DEBOUNCE_MS = 300;
-
 function norm(s: string): string {
     return s.trim().toLowerCase();
 }
-
 function matchesQuery(option: SearchableSelectOption, query: string): boolean {
     const q = norm(query);
     if (!q) return true;
     const hay = norm(`${option.label} ${option.keywords ?? ''}`);
     return hay.includes(q);
 }
-
 export type SearchableSelectProps = {
     id?: string;
     options: SearchableSelectOption[];

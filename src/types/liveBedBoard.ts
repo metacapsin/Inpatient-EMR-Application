@@ -1,3 +1,5 @@
+import type { EvsBedFields } from './evs';
+
 /** Narrow patient fields for bed board display (PHI: same handling as other clinical lists). */
 export type LiveBedBoardPatient = {
     id: string;
@@ -37,6 +39,8 @@ export type LiveBedBoardRow = {
     ward: LiveBedBoardWard | null;
     encounter: LiveBedBoardEncounter | null;
     patient: LiveBedBoardPatient | null;
+    /** Mock EVS overlay until GET /api/evs/beds is available. */
+    evs?: EvsBedFields;
 };
 
 export type LiveBedBoardSummary = {

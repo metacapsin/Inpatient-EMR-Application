@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { BedDouble, RefreshCw } from 'lucide-react';
 import { fetchLiveBedBoard } from '../../services/liveBedBoard.service';
+import { getEvsFieldsByBedIds } from '../../services/evsMockService';
 import { getRooms, getWards } from '../../services/rooms.service';
 import { LiveBedBoardSummaryBar } from '../../modules/bed-board/LiveBedBoardSummaryBar';
 import { LiveBedBoardFilters } from '../../modules/bed-board/LiveBedBoardFilters';
@@ -97,9 +98,26 @@ const LiveBedBoardPage = () => {
     const boardError =
         boardQuery.error instanceof Error ? boardQuery.error.message : boardQuery.error ? String(boardQuery.error) : null;
 
+    const bedIds = useMemo(() => (boardQuery.data?.rows ?? []).map((r) => r.bed.id), [boardQuery.data?.rows]);
+
+    const evsMapQuery = useQuery({
+        queryKey: ['evs', 'bedMap', bedIds.join(',')],
+        queryFn: () => getEvsFieldsByBedIds(bedIds),
+        enabled: bedIds.length > 0,
+        staleTime: 10_000,
+    });
+
+    const boardRowsWithEvs = useMemo(() => {
+        const evsMap = evsMapQuery.data ?? {};
+        return (boardQuery.data?.rows ?? []).map((row) => ({
+            ...row,
+            evs: evsMap[row.bed.id],
+        }));
+    }, [boardQuery.data?.rows, evsMapQuery.data]);
+
     const activeBedBoardRows = useMemo(
-        () => (boardQuery.data?.rows ?? []).filter((r) => r.encounter !== null),
-        [boardQuery.data?.rows]
+        () => boardRowsWithEvs.filter((r) => r.encounter !== null),
+        [boardRowsWithEvs]
     );
 
     return (
@@ -197,7 +215,7 @@ const LiveBedBoardPage = () => {
                 {tab === 'board' ? (
                     !boardQuery.isError ? (
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                            <LiveBedBoardGrid rows={boardQuery.data?.rows ?? []} loading={boardQuery.isLoading} />
+                            <LiveBedBoardGrid rows={boardRowsWithEvs} loading={boardQuery.isLoading} />
                         </div>
                     ) : null
                 ) : (

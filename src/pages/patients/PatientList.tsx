@@ -379,6 +379,7 @@ const PatientList = () => {
                                 value={status || ''}
                                 placeholder="Select Status"
                                 className="w-full min-w-0"
+                                appendMenuToBody
                                 onChange={(v) => {
                                     setStatus(v as StatusValue);
                                     setPage(1);
@@ -393,6 +394,7 @@ const PatientList = () => {
                                 value={gender || ''}
                                 placeholder="Select Gender"
                                 className="w-full min-w-0"
+                                appendMenuToBody
                                 onChange={(v) => {
                                     setGender(v as string);
                                     setPage(1);
@@ -407,6 +409,7 @@ const PatientList = () => {
                                 value={ageRange || ''}
                                 placeholder="Select Age range"
                                 className="w-full min-w-0"
+                                appendMenuToBody
                                 onChange={(v) => {
                                     setAgeRange(v as string);
                                     setPage(1);
@@ -421,6 +424,7 @@ const PatientList = () => {
                                 value={recent || ''}
                                 placeholder="Select Recent patients"
                                 className="w-full min-w-0"
+                                appendMenuToBody
                                 onChange={(v) => {
                                     setRecent(v as string);
                                     setPage(1);

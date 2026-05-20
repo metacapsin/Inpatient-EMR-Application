@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format, parseISO, isValid } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { ActionIconTooltip } from '@/components/ui/ActionIconTooltip';
 import type { LiveBedBoardRow } from '../../types/liveBedBoard';
 import { bedStatusPillClass } from '../../lib/adtBedPicker';
+import { EVSBedStatusStrip } from '../../components/evs/EVSBedStatusStrip';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 0] as const;
 
@@ -105,8 +106,9 @@ export function LiveBedBoardGrid({ rows, loading }: LiveBedBoardGridProps) {
                         return (
                             <article
                                 key={row.bed.id}
-                                className="rounded-xl border border-gray-200/90 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#1a1a1a]"
+                                className="overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-sm dark:border-white/10 dark:bg-[#1a1a1a]"
                             >
+                                <div className="p-4">
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="min-w-0">
                                         <h3 className="truncate text-sm font-semibold text-gray-900 dark:text-white">{row.bed.label}</h3>
@@ -152,6 +154,10 @@ export function LiveBedBoardGrid({ rows, loading }: LiveBedBoardGridProps) {
                                         </>
                                     ) : null}
                                 </div>
+                                </div>
+                                {row.evs?.evsStatus ? (
+                                    <EVSBedStatusStrip status={row.evs.evsStatus} />
+                                ) : null}
                             </article>
                         );
                     })
@@ -255,8 +261,8 @@ export function LiveBedBoardGrid({ rows, loading }: LiveBedBoardGridProps) {
                                 const pid = row.patient?.id;
                                 const encId = row.encounter?.id;
                                 return (
+                                    <Fragment key={row.bed.id}>
                                     <tr
-                                        key={row.bed.id}
                                         className="h-10 transition-colors hover:bg-gray-50/90 dark:hover:bg-white/[0.04]"
                                     >
                                         <td className="px-2.5 py-1.5 align-middle text-gray-800 dark:text-gray-200">{row.ward?.name ?? '—'}</td>
@@ -301,6 +307,14 @@ export function LiveBedBoardGrid({ rows, loading }: LiveBedBoardGridProps) {
                                             </div>
                                         </td>
                                     </tr>
+                                    {row.evs?.evsStatus ? (
+                                        <tr>
+                                            <td colSpan={9} className="p-0">
+                                                <EVSBedStatusStrip status={row.evs.evsStatus} />
+                                            </td>
+                                        </tr>
+                                    ) : null}
+                                    </Fragment>
                                 );
                             })
                         )}

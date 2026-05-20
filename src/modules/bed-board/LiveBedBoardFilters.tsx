@@ -47,6 +47,7 @@ export function LiveBedBoardFilters({
                     disabled={disabled || wardsLoading}
                     aria-busy={wardsLoading}
                     className="w-full min-w-0"
+                    appendMenuToBody
                 />
             </div>
             <div className="min-w-0 flex-1 md:min-w-0">
@@ -60,6 +61,7 @@ export function LiveBedBoardFilters({
                     disabled={disabled || roomsLoading || !wardId}
                     aria-busy={roomsLoading}
                     className="w-full min-w-0"
+                    appendMenuToBody
                 />
             </div>
             <div className="min-w-0 flex-1 md:min-w-0">
@@ -75,6 +77,7 @@ export function LiveBedBoardFilters({
                     onChange={(v) => onBedStatusChange(v === '__all__' ? '' : String(v))}
                     disabled={disabled}
                     className="w-full min-w-0"
+                    appendMenuToBody
                 />
             </div>
         </div>

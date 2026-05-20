@@ -1,4 +1,5 @@
 import React, { memo, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import type { IpdAlerts } from '../../types/ipdDashboard';
 
 type Props = {
@@ -33,10 +34,34 @@ function IpdAlertsStripInner({ alerts }: Props) {
                         key={g.title}
                         className={`flex min-w-0 max-w-full sm:max-w-[32%] border-l-4 pl-2 ${toneBorder[g.tone]}`}
                     >
-                        <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 shrink-0 mr-1.5">{g.title}:</span>
-                        <span className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2" title={g.items.join(' · ')}>
-                            {g.items.join(' · ')}
-                        </span>
+                        {g.title === 'Beds pending cleaning' ? (
+                            <Link
+                                to="/app/operations/evs-queue"
+                                className="group flex min-w-0 flex-1 flex-col gap-0.5 rounded-md pr-1 transition hover:bg-amber-50/80 dark:hover:bg-amber-950/20"
+                            >
+                                <span className="text-xs font-semibold text-amber-800 underline-offset-2 group-hover:underline dark:text-amber-200">
+                                    {g.title} ({g.items.length})
+                                </span>
+                                <span
+                                    className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2"
+                                    title={g.items.join(' · ')}
+                                >
+                                    {g.items.join(' · ')} — open EVS queue
+                                </span>
+                            </Link>
+                        ) : (
+                            <>
+                                <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 shrink-0 mr-1.5">
+                                    {g.title}:
+                                </span>
+                                <span
+                                    className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2"
+                                    title={g.items.join(' · ')}
+                                >
+                                    {g.items.join(' · ')}
+                                </span>
+                            </>
+                        )}
                     </div>
                 ))}
             </div>

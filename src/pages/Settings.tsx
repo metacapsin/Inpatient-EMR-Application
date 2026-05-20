@@ -316,12 +316,20 @@ const Settings: React.FC = () => {
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
                         Manage wards, rooms, and beds for inpatient placement (mock-backed until facility APIs are live).
                     </p>
-                    <NavLink
-                        to="/app/settings/facility"
-                        className="inline-flex items-center rounded-lg bg-primary/10 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/15"
-                    >
-                        Open facility settings
-                    </NavLink>
+                    <div className="flex flex-wrap gap-2">
+                        <NavLink
+                            to="/app/settings/facility"
+                            className="inline-flex items-center rounded-lg bg-primary/10 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/15"
+                        >
+                            Wards, rooms & beds
+                        </NavLink>
+                        <NavLink
+                            to="/app/operations/evs-queue"
+                            className="inline-flex items-center rounded-lg border border-primary/30 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/10"
+                        >
+                            EVS / bed turnaround
+                        </NavLink>
+                    </div>
                 </div>
 
                 {/* Practice Information Card */}

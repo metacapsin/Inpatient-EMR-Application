@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import type { LiveBedBoardSummary } from '../../types/liveBedBoard';
 import { bedStatusPillClass } from '../../lib/adtBedPicker';
 
@@ -23,6 +24,15 @@ export function LiveBedBoardSummaryBar({ summary }: LiveBedBoardSummaryBarProps)
                     Active encounter{' '}
                     <strong className="font-semibold tabular-nums text-gray-900 dark:text-white">{withActiveEncounter}</strong>
                 </span>
+                <span className="text-gray-300 dark:text-gray-600" aria-hidden>
+                    ·
+                </span>
+                <Link
+                    to="/app/operations/evs-queue"
+                    className="font-medium text-primary underline-offset-2 hover:underline"
+                >
+                    Beds pending cleaning (EVS)
+                </Link>
             </div>
             {statusEntries.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">

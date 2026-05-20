@@ -19,12 +19,10 @@ type AppointmentRow = {
   visitReasonName?: string;
   appointmentStatus?: string;
 };
-
 type AppointmentListApiShape = {
   rows: AppointmentRow[];
   total: number;
 };
-
 type FilterState = {
   status: string;
   providerId: string;
@@ -37,17 +35,14 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 function rowId(row: AppointmentRow): string {
   return String(row?._id ?? row?.id ?? '').trim();
 }
-
 function asNonEmptyString(v: unknown): string | undefined {
   if (typeof v !== 'string') return undefined;
   const t = v.trim();
   return t ? t : undefined;
 }
-
 /** Reads common string shapes from API payloads (including PascalCase / nested patient). */
 function buildPatientDisplayName(raw: any): string | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
-
   const tryKeys = (obj: any, keys: string[]): string | undefined => {
     for (const k of keys) {
       const v = asNonEmptyString(obj?.[k]);
@@ -65,7 +60,6 @@ function buildPatientDisplayName(raw: any): string | undefined {
     }
     return undefined;
   };
-
   const direct =
     tryKeys(raw, [
       'patientName',
@@ -306,7 +300,6 @@ const AppointmentList: React.FC = () => {
       setLoading(false);
     }
   }, [debouncedSearch, filters.dateFrom, filters.dateTo, filters.providerId, filters.status, page, pageSize]);
-
   useEffect(() => {
     loadProviders();
   }, [loadProviders]);
@@ -314,7 +307,6 @@ const AppointmentList: React.FC = () => {
   useEffect(() => {
     loadRows();
   }, [loadRows]);
-
   useLayoutEffect(() => {
     const state = location.state as
       | { refreshAppointments?: boolean; focusAppointmentId?: string }
@@ -375,7 +367,7 @@ const AppointmentList: React.FC = () => {
               type="button"
               onClick={() => navigate('/app/appointments/add')}
               className="inline-flex h-8 w-full shrink-0 items-center justify-center rounded-lg bg-primary px-3 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 hover:shadow-primary sm:w-auto"
-            >
+             >
               Create Appointment
             </button>
           </div>
@@ -401,6 +393,7 @@ const AppointmentList: React.FC = () => {
                 }}
                 placeholder="All statuses"
                 className="w-full min-w-0"
+                appendMenuToBody
               />
             </div>
             <div className="min-w-0 flex-1 md:min-w-0">
@@ -421,6 +414,7 @@ const AppointmentList: React.FC = () => {
                 }}
                 placeholder="All providers"
                 className="w-full min-w-0"
+                appendMenuToBody
               />
             </div>
             <div className="min-w-0 flex-1 md:max-w-[320px] w-full">

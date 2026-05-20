@@ -22,6 +22,7 @@ const AppointmentCalendarPage = lazy(() => import('../pages/appointments/Appoint
 const AddAppointment = lazy(() => import('../pages/appointments/AddAppointment'));
 const Settings = lazy(() => import('../pages/Settings'));
 const FacilitySettingsPage = lazy(() => import('../modules/settings/facility/FacilitySettingsPage'));
+const EVSQueuePage = lazy(() => import('../pages/operations/EVSQueuePage'));
 const Demographic = lazy(() => import('../pages/patient/Demographic'));
 const Vitals = lazy(() => import('../pages/patient/Vitals'));
 const History = lazy(() => import('../pages/patient/History'));
@@ -156,6 +157,11 @@ const routes = [
     {
         path: '/app/settings/facility',
         element: guard(<FacilitySettingsPage />),
+        layout: 'default' as const,
+    },
+    {
+        path: '/app/operations/evs-queue',
+        element: guard(<EVSQueuePage />),
         layout: 'default' as const,
     },
     {
