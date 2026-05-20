@@ -23,10 +23,15 @@
  *   lab        → /app/facesheet/:patientId/lab-orders
  *   radiology  → /app/facesheet/:patientId/radiology
  *   dietary | therapy | procedure → canOpenSource: false (no deepLink)
+ *
+ * Mock patient ids come from {@link demoPatientRegistry} (same fixtures as patient search).
+ * Encounter ids are hydrated from GET /api/admissions/active when listing mock orders.
  */
 
 import api from './api';
 import { withOrderSourceRouting } from '../features/order-dashboard/orderSourceRouting';
+import { demoPatientBySlot } from '../mocks/demoPatientRegistry';
+import { activeEncounterRowsToAdtMergePayload, listActiveEncounters } from './adt.service';
 import { getWards } from './rooms.service';
 import type {
     UnifiedOrderActionResult,
@@ -65,6 +70,54 @@ function aggregatedId(sourceModule: string, sourceOrderId: string): string {
     return `agg-${sourceModule}-${sourceOrderId}`;
 }
 
+const P0 = demoPatientBySlot(0);
+const P1 = demoPatientBySlot(1);
+const P2 = demoPatientBySlot(2);
+const P3 = demoPatientBySlot(3);
+
+let encounterIdByPatientCache: Map<string, string> | null = null;
+let encounterIdByPatientCacheAt = 0;
+const ENCOUNTER_CACHE_MS = 30_000;
+
+async function loadEncounterIdByPatient(): Promise<Map<string, string>> {
+    const now = Date.now();
+    if (encounterIdByPatientCache && now - encounterIdByPatientCacheAt < ENCOUNTER_CACHE_MS) {
+        return encounterIdByPatientCache;
+    }
+    const map = new Map<string, string>();
+    const res = await listActiveEncounters();
+    if (res.ok) {
+        for (const row of activeEncounterRowsToAdtMergePayload(res.data)) {
+            if (row.patientId && row.encounterId) map.set(row.patientId, row.encounterId);
+        }
+    }
+    encounterIdByPatientCache = map;
+    encounterIdByPatientCacheAt = now;
+    return map;
+}
+
+function applyLiveOrderContext(
+    row: UnifiedOrderRow,
+    encounterByPatient: Map<string, string>
+): UnifiedOrderRow {
+    const encounterId = encounterByPatient.get(row.patientId.trim()) || '';
+    const base: UnifiedOrderRow = { ...row, encounterId };
+    const actions = computeActions(base);
+    return {
+        ...withOrderSourceRouting(base),
+        ...actions,
+    };
+}
+
+async function enrichMockRows(items: UnifiedOrderRow[]): Promise<UnifiedOrderRow[]> {
+    const encounterByPatient = await loadEncounterIdByPatient();
+    return items.map((r) => applyLiveOrderContext(r, encounterByPatient));
+}
+
+async function enrichMockListResponse(res: UnifiedOrdersListResponse): Promise<UnifiedOrdersListResponse> {
+    return { ...res, items: await enrichMockRows(res.items) };
+}
+
 function buildSeedOrders(): UnifiedOrderRow[] {
     const rows: Array<
         Omit<UnifiedOrderRow, 'id' | 'deepLink' | 'canOpenSource' | 'canAcknowledge' | 'canCancel'>
@@ -73,10 +126,10 @@ function buildSeedOrders(): UnifiedOrderRow[] {
             sourceOrderId: 'cpoe-med-101',
             sourceModule: 'medication',
             orderType: 'medication',
-            patientId: 'pat-demo-1',
-            patientName: 'Elena Martinez',
-            mrn: 'MRN-44021',
-            encounterId: 'enc-8842',
+            patientId: P0.id,
+            patientName: P0.patientName,
+            mrn: P0.mrn,
+            encounterId: '',
             unitId: '1',
             unitName: 'ICU West',
             summary: 'Lisinopril 10 mg PO daily',
@@ -89,10 +142,10 @@ function buildSeedOrders(): UnifiedOrderRow[] {
             sourceOrderId: 'cpoe-med-102',
             sourceModule: 'medication',
             orderType: 'medication',
-            patientId: 'pat-demo-2',
-            patientName: 'James Okonkwo',
-            mrn: 'MRN-11892',
-            encounterId: 'enc-9011',
+            patientId: P1.id,
+            patientName: P1.patientName,
+            mrn: P1.mrn,
+            encounterId: '',
             unitId: '2',
             unitName: 'Med/Surg 4B',
             summary: 'Vancomycin 1 g IV q12h',
@@ -107,10 +160,10 @@ function buildSeedOrders(): UnifiedOrderRow[] {
             sourceOrderId: 'lab-5501',
             sourceModule: 'lab',
             orderType: 'lab',
-            patientId: 'pat-demo-1',
-            patientName: 'Elena Martinez',
-            mrn: 'MRN-44021',
-            encounterId: 'enc-8842',
+            patientId: P0.id,
+            patientName: P0.patientName,
+            mrn: P0.mrn,
+            encounterId: '',
             unitId: '1',
             unitName: 'ICU West',
             summary: 'BMP, CBC, lactate',
@@ -123,10 +176,10 @@ function buildSeedOrders(): UnifiedOrderRow[] {
             sourceOrderId: 'lab-5502',
             sourceModule: 'lab',
             orderType: 'lab',
-            patientId: 'pat-demo-3',
-            patientName: 'Sofia Nguyen',
-            mrn: 'MRN-77201',
-            encounterId: 'enc-7701',
+            patientId: P2.id,
+            patientName: P2.patientName,
+            mrn: P2.mrn,
+            encounterId: '',
             unitId: '3',
             unitName: 'Telemetry',
             summary: 'Troponin ×3, BNP',
@@ -141,10 +194,10 @@ function buildSeedOrders(): UnifiedOrderRow[] {
             sourceOrderId: 'rad-mock-002',
             sourceModule: 'radiology',
             orderType: 'radiology',
-            patientId: 'pat-demo-2',
-            patientName: 'James Okonkwo',
-            mrn: 'MRN-11892',
-            encounterId: 'enc-9011',
+            patientId: P1.id,
+            patientName: P1.patientName,
+            mrn: P1.mrn,
+            encounterId: '',
             unitId: '2',
             unitName: 'Med/Surg 4B',
             summary: 'CT Chest w/ contrast',
@@ -157,10 +210,10 @@ function buildSeedOrders(): UnifiedOrderRow[] {
             sourceOrderId: 'rad-mock-003',
             sourceModule: 'radiology',
             orderType: 'radiology',
-            patientId: 'pat-demo-1',
-            patientName: 'Elena Martinez',
-            mrn: 'MRN-44021',
-            encounterId: 'enc-8842',
+            patientId: P0.id,
+            patientName: P0.patientName,
+            mrn: P0.mrn,
+            encounterId: '',
             unitId: '1',
             unitName: 'ICU West',
             summary: 'Portable CXR',
@@ -175,10 +228,10 @@ function buildSeedOrders(): UnifiedOrderRow[] {
             sourceOrderId: 'cpoe-diet-01',
             sourceModule: 'dietary',
             orderType: 'dietary',
-            patientId: 'pat-demo-3',
-            patientName: 'Sofia Nguyen',
-            mrn: 'MRN-77201',
-            encounterId: 'enc-7701',
+            patientId: P2.id,
+            patientName: P2.patientName,
+            mrn: P2.mrn,
+            encounterId: '',
             unitId: '3',
             unitName: 'Telemetry',
             summary: 'Cardiac diet — sodium 2 g',
@@ -193,10 +246,10 @@ function buildSeedOrders(): UnifiedOrderRow[] {
             sourceOrderId: 'cpoe-pt-01',
             sourceModule: 'therapy',
             orderType: 'therapy',
-            patientId: 'pat-demo-2',
-            patientName: 'James Okonkwo',
-            mrn: 'MRN-11892',
-            encounterId: 'enc-9011',
+            patientId: P1.id,
+            patientName: P1.patientName,
+            mrn: P1.mrn,
+            encounterId: '',
             unitId: '2',
             unitName: 'Med/Surg 4B',
             summary: 'PT eval & treat — mobility',
@@ -209,10 +262,10 @@ function buildSeedOrders(): UnifiedOrderRow[] {
             sourceOrderId: 'cpoe-proc-44',
             sourceModule: 'procedure',
             orderType: 'procedure',
-            patientId: 'pat-demo-1',
-            patientName: 'Elena Martinez',
-            mrn: 'MRN-44021',
-            encounterId: 'enc-8842',
+            patientId: P0.id,
+            patientName: P0.patientName,
+            mrn: P0.mrn,
+            encounterId: '',
             unitId: '1',
             unitName: 'ICU West',
             summary: 'Central line dressing change',
@@ -227,10 +280,10 @@ function buildSeedOrders(): UnifiedOrderRow[] {
             sourceOrderId: 'cpoe-med-103',
             sourceModule: 'medication',
             orderType: 'medication',
-            patientId: 'pat-demo-4',
-            patientName: 'Robert Kim',
-            mrn: 'MRN-33019',
-            encounterId: 'enc-3300',
+            patientId: P3.id,
+            patientName: P3.patientName,
+            mrn: P3.mrn,
+            encounterId: '',
             unitId: '2',
             unitName: 'Med/Surg 4B',
             summary: 'Insulin lispro sliding scale',
@@ -308,6 +361,11 @@ function filterMock(params: UnifiedOrdersListParams): UnifiedOrdersListResponse 
     return normalizeListResponse({ items: pageItems, total, page, limit });
 }
 
+async function filterMockEnriched(params: UnifiedOrdersListParams): Promise<UnifiedOrdersListResponse> {
+    const res = filterMock(params);
+    return enrichMockListResponse(res);
+}
+
 async function mockAcknowledge(id: string, acknowledgedBy?: string): Promise<UnifiedOrderActionResult> {
     const idx = mockStore.findIndex((r) => r.id === id);
     if (idx < 0) return { ok: false, message: 'Order not found' };
@@ -325,7 +383,8 @@ async function mockAcknowledge(id: string, acknowledgedBy?: string): Promise<Uni
         }),
     };
     mockStore = [...mockStore.slice(0, idx), updated, ...mockStore.slice(idx + 1)];
-    return { ok: true, order: updated };
+    const [enriched] = await enrichMockRows([updated]);
+    return { ok: true, order: enriched ?? updated };
 }
 
 async function mockCancel(id: string, _cancelReason?: string): Promise<UnifiedOrderActionResult> {
@@ -340,7 +399,8 @@ async function mockCancel(id: string, _cancelReason?: string): Promise<UnifiedOr
         ...computeActions({ status: 'cancelled', acknowledgedAt: cur.acknowledgedAt }),
     };
     mockStore = [...mockStore.slice(0, idx), updated, ...mockStore.slice(idx + 1)];
-    return { ok: true, order: updated };
+    const [enriched] = await enrichMockRows([updated]);
+    return { ok: true, order: enriched ?? updated };
 }
 
 function serializeListParams(params: UnifiedOrdersListParams): Record<string, string> {
@@ -385,7 +445,7 @@ function unwrapOrder(body: unknown): UnifiedOrderRow | undefined {
 }
 
 export async function listUnifiedOrders(params: UnifiedOrdersListParams = {}): Promise<UnifiedOrdersListResponse> {
-    if (useMock()) return mockDelay(filterMock(params));
+    if (useMock()) return mockDelay(filterMockEnriched(params));
 
     const { data } = await api.get<UnifiedOrdersApiEnvelope<UnifiedOrdersListResponse>>('/api/inpatient/orders', {
         params: serializeListParams(params),

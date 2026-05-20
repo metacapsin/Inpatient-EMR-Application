@@ -97,15 +97,25 @@ function withSourceRouting(row) {
     };
 }
 
+/** Keep in sync with src/mocks/demoPatientRegistry.ts */
+const DEMO_PATIENTS = [
+    { id: '696b3e59d0c882d0b569684f', patientName: 'Akbaruddin AO Owaisi', mrn: '25000207' },
+    { id: '696b3e59d0c882d0b569684e', patientName: 'Jane M Doe', mrn: '25000208' },
+    { id: '696b3e59d0c882d0b569684d', patientName: 'John Smith', mrn: '25000209' },
+    { id: '696b3e59d0c882d0b569684c', patientName: 'Maria R Garcia', mrn: '25000210' },
+];
+
 function buildMockSeed() {
+    const p0 = DEMO_PATIENTS[0];
+    const p1 = DEMO_PATIENTS[1];
     const raw = [
         {
             sourceModule: 'medication',
             sourceOrderId: 'cpoe-med-101',
-            patientId: 'pat-demo-1',
-            patientName: 'Elena Martinez',
-            mrn: 'MRN-44021',
-            encounterId: 'enc-8842',
+            patientId: p0.id,
+            patientName: p0.patientName,
+            mrn: p0.mrn,
+            encounterId: '',
             unitId: '1',
             unitName: 'ICU West',
             summary: 'Lisinopril 10 mg PO daily',
@@ -117,10 +127,10 @@ function buildMockSeed() {
         {
             sourceModule: 'lab',
             sourceOrderId: 'lab-5501',
-            patientId: 'pat-demo-1',
-            patientName: 'Elena Martinez',
-            mrn: 'MRN-44021',
-            encounterId: 'enc-8842',
+            patientId: p0.id,
+            patientName: p0.patientName,
+            mrn: p0.mrn,
+            encounterId: '',
             unitId: '1',
             unitName: 'ICU West',
             summary: 'BMP, CBC, lactate',
@@ -132,10 +142,10 @@ function buildMockSeed() {
         {
             sourceModule: 'radiology',
             sourceOrderId: 'rad-mock-002',
-            patientId: 'pat-demo-2',
-            patientName: 'James Okonkwo',
-            mrn: 'MRN-11892',
-            encounterId: 'enc-9011',
+            patientId: p1.id,
+            patientName: p1.patientName,
+            mrn: p1.mrn,
+            encounterId: '',
             unitId: '2',
             unitName: 'Med/Surg 4B',
             summary: 'CT Chest w/ contrast',
