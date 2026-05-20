@@ -15,6 +15,7 @@ import {
     ScanLine,
     Stethoscope,
     Syringe,
+    TestTubes,
     UserRound,
     UsersRound,
 } from 'lucide-react';
@@ -54,6 +55,7 @@ export const FACESHEET_MODULES: FacesheetModuleDef[] = [
         group: 'clinical',
     },
     { path: 'labs', label: 'Labs', icon: FlaskConical, group: 'labs' },
+    { path: 'lab-orders', label: 'Lab Orders', icon: TestTubes, group: 'labs' },
     { path: 'radiology', label: 'Radiology', icon: ScanLine, group: 'labs' },
     { path: 'documents', label: 'Documents', icon: FileStack, group: 'labs' },
     { path: 'notes', label: 'Notes', icon: NotebookPen, group: 'care' },

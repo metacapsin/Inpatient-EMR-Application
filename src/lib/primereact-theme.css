@@ -912,3 +912,28 @@ body .p-dialog.nfs-chart-dialog .p-dialog-footer {
     box-shadow: none !important;
     overflow: hidden;
 }
+
+/* Orders dashboard filter multiselects — match flowsheet in-frame chrome without focus ring */
+.orders-dashboard-filter-ms.nfs-flowsheet-ms-shell {
+    display: flex;
+    align-items: center;
+    height: 2rem;
+    max-height: 2rem;
+    box-sizing: border-box;
+}
+
+.orders-dashboard-filter-ms .nfs-flowsheet-multiselect-in-frame.p-multiselect.p-focus,
+.orders-dashboard-filter-ms .nfs-flowsheet-multiselect-in-frame.p-multiselect:not(.p-disabled):hover {
+    box-shadow: none !important;
+    border-color: transparent !important;
+}
+
+.orders-dashboard-filter-ms .nfs-flowsheet-multiselect-trigger.p-multiselect {
+    min-height: 0 !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    width: 100%;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+}

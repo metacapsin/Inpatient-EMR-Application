@@ -15,18 +15,23 @@ export const PATIENT_SUB_LINKS = [
     { to: '/app/bed-board', label: 'Bed board' },
     {
         to: '/app/inpatient/clinical',
-        label: 'Inpatient clinical workspace',
-        title: 'Physician & nursing notes, vitals, orders',
+        label: 'Clinical workspace',
+        title: 'Physician & nursing notes, vitals, order entry',
     },
     {
-        to: '/app/inpatient/discharge-readiness',
-        label: 'Discharge & billing readiness',
-        title: 'Discharge summary, checklist, charges, eligibility, claim prep',
+        to: '/app/inpatient/orders',
+        label: 'Orders dashboard',
+        title: 'Unified monitoring across medication, lab, radiology, dietary, therapy, and procedure orders',
     },
     {
         to: '/app/inpatient/medication-management',
         label: 'Medication management',
         title: 'MAR, PRN/STAT, pharmacy dispensing, discharge medications',
+    },
+    {
+        to: '/app/inpatient/discharge-readiness',
+        label: 'Discharge readiness',
+        title: 'Discharge summary, checklist, charges, eligibility, claim prep',
     },
 ] as const;
 

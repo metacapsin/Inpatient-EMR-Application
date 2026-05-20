@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import type { AppDispatch, IRootState } from '../../store';
 import { fetchFacesheetPatient } from '../../store/facesheetSlice';
@@ -79,23 +79,6 @@ const FacesheetPage = () => {
         );
     }
 
-    if (error && !patient) {
-        return (
-            <FacesheetEmptyState
-                title="Unable to open this chart"
-                description={error}
-                action={
-                    <Link
-                        to="/app/patients/list"
-                        className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"
-                    >
-                        Back to patient list
-                    </Link>
-                }
-            />
-        );
-    }
-
     return (
         <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden text-gray-900 dark:text-gray-100">
             {patient ? (
@@ -105,6 +88,16 @@ const FacesheetPage = () => {
                         base={base}
                         className="shrink-0 border-b border-emr-border bg-emr-sidebar px-2 py-2 dark:border-white/10 lg:hidden"
                     />
+                </div>
+            ) : error ? (
+                <div className="shrink-0 border-b border-amber-200/80 bg-amber-50 px-4 py-2.5 dark:border-amber-800/40 dark:bg-amber-950/30">
+                    <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">
+                        Patient header unavailable
+                    </p>
+                    <p className="mt-0.5 text-xs text-amber-900/90 dark:text-amber-200/90">{error}</p>
+                    <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-300/80">
+                        Chart modules below are still available (e.g. lab orders, radiology).
+                    </p>
                 </div>
             ) : (
                 <FacesheetEmptyState

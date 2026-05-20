@@ -25,3 +25,7 @@ export const NOTCHED_COMPACT_LABEL_CLASS = `${NOTCHED_LABEL_STRIP} cursor-pointe
 /** Outlined control shell — isolate keeps notch above inner focus rings / inputs */
 export const NOTCHED_FIELD_FRAME_CLASS =
     'relative isolate rounded-lg border border-gray-200/70 bg-white shadow-sm transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 dark:border-gray-600 dark:bg-[#141210]';
+
+/** Same shell without focus ring (dense filter bars where PrimeNG supplies focus). */
+export const NOTCHED_FIELD_FRAME_CLASS_STATIC =
+    'relative isolate rounded-lg border border-gray-200/70 bg-white shadow-sm dark:border-gray-600 dark:bg-[#141210]';
