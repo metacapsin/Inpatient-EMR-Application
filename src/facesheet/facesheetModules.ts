@@ -18,6 +18,7 @@ import {
     TestTubes,
     UserRound,
     UsersRound,
+    UtensilsCrossed,
 } from 'lucide-react';
 
 export type FacesheetModuleGroupId = 'overview' | 'clinical' | 'labs' | 'care' | 'social';
@@ -39,6 +40,7 @@ export const FACESHEET_MODULE_GROUPS: Record<FacesheetModuleGroupId, string> = {
 
 export const FACESHEET_MODULES: FacesheetModuleDef[] = [
     { path: 'demographic', label: 'Demographics', icon: UserRound, group: 'overview' },
+    { path: 'dietary', label: 'Dietary', icon: UtensilsCrossed, group: 'overview' },
     { path: 'vitals', label: 'Vitals', icon: Activity, group: 'overview' },
     { path: 'location', label: 'Location', icon: BedDouble, group: 'overview' },
     { path: 'adt', label: 'ADT', icon: Hospital, group: 'overview' },
