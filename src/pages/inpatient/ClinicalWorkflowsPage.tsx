@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { toast } from 'sonner';
 import {
@@ -570,6 +570,17 @@ function ClinicalWorkflowsPage() {
                 <div className="mt-3 rounded-md border border-gray-200 bg-gray-50/80 p-3 dark:border-gray-700 dark:bg-gray-800/50">
                     {renderPatientEncounterForm(false)}
                 </div>
+                {patientId && encounterId ? (
+                    <p className="mt-2 text-sm">
+                        <Link
+                            to={`/app/inpatient/care-plan/${encodeURIComponent(patientId)}/${encodeURIComponent(encounterId)}`}
+                            className="font-semibold text-primary hover:underline"
+                        >
+                            Open Structured Care Plan
+                        </Link>
+                        <span className="text-gray-500 dark:text-gray-400"> — NANDA diagnoses, goals, interventions</span>
+                    </p>
+                ) : null}
                 {loading && <p className="mt-2 text-sm text-gray-500">Loading clinical data…</p>}
 
                 <div className="mt-4 flex flex-wrap gap-2 border-b border-gray-200 pb-2 dark:border-gray-700">

@@ -56,6 +56,12 @@ export const FACESHEET_MODULES: FacesheetModuleDef[] = [
         icon: ClipboardPenLine,
         group: 'clinical',
     },
+    {
+        path: 'clinical/care-plan',
+        label: 'Care Plan',
+        icon: ClipboardList,
+        group: 'clinical',
+    },
     { path: 'labs', label: 'Labs', icon: FlaskConical, group: 'labs' },
     { path: 'lab-orders', label: 'Lab Orders', icon: TestTubes, group: 'labs' },
     { path: 'radiology', label: 'Radiology', icon: ScanLine, group: 'labs' },

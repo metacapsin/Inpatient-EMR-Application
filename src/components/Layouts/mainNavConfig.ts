@@ -29,6 +29,11 @@ export const PATIENT_SUB_LINKS = [
         title: 'MAR, PRN/STAT, pharmacy dispensing, discharge medications',
     },
     {
+        to: '/app/inpatient/care-plan',
+        label: 'Care Plan',
+        title: 'Structured NANDA diagnoses, goals, and interdisciplinary interventions',
+    },
+    {
         to: '/app/inpatient/discharge-readiness',
         label: 'Discharge readiness',
         title: 'Discharge summary, checklist, charges, eligibility, claim prep',

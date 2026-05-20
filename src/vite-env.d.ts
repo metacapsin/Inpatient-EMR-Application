@@ -18,6 +18,8 @@ interface ImportMetaEnv {
   readonly VITE_MEDICATION_API_MOCK?: string;
   /** When not "false", staff scheduling uses in-memory mock APIs. */
   readonly VITE_STAFF_SCHEDULING_MOCK?: string;
+  /** When not "false", care plan uses in-memory mock with API fallback. */
+  readonly VITE_CARE_PLAN_MOCK?: string;
 }
 
 interface ImportMeta {

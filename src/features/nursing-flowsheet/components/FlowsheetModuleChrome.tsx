@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { Tag } from 'primereact/tag';
 import { Button } from 'primereact/button';
 import { Divider } from 'primereact/divider';
@@ -29,6 +30,7 @@ export function FlowsheetModuleChrome({
     onOpenShiftSwitch,
     onOpenEncounterSwitch,
 }: FlowsheetModuleChromeProps) {
+    const navigate = useNavigate();
     const { state, openHistory } = useNursingFlowsheet();
     const { document: doc, save } = state;
     const bed = patient ? formatPatientHeaderBedLine(patient.location) : '—';
@@ -100,6 +102,21 @@ export function FlowsheetModuleChrome({
                         outlined
                         onClick={onOpenEncounterSwitch}
                     />
+                    {patient?.id && encounterId ? (
+                        <Button
+                            type="button"
+                            size="small"
+                            label="Care Plan"
+                            icon="pi pi-list"
+                            className="!py-1 !text-[11px]"
+                            outlined
+                            onClick={() =>
+                                navigate(
+                                    `/app/inpatient/care-plan/${encodeURIComponent(patient.id)}/${encodeURIComponent(encounterId)}`
+                                )
+                            }
+                        />
+                    ) : null}
                     <Tag
                         value={
                             save.status === 'saved' && save.lastSavedAtIso

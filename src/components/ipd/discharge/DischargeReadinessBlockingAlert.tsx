@@ -1,13 +1,30 @@
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle } from 'lucide-react';
 import { useDischargeReadiness } from '../../../contexts/DischargeReadinessContext';
 import { useDischargeFinalizeFlow } from '../../../hooks/useDischargeFinalizeFlow';
+import { fetchCarePlan } from '../../../features/care-plan/api/carePlanWithFallback';
+import { carePlanDischargeWarnings } from '../../../features/care-plan/utils/dischargeCarePlanCheck';
 
 export function DischargeReadinessBlockingAlert() {
     const { encounterId, view } = useDischargeReadiness();
     const flow = useDischargeFinalizeFlow(encounterId, view);
+    const patientId = view.context.patientId?.trim() ?? '';
+
+    const carePlanQuery = useQuery({
+        queryKey: ['carePlanDischargeCheck', encounterId, patientId],
+        queryFn: () => fetchCarePlan(encounterId, patientId, 'tenant-default'),
+        enabled: Boolean(encounterId && patientId),
+        staleTime: 60_000,
+    });
+
+    const blockingReasons = useMemo(() => {
+        const care = carePlanDischargeWarnings(carePlanQuery.data);
+        return [...flow.blockingReasons, ...care];
+    }, [flow.blockingReasons, carePlanQuery.data]);
 
     if (flow.readinessQuery.isLoading) return null;
-    if (flow.blockingReasons.length === 0) return null;
+    if (blockingReasons.length === 0) return null;
 
     return (
         <div
@@ -24,7 +41,7 @@ export function DischargeReadinessBlockingAlert() {
                         </span>
                     </div>
                     <ul className="mt-1 space-y-0.5">
-                        {flow.blockingReasons.map((msg, i) => (
+                        {blockingReasons.map((msg, i) => (
                             <li
                                 key={`${i}-${msg}`}
                                 className="flex gap-1.5 text-[11px] font-medium leading-snug text-red-950 dark:text-red-50"

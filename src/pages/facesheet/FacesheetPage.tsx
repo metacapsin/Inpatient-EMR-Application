@@ -29,6 +29,9 @@ const VisitorsContacts = lazy(() => import('../patient/VisitorsContacts'));
 const PatientLocation = lazy(() => import('../patient/PatientLocation'));
 const Adt = lazy(() => import('../patient/Adt'));
 const NursingFlowsheetPage = lazy(() => import('./NursingFlowsheetPage'));
+const CarePlanFacesheetRedirect = lazy(() =>
+    import('../inpatient/CarePlanPage').then((m) => ({ default: m.CarePlanFacesheetRedirect }))
+);
 const DietaryTab = lazy(() => import('./DietaryTab'));
 const Radiology = lazy(() => import('../patient/Radiology'));
 
@@ -126,6 +129,7 @@ const FacesheetPage = () => {
                         <Route path="immunizations" element={<Immunizations />} />
                         <Route path="risk-assessments" element={<Navigate to={`${base}/clinical/nursing-flowsheet?sub=risk`} replace />} />
                         <Route path="clinical/nursing-flowsheet" element={<NursingFlowsheetPage />} />
+                        <Route path="clinical/care-plan" element={<CarePlanFacesheetRedirect />} />
                         <Route path="labs" element={<Labs />} />
                         <Route path="lab-orders" element={<LabOrders />} />
                         <Route path="radiology" element={<Radiology />} />

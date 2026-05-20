@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { Activity, ArrowRightLeft, BedDouble, DoorOpen, Stethoscope, UserPlus } from 'lucide-react';
+import { Activity, ArrowRightLeft, BedDouble, ClipboardList, DoorOpen, Stethoscope, UserPlus } from 'lucide-react';
 import type { FacesheetPatient } from '../../services/patient.service';
 import { formatLocationLine } from '../../types/patientLocation';
 import type { IRootState } from '../../store';
@@ -51,6 +51,12 @@ export function EncounterBanner({ patient, moduleBase }: EncounterBannerProps) {
         qs.set('patientId', patient.id);
         if (session?.encounterId?.trim()) qs.set('encounterId', session.encounterId.trim());
         navigate(`/app/inpatient/discharge-readiness?${qs.toString()}`);
+    }, [navigate, patient.id, session?.encounterId]);
+
+    const goCarePlan = useCallback(() => {
+        const enc = session?.encounterId?.trim();
+        if (!enc) return;
+        navigate(`/app/inpatient/care-plan/${encodeURIComponent(patient.id)}/${encodeURIComponent(enc)}`);
     }, [navigate, patient.id, session?.encounterId]);
 
     const statusLabel = !encounterReady
@@ -131,6 +137,15 @@ export function EncounterBanner({ patient, moduleBase }: EncounterBannerProps) {
                         >
                             <ArrowRightLeft className="h-4 w-4 shrink-0" aria-hidden />
                             Transfer
+                        </button>
+                        <button
+                            type="button"
+                            disabled={!encounterReady}
+                            onClick={goCarePlan}
+                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-primary/25 bg-white px-4 py-2 text-sm font-semibold text-primary shadow-sm transition hover:bg-primary/5 disabled:pointer-events-none disabled:opacity-45 dark:border-primary/30 dark:bg-[#1a2332] dark:hover:bg-primary/10"
+                        >
+                            <ClipboardList className="h-4 w-4 shrink-0" aria-hidden />
+                            Care Plan
                         </button>
                         <button
                             type="button"
