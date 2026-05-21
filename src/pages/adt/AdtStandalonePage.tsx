@@ -21,5 +21,4 @@ const AdtStandalonePage = () => {
         </div>
     );
 };
-
 export default AdtStandalonePage;

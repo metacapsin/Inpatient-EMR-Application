@@ -25,6 +25,7 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
     const isAppointmentsListPage = location.pathname === '/app/appointments';
     const isStaffSchedulingPage = location.pathname === '/app/staff-scheduling';
     const isIpdDashboardPage = location.pathname === '/app/dashboard';
+    const isCarePlanPage = location.pathname.startsWith('/app/inpatient/care-plan');
 
     const [showTopButton, setShowTopButton] = useState(false);
 
@@ -109,7 +110,8 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
                                               isBedBoardPage ||
                                               isAppointmentsListPage ||
                                               isStaffSchedulingPage ||
-                                              isIpdDashboardPage
+                                              isIpdDashboardPage ||
+                                              isCarePlanPage
                                             ? 'min-h-0 overflow-x-hidden overflow-y-hidden'
                                             : 'min-h-0 overflow-y-auto overflow-x-hidden'
                                 } ${
@@ -120,7 +122,8 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
                                           : isBedBoardPage ||
                                               isAppointmentsListPage ||
                                               isStaffSchedulingPage ||
-                                              isIpdDashboardPage
+                                              isIpdDashboardPage ||
+                                              isCarePlanPage
                                             ? 'p-4 sm:p-5'
                                             : 'p-6'
                                 }`}
@@ -130,7 +133,8 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
                                 isBedBoardPage ||
                                 isAppointmentsListPage ||
                                 isStaffSchedulingPage ||
-                                isIpdDashboardPage ? (
+                                isIpdDashboardPage ||
+                                isCarePlanPage ? (
                                     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
                                 ) : (
                                     children

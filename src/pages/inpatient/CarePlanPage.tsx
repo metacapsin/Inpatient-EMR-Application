@@ -199,52 +199,56 @@ export default function CarePlanPage() {
     };
 
     return (
-        <div className="space-y-4 p-4">
-            <div className="panel overflow-hidden rounded-lg border border-gray-200/80 bg-white p-6 shadow-none dark:border-gray-700/80 dark:bg-[#0c0a08]/40">
+        <div className="flex h-full min-h-0 w-full flex-1 flex-col">
+            <div className="panel flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-lg border border-gray-200/80 bg-white p-6 shadow-none dark:border-gray-700/80 dark:bg-[#0c0a08]/40">
                 <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Structured Care Plan</h1>
-                <p className="mt-2 max-w-2xl text-sm text-gray-600 dark:text-gray-400">
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                     Select an inpatient patient and active encounter to open the interdisciplinary NANDA-based care plan for
                     this admission.
                 </p>
-                <div className="mt-4 grid max-w-2xl gap-4 md:grid-cols-2">
+                <div className="mt-4 grid w-full gap-4 md:grid-cols-2">
                     <div>
                         <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Patient</label>
-                        <SearchableSelect
-                            allowEmpty
-                            emptyRowLabel={patientsLoading ? 'Loading…' : 'Select patient…'}
-                            disabled={patientsLoading}
-                            value={pickPatientId}
-                            options={patients.map((p) => ({
-                                value: p.id,
-                                label: `${p.name}${p.mrn ? ` · MRN ${p.mrn}` : ''}`,
-                                keywords: `${p.name} ${p.mrn} ${p.id}`,
-                            }))}
-                            onChange={(v) => {
-                                setPickPatientId(String(v));
-                                setPickEncounterId('');
-                            }}
-                        />
+                        <div className="w-full">
+                            <SearchableSelect
+                                allowEmpty
+                                emptyRowLabel={patientsLoading ? 'Loading…' : 'Select patient…'}
+                                disabled={patientsLoading}
+                                value={pickPatientId}
+                                options={patients.map((p) => ({
+                                    value: p.id,
+                                    label: `${p.name}${p.mrn ? ` · MRN ${p.mrn}` : ''}`,
+                                    keywords: `${p.name} ${p.mrn} ${p.id}`,
+                                }))}
+                                onChange={(v) => {
+                                    setPickPatientId(String(v));
+                                    setPickEncounterId('');
+                                }}
+                            />
+                        </div>
                     </div>
                     <div>
                         <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Encounter</label>
-                        <SearchableSelect
-                            allowEmpty
-                            emptyRowLabel={
-                                !pickPatientId
-                                    ? 'Select patient first'
-                                    : encountersLoading
-                                      ? 'Loading…'
-                                      : 'Select encounter…'
-                            }
-                            disabled={!pickPatientId || encountersLoading}
-                            value={pickEncounterId}
-                            options={encounters.map((e) => ({
-                                value: e.id,
-                                label: formatEncounterLabel(e),
-                                keywords: `${e.id} ${e.patientName || ''}`,
-                            }))}
-                            onChange={(v) => setPickEncounterId(String(v))}
-                        />
+                        <div className="w-full">
+                            <SearchableSelect
+                                allowEmpty
+                                emptyRowLabel={
+                                    !pickPatientId
+                                        ? 'Select patient first'
+                                        : encountersLoading
+                                          ? 'Loading…'
+                                          : 'Select encounter…'
+                                }
+                                disabled={!pickPatientId || encountersLoading}
+                                value={pickEncounterId}
+                                options={encounters.map((e) => ({
+                                    value: e.id,
+                                    label: formatEncounterLabel(e),
+                                    keywords: `${e.id} ${e.patientName || ''}`,
+                                }))}
+                                onChange={(v) => setPickEncounterId(String(v))}
+                            />
+                        </div>
                     </div>
                 </div>
                 <button
