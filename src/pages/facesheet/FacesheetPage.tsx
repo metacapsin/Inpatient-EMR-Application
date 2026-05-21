@@ -33,6 +33,7 @@ const CarePlanFacesheetRedirect = lazy(() =>
     import('../inpatient/CarePlanPage').then((m) => ({ default: m.CarePlanFacesheetRedirect }))
 );
 const DietaryTab = lazy(() => import('./DietaryTab'));
+const InfectionControlTab = lazy(() => import('./InfectionControlTab'));
 const Radiology = lazy(() => import('../patient/Radiology'));
 
 function ModuleFallback() {
@@ -130,6 +131,7 @@ const FacesheetPage = () => {
                         <Route path="risk-assessments" element={<Navigate to={`${base}/clinical/nursing-flowsheet?sub=risk`} replace />} />
                         <Route path="clinical/nursing-flowsheet" element={<NursingFlowsheetPage />} />
                         <Route path="clinical/care-plan" element={<CarePlanFacesheetRedirect />} />
+                        <Route path="infection-control" element={<InfectionControlTab />} />
                         <Route path="labs" element={<Labs />} />
                         <Route path="lab-orders" element={<LabOrders />} />
                         <Route path="radiology" element={<Radiology />} />

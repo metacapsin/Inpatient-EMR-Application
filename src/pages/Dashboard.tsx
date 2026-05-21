@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import { FaClipboardList } from 'react-icons/fa';
 import { IpdAlertsStrip } from '../components/ipd/IpdAlertsStrip';
+import { IpdPpeAlertStrip } from '../components/ipd/IpdPpeAlertStrip';
 import { StaffCoverageWidget } from '../components/ipd/StaffCoverageWidget';
 import { IpdBedBoardTable } from '../components/ipd/IpdBedBoardTable';
 import { IpdKpiRow } from '../components/ipd/IpdKpiRow';
@@ -160,6 +161,8 @@ const Dashboard: React.FC = () => {
             <IpdCodeAlertStrip events={activeCodeEvents} />
 
             <IpdKpiRow kpis={payload.kpis} loading={dashboardQuery.isFetching && !dashboardQuery.isLoading} />
+
+            <IpdPpeAlertStrip bedRows={payload.bedBoard} />
 
             <StaffCoverageWidget />
 

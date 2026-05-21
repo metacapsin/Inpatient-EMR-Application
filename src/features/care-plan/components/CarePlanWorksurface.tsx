@@ -4,6 +4,7 @@ import { CarePlanSuggestionsBanner } from './CarePlanSuggestionsBanner';
 import { CarePlanDiagnosisList } from './CarePlanDiagnosisList';
 import { CarePlanDetailTabs } from './CarePlanDetailTabs';
 import { CarePlanFooter } from './CarePlanFooter';
+import { InfectionMonitoringBanner } from './InfectionMonitoringBanner';
 import { useCarePlan } from '../state/CarePlanContext';
 
 type CarePlanWorksurfaceProps = {
@@ -18,6 +19,7 @@ export function CarePlanWorksurface({ patientName, mrn, encounterLabel }: CarePl
     return (
         <div className="panel flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200/80 bg-white p-0 shadow-none dark:border-gray-700/80 dark:bg-[#0c0a08]/40">
             <CarePlanHeader patientName={patientName} mrn={mrn} encounterLabel={encounterLabel} />
+            <InfectionMonitoringBanner />
             <CarePlanSuggestionsBanner />
             <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
                 <CarePlanDiagnosisList />

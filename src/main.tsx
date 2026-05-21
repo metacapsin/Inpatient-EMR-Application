@@ -36,6 +36,7 @@ import { AdtLegacySessionMigration } from './components/adt/AdtLegacySessionMigr
 // Contexts
 import { SettingsProvider } from './contexts/SettingsContext';
 import { SidebarProvider } from './contexts/SidebarContext';
+import { InfectionControlProvider } from './contexts/InfectionControlContext';
 
 // Toast
 import { Toaster } from 'sonner';
@@ -55,11 +56,13 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
                 <Provider store={store}>
                     <AdtLegacySessionMigration />
                     <SettingsProvider>
-                        <SidebarProvider>
-                            <RouterProvider router={router} />
+                        <InfectionControlProvider>
+                            <SidebarProvider>
+                                <RouterProvider router={router} />
                             <Toaster position="top-right" />
                             <ToastContainer position="top-right" />
-                        </SidebarProvider>
+                            </SidebarProvider>
+                        </InfectionControlProvider>
                     </SettingsProvider>
                 </Provider>
             </QueryClientProvider>

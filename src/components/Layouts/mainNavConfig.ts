@@ -38,9 +38,14 @@ export const PATIENT_SUB_LINKS = [
         label: 'Discharge readiness',
         title: 'Discharge summary, checklist, charges, eligibility, claim prep',
     },
+    {
+        to: '/app/quality/infection-dashboard',
+        label: 'Infection analytics',
+        title: 'HAI event summary and unit infection quality metrics',
+    },
 ] as const;
 
-const PATIENT_ACTIVE_PREFIXES = ['/app/patients', '/app/bed-board', '/app/inpatient'] as const;
+const PATIENT_ACTIVE_PREFIXES = ['/app/patients', '/app/bed-board', '/app/inpatient', '/app/quality'] as const;
 
 export function isPatientsSectionActive(pathname: string): boolean {
     return PATIENT_ACTIVE_PREFIXES.some(

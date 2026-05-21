@@ -6,6 +6,7 @@ import { ActionIconTooltip } from '@/components/ui/ActionIconTooltip';
 import type { LiveBedBoardRow } from '../../types/liveBedBoard';
 import { bedStatusPillClass } from '../../lib/adtBedPicker';
 import { EVSBedStatusStrip } from '../../components/evs/EVSBedStatusStrip';
+import { InfectionBedBoardIndicator } from '../../components/infection/InfectionBedBoardIndicator';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 0] as const;
 
@@ -123,8 +124,9 @@ export function LiveBedBoardGrid({ rows, loading }: LiveBedBoardGridProps) {
                                 <dl className="mt-3 space-y-1 text-xs text-gray-600 dark:text-gray-300">
                                     <div className="flex justify-between gap-2">
                                         <dt className="font-bold text-dark dark:text-gray-200">Patient</dt>
-                                        <dd className="max-w-[60%] truncate text-right font-medium text-gray-900 dark:text-white">
-                                            {row.patient?.displayName ?? '—'}
+                                        <dd className="flex max-w-[60%] flex-col items-end gap-1 text-right font-medium text-gray-900 dark:text-white">
+                                            <span className="truncate">{row.patient?.displayName ?? '—'}</span>
+                                            <InfectionBedBoardIndicator patientId={pid} />
                                         </dd>
                                     </div>
                                     <div className="flex justify-between gap-2">
@@ -271,8 +273,11 @@ export function LiveBedBoardGrid({ rows, loading }: LiveBedBoardGridProps) {
                                         <td className="px-2.5 py-1.5 align-middle" aria-label={`Bed status ${row.bed.bedStatus}`}>
                                             <StatusBadge status={row.bed.bedStatus} />
                                         </td>
-                                        <td className="max-w-[140px] truncate px-2.5 py-1.5 align-middle text-gray-800 dark:text-gray-200">
-                                            {row.patient?.displayName ?? '—'}
+                                        <td className="max-w-[180px] px-2.5 py-1.5 align-middle text-gray-800 dark:text-gray-200">
+                                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                                                <span className="truncate">{row.patient?.displayName ?? '—'}</span>
+                                                <InfectionBedBoardIndicator patientId={pid} />
+                                            </div>
                                         </td>
                                         <td className="px-2.5 py-1.5 align-middle font-mono text-[11px] text-gray-600 dark:text-gray-300">
                                             {row.patient?.mrn || '—'}

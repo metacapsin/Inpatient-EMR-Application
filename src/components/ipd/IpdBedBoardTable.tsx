@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { InfectionBedBoardIndicator } from '../infection/InfectionBedBoardIndicator';
 import type { IpdBedRow } from '../../types/ipdDashboard';
 
 type Props = {
@@ -80,8 +81,11 @@ function IpdBedBoardTableInner({ rows, selectedId, onSelect, loading }: Props) {
                                         <td className="px-4 py-2.5 text-gray-800 dark:text-gray-200 truncate" title={row.bed}>
                                             {row.bed}
                                         </td>
-                                        <td className="px-4 py-2.5 text-gray-900 dark:text-white font-medium truncate" title={row.patientName || '—'}>
-                                            {row.patientName || '—'}
+                                        <td className="px-4 py-2.5 text-gray-900 dark:text-white font-medium" title={row.patientName || '—'}>
+                                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                                                <span className="truncate">{row.patientName || '—'}</span>
+                                                <InfectionBedBoardIndicator patientId={row.patientId} />
+                                            </div>
                                         </td>
                                         <td className="px-4 py-2.5">
                                             <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${statusBadgeClass(row.status)}`}>

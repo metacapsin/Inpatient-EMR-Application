@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
     Activity,
     BedDouble,
+    Biohazard,
     Hospital,
     ClipboardList,
     ClipboardPenLine,
@@ -60,6 +61,12 @@ export const FACESHEET_MODULES: FacesheetModuleDef[] = [
         path: 'clinical/care-plan',
         label: 'Care Plan',
         icon: ClipboardList,
+        group: 'clinical',
+    },
+    {
+        path: 'infection-control',
+        label: 'Infection Control',
+        icon: Biohazard,
         group: 'clinical',
     },
     { path: 'labs', label: 'Labs', icon: FlaskConical, group: 'labs' },

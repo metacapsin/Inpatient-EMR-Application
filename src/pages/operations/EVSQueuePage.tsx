@@ -8,6 +8,7 @@ import { EVSAssignModal } from '../../components/evs/EVSAssignModal';
 import { EVSEmptyState } from '../../components/evs/EVSEmptyState';
 import { EVSMetricsBar } from '../../components/evs/EVSMetricsBar';
 import { EVSQueueTable } from '../../components/evs/EVSQueueTable';
+import { InfectionDeepCleaningBanner } from '../../components/evs/InfectionDeepCleaningBanner';
 import { useQueueTimerTick } from '../../components/evs/useQueueTimerTick';
 import type { EvsQueueActionId } from '../../components/evs/evsQueueUtils';
 import type { EvsQueueItem } from '../../types/evs';
@@ -130,6 +131,8 @@ const EVSQueuePage = () => {
             <FacilityManagementNav />
 
             <EVSMetricsBar metrics={metricsQuery.data} loading={metricsQuery.isLoading && !metricsQuery.data} />
+
+            <InfectionDeepCleaningBanner />
 
             <div className="mt-4 flex min-h-[20rem] flex-1 flex-col">
                 {!loading && items.length === 0 ? <EVSEmptyState /> : null}

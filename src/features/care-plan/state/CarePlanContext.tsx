@@ -35,6 +35,8 @@ function uid(prefix: string): string {
 export type CarePlanSaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
 type CarePlanContextValue = {
+    patientId: string;
+    encounterId: string;
     loading: boolean;
     plan: CarePlanDocument | null;
     selectedDiagnosisId: string | null;
@@ -335,6 +337,8 @@ export function CarePlanProvider({
     );
 
     const value: CarePlanContextValue = {
+        patientId,
+        encounterId,
         loading,
         plan,
         selectedDiagnosisId,

@@ -2,11 +2,11 @@ import React from "react";
 
 type AppButtonProps = {
   children: React.ReactNode;
-  onClick?: () => void;
-  type?: "button" | "submit" | "reset";
-  disabled?: boolean;
   className?: string;
-};
+} & Pick<
+  React.ButtonHTMLAttributes<HTMLButtonElement>,
+  "onClick" | "type" | "disabled" | "form" | "name" | "id" | "aria-label"
+>;
 
 const AppButton = ({
   children,
@@ -14,6 +14,10 @@ const AppButton = ({
   type = "button",
   disabled = false,
   className = "",
+  form,
+  name,
+  id,
+  "aria-label": ariaLabel,
 }: AppButtonProps) => {
   const baseStyle = `
     inline-flex items-center gap-2 text-sm font-medium
@@ -31,6 +35,10 @@ const AppButton = ({
       type={type}
       disabled={disabled}
       onClick={onClick}
+      form={form}
+      name={name}
+      id={id}
+      aria-label={ariaLabel}
       className={`${baseStyle} ${className}`}
     >
       {children}
