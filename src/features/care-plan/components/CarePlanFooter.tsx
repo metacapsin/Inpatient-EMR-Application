@@ -35,7 +35,7 @@ export function CarePlanFooter() {
                     disabled={saveState === 'saving'}
                     onClick={() => void savePlan()}
                 >
-                    {saveState === 'saving' ? 'Saving…' : 'Save care plan'}
+                    {saveState === 'saving' ? 'Saving…' : 'Save Care Plan'}
                 </AppButton>
             </div>
         </footer>

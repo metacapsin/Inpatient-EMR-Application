@@ -6,6 +6,7 @@ import {
     Hospital,
     ClipboardList,
     ClipboardPenLine,
+    FileSignature,
     FileStack,
     FileText,
     FlaskConical,
@@ -73,18 +74,38 @@ export const FACESHEET_MODULES: FacesheetModuleDef[] = [
     { path: 'lab-orders', label: 'Lab Orders', icon: TestTubes, group: 'labs' },
     { path: 'radiology', label: 'Radiology', icon: ScanLine, group: 'labs' },
     { path: 'documents', label: 'Documents', icon: FileStack, group: 'labs' },
+    { path: 'consents', label: 'Consents', icon: FileSignature, group: 'labs' },
     { path: 'notes', label: 'Notes', icon: NotebookPen, group: 'care' },
     { path: 'preventive-screening', label: 'Preventive', icon: FileText, group: 'care' },
     { path: 'visitors-contacts', label: 'Visitors & Contacts', icon: UsersRound, group: 'social' },
 ];
 
+/** Hidden from sidebar and mobile module tabs; direct URLs still work. */
+const HIDDEN_FACESHEET_NAV_PATHS = new Set([
+    'vitals',
+    'location',
+    'history',
+    'prescriptions',
+    'immunizations',
+    'preventive-screening',
+]);
+
+function isVisibleInChartNav(m: FacesheetModuleDef): boolean {
+    return !HIDDEN_FACESHEET_NAV_PATHS.has(m.path);
+}
+
 const ORDER: FacesheetModuleGroupId[] = ['overview', 'clinical', 'labs', 'care', 'social'];
+
+/** Modules shown in patient chart sidebar and mobile tab strip. */
+export function visibleFacesheetModules(): FacesheetModuleDef[] {
+    return FACESHEET_MODULES.filter(isVisibleInChartNav);
+}
 
 export function facesheetModulesByGroup(): { group: FacesheetModuleGroupId; title: string; items: FacesheetModuleDef[] }[] {
     return ORDER.map((group) => ({
         group,
         title: FACESHEET_MODULE_GROUPS[group],
-        items: FACESHEET_MODULES.filter((m) => m.group === group),
+        items: FACESHEET_MODULES.filter((m) => m.group === group && isVisibleInChartNav(m)),
     })).filter((g) => g.items.length > 0);
 }
 

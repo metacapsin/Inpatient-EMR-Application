@@ -1,18 +1,26 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { Loader2 } from 'lucide-react';
+import { ClipboardList } from 'lucide-react';
 import { toast } from 'sonner';
 import type { IRootState } from '../../store';
 import type { User } from '../../store/authSlice';
 import { selectAdtEncounter } from '../../store/adtEncounterSlice';
 import { getPatientsList, type PatientListItem } from '../../services/patient.service';
 import { listActiveEncounters, type ActiveEncounterRow } from '../../services/adt.service';
-import SearchableSelect from '../../components/ui/SearchableSelect';
 import { CarePlanProvider } from '../../features/care-plan/state/CarePlanContext';
 import { CarePlanWorksurface } from '../../features/care-plan/components/CarePlanWorksurface';
 import { CarePlanSkeleton } from '../../features/care-plan/components/CarePlanSkeleton';
 import { useCarePlan } from '../../features/care-plan/state/CarePlanContext';
+import {
+    CarePlanDropdown,
+    CarePlanSearchableSelect,
+    CARE_PLAN_FORM_GRID_CLASS,
+} from '../../features/care-plan/components/CarePlanStyledFields';
+import {
+    CARE_PLAN_PAGE_HEADER_CLASS,
+    CARE_PLAN_PICKER_CARD_CLASS,
+} from '../../features/care-plan/constants/carePlanLayout';
 
 function formatEncounterLabel(enc: ActiveEncounterRow): string {
     const idTail = enc.id.length > 8 ? enc.id.slice(-8) : enc.id;
@@ -93,6 +101,7 @@ export default function CarePlanPage() {
     const params = useParams<{ patientId?: string; encounterId?: string }>();
     const [searchParams] = useSearchParams();
     const user = useSelector((s: IRootState) => s.auth.user);
+    const baseId = useId();
 
     const routePatientId = params.patientId?.trim() || searchParams.get('patientId')?.trim() || '';
     const routeEncounterId = params.encounterId?.trim() || searchParams.get('encounterId')?.trim() || '';
@@ -169,6 +178,26 @@ export default function CarePlanPage() {
             : pickEncounterId
         : '—';
 
+    const patientOptions = useMemo(
+        () =>
+            patients.map((p) => ({
+                value: p.id,
+                label: `${p.name}${p.mrn ? ` · MRN ${p.mrn}` : ''}`,
+                keywords: `${p.name} ${p.mrn} ${p.id}`,
+            })),
+        [patients],
+    );
+
+    const encounterOptions = useMemo(
+        () =>
+            encounters.map((e) => ({
+                value: e.id,
+                label: formatEncounterLabel(e),
+                keywords: `${e.id} ${e.patientName || ''}`,
+            })),
+        [encounters],
+    );
+
     if (routePatientId && routeEncounterId) {
         return (
             <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -194,45 +223,56 @@ export default function CarePlanPage() {
         const q = searchParams.toString();
         const suffix = q ? `?${q}` : '';
         navigate(
-            `/app/inpatient/care-plan/${encodeURIComponent(pickPatientId)}/${encodeURIComponent(pickEncounterId)}${suffix}`
+            `/app/inpatient/care-plan/${encodeURIComponent(pickPatientId)}/${encodeURIComponent(pickEncounterId)}${suffix}`,
         );
     };
 
     return (
-        <div className="flex h-full min-h-0 w-full flex-1 flex-col">
-            <div className="panel flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-lg border border-gray-200/80 bg-white p-6 shadow-none dark:border-gray-700/80 dark:bg-[#0c0a08]/40">
-                <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Structured Care Plan</h1>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                    Select an inpatient patient and active encounter to open the interdisciplinary NANDA-based care plan for
-                    this admission.
-                </p>
-                <div className="mt-4 grid w-full gap-4 md:grid-cols-2">
-                    <div>
-                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Patient</label>
-                        <div className="w-full">
-                            <SearchableSelect
+        <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
+            <header className={CARE_PLAN_PAGE_HEADER_CLASS}>
+                <div className="flex items-start gap-2.5">
+                    <div
+                        className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/5 text-primary dark:border-primary/30 dark:bg-primary/10"
+                        aria-hidden
+                    >
+                        <ClipboardList className="h-4 w-4" strokeWidth={2.25} />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">Clinical</p>
+                        <h1 className="text-lg font-bold text-gray-900 dark:text-white">Structured Care Plan</h1>
+                        <p className="mt-1 max-w-xl text-sm text-gray-600 dark:text-gray-400">
+                            Select an inpatient patient and active encounter to open the interdisciplinary NANDA-based care
+                            plan for this admission.
+                        </p>
+                    </div>
+                </div>
+            </header>
+
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 [scrollbar-width:thin]">
+                <div className={`${CARE_PLAN_PICKER_CARD_CLASS} mx-auto w-full max-w-3xl`}>
+                    <div className={CARE_PLAN_FORM_GRID_CLASS}>
+                        <div className="col-span-12">
+                            <CarePlanSearchableSelect
+                                fieldId={`${baseId}-patient`}
+                                label="Patient"
                                 allowEmpty
                                 emptyRowLabel={patientsLoading ? 'Loading…' : 'Select patient…'}
                                 disabled={patientsLoading}
                                 value={pickPatientId}
-                                options={patients.map((p) => ({
-                                    value: p.id,
-                                    label: `${p.name}${p.mrn ? ` · MRN ${p.mrn}` : ''}`,
-                                    keywords: `${p.name} ${p.mrn} ${p.id}`,
-                                }))}
+                                options={patientOptions}
+                                placeholder="Search patient…"
+                                aria-busy={patientsLoading}
                                 onChange={(v) => {
                                     setPickPatientId(String(v));
                                     setPickEncounterId('');
                                 }}
                             />
                         </div>
-                    </div>
-                    <div>
-                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Encounter</label>
-                        <div className="w-full">
-                            <SearchableSelect
-                                allowEmpty
-                                emptyRowLabel={
+                        <div className="col-span-12">
+                            <CarePlanDropdown
+                                fieldId={`${baseId}-encounter`}
+                                label="Encounter"
+                                placeholder={
                                     !pickPatientId
                                         ? 'Select patient first'
                                         : encountersLoading
@@ -241,23 +281,19 @@ export default function CarePlanPage() {
                                 }
                                 disabled={!pickPatientId || encountersLoading}
                                 value={pickEncounterId}
-                                options={encounters.map((e) => ({
-                                    value: e.id,
-                                    label: formatEncounterLabel(e),
-                                    keywords: `${e.id} ${e.patientName || ''}`,
-                                }))}
+                                options={encounterOptions}
                                 onChange={(v) => setPickEncounterId(String(v))}
                             />
                         </div>
                     </div>
+                    <button
+                        type="button"
+                        className="btn btn-primary mt-5 inline-flex items-center gap-2"
+                        onClick={openPlan}
+                    >
+                        Open care plan
+                    </button>
                 </div>
-                <button
-                    type="button"
-                    className="btn btn-primary mt-4 inline-flex items-center gap-2"
-                    onClick={openPlan}
-                >
-                    Open care plan
-                </button>
             </div>
         </div>
     );

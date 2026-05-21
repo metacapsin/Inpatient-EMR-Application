@@ -4,6 +4,7 @@ import AppButton from '@/components/ui/AppButton';
 import { useCarePlan } from '../state/CarePlanContext';
 import { CarePlanDiagnosisCard } from './CarePlanDiagnosisCard';
 import { CarePlanAddDiagnosisDialog } from './CarePlanAddDiagnosisDialog';
+import { CARE_PLAN_SIDEBAR_CLASS } from '../constants/carePlanLayout';
 
 export function CarePlanDiagnosisList() {
     const { plan, selectedDiagnosisId, setSelectedDiagnosisId } = useCarePlan();
@@ -13,7 +14,7 @@ export function CarePlanDiagnosisList() {
     const diagnoses = plan?.diagnoses || [];
 
     return (
-        <aside className="flex min-h-0 flex-col border-r border-gray-200/90 bg-gray-50/50 dark:border-white/10 dark:bg-[#0c0a08]/40 lg:w-[30%] lg:max-w-[360px] lg:shrink-0">
+        <aside className={CARE_PLAN_SIDEBAR_CLASS}>
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200/80 px-3 py-2.5 dark:border-white/10">
                 <div>
                     <h2 className="text-xs font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300">Diagnoses</h2>
