@@ -1,17 +1,29 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { AutoComplete } from 'primereact/autocomplete';
 import { classNames } from 'primereact/utils';
+import SearchableSelect, { type SearchableSelectProps } from '../../../components/ui/SearchableSelect';
 import {
     FlowsheetLabeledDropdown,
     FlowsheetOutlinedCalendar,
     FlowsheetOutlinedTextInput,
     NFS_FLOAT_FIELD_LABEL,
     NFS_OUTLINED_FIELD_FRAME,
-    NFS_OUTLINED_FIELD_INPUT,
+    NFS_SECTION_GRID_CLASS,
 } from '../../nursing-flowsheet/components/FlowsheetStyledFields';
+import { FlowsheetOutlinedTextarea } from '../../io-tracking/components/FlowsheetOutlinedTextarea';
 import type { NandaSearchResult } from '../types/carePlan.types';
 
 export { FlowsheetLabeledDropdown as CarePlanDropdown };
+export { NFS_SECTION_GRID_CLASS as CARE_PLAN_FORM_GRID_CLASS };
+
+export function CarePlanFieldError({ message }: { message?: string }) {
+    if (!message) return null;
+    return (
+        <p className="mt-1 text-[11px] font-medium text-primary-700 dark:text-primary-300" role="alert">
+            {message}
+        </p>
+    );
+}
 
 type CarePlanTextareaProps = {
     fieldId: string;
@@ -35,27 +47,15 @@ export function CarePlanTextarea({
     hasError,
 }: CarePlanTextareaProps) {
     return (
-        <div
-            className={classNames(
-                NFS_OUTLINED_FIELD_FRAME,
-                'flex min-h-0 flex-col',
-                hasError && 'border-primary-600 ring-2 ring-primary/20 dark:border-primary-500'
-            )}
-        >
-            <label htmlFor={fieldId} className={NFS_FLOAT_FIELD_LABEL}>
-                {label}
-            </label>
-            <textarea
-                id={fieldId}
+        <div className={classNames(hasError && 'rounded-lg ring-2 ring-primary/20')}>
+            <FlowsheetOutlinedTextarea
+                fieldId={fieldId}
+                label={label}
                 value={value}
+                onChange={onChange}
                 rows={rows}
-                disabled={disabled}
                 placeholder={placeholder}
-                onChange={(e) => onChange(e.target.value)}
-                className={classNames(
-                    NFS_OUTLINED_FIELD_INPUT,
-                    'min-h-[4.5rem] resize-y py-2 leading-snug'
-                )}
+                disabled={disabled}
             />
         </div>
     );
@@ -108,9 +108,10 @@ type CarePlanNandaSearchProps = {
     onSearch: (query: string) => Promise<NandaSearchResult[]>;
     disabled?: boolean;
     required?: boolean;
+    variant?: 'default' | 'comfortable';
 };
 
-/** NANDA typeahead — same notched shell + panel class as flowsheet / radiology. */
+/** NANDA typeahead — notched shell + PrimeReact AutoComplete (flowsheet / radiology pattern). */
 export function CarePlanNandaSearch({
     fieldId,
     label,
@@ -119,7 +120,9 @@ export function CarePlanNandaSearch({
     onSearch,
     disabled,
     required,
+    variant = 'default',
 }: CarePlanNandaSearchProps) {
+    const comfortable = variant === 'comfortable';
     const [query, setQuery] = useState(value?.label ?? '');
     const [suggestions, setSuggestions] = useState<NandaSearchResult[]>([]);
     const [busy, setBusy] = useState(false);
@@ -138,18 +141,23 @@ export function CarePlanNandaSearch({
             }
             setBusy(true);
             try {
-                const rows = await onSearch(q);
-                setSuggestions(rows);
+                setSuggestions(await onSearch(q));
             } finally {
                 setBusy(false);
             }
         },
-        [onSearch]
+        [onSearch],
     );
 
     return (
-        <div className="relative w-full min-w-0">
-            <div className={classNames(NFS_OUTLINED_FIELD_FRAME, 'flex min-h-8 flex-col justify-center')}>
+        <div className="care-plan-nanda-ac relative w-full min-w-0">
+            <div
+                className={classNames(
+                    NFS_OUTLINED_FIELD_FRAME,
+                    'flex flex-col justify-center transition-shadow focus-within:ring-2 focus-within:ring-primary/15',
+                    comfortable ? 'min-h-[52px]' : 'min-h-8',
+                )}
+            >
                 <label htmlFor={fieldId} className={NFS_FLOAT_FIELD_LABEL}>
                     {label}
                     {required ? <span className="text-primary"> *</span> : null}
@@ -164,15 +172,18 @@ export function CarePlanNandaSearch({
                     dropdown
                     disabled={disabled}
                     placeholder="Type to search NANDA…"
-                    className="w-full"
-                    inputClassName="!h-7 !w-full !border-0 !bg-transparent !text-xs !font-medium !shadow-none"
+                    className="w-full [&_.p-autocomplete]:w-full [&_.p-autocomplete-dropdown]:!border-0 [&_.p-autocomplete-dropdown]:!bg-transparent [&_.p-autocomplete-dropdown]:!text-primary"
+                    inputClassName={classNames(
+                        '!w-full !border-0 !bg-transparent !font-medium !shadow-none !outline-none',
+                        comfortable ? '!h-9 !text-sm' : '!h-7 !text-xs',
+                    )}
                     appendTo={typeof document !== 'undefined' ? document.body : undefined}
-                    panelClassName="nfs-flowsheet-cal-panel"
+                    panelClassName="nfs-flowsheet-cal-panel io-tracking-cal-panel !rounded-xl !border-gray-200/90 !shadow-xl dark:!border-white/10"
                     itemTemplate={(item: NandaSearchResult) => (
-                        <span className="text-xs">
-                            <span className="font-semibold">{item.label}</span>
-                            <span className="ml-2 font-mono text-gray-500">{item.code}</span>
-                        </span>
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5 py-0.5 text-xs">
+                            <span className="font-semibold text-gray-900 dark:text-gray-100">{item.label}</span>
+                            <span className="font-mono text-[10px] font-semibold text-primary">{item.code}</span>
+                        </div>
                     )}
                     onChange={(e) => {
                         const v = String(e.value ?? '');
@@ -198,8 +209,29 @@ export function CarePlanNandaSearch({
 }
 
 export const CARE_PLAN_SECTION_CARD_CLASS =
-    'rounded-lg border border-gray-200/90 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-[#141210]';
+    'rounded-xl border border-gray-200/90 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#141210]';
 
 export function CarePlanFieldRow({ children, className = '' }: { children: ReactNode; className?: string }) {
     return <div className={classNames('grid gap-3 sm:grid-cols-2 lg:grid-cols-3', className)}>{children}</div>;
+}
+
+type CarePlanSearchableSelectProps = SearchableSelectProps & {
+    fieldId: string;
+    label: string;
+};
+
+/** Large lists (patients) — notched shell + searchable select (application theme). */
+export function CarePlanSearchableSelect({ fieldId, label, ...selectProps }: CarePlanSearchableSelectProps) {
+    return (
+        <div className="relative w-full min-w-0">
+            <div className={classNames(NFS_OUTLINED_FIELD_FRAME, 'flex min-h-8 flex-col justify-center')}>
+                <label htmlFor={fieldId} className={NFS_FLOAT_FIELD_LABEL}>
+                    {label}
+                </label>
+                <div className="min-w-0 [&_button]:!h-7 [&_button]:!min-h-7 [&_button]:!border-0 [&_button]:!bg-transparent [&_button]:!px-1 [&_button]:!shadow-none">
+                    <SearchableSelect id={fieldId} {...selectProps} />
+                </div>
+            </div>
+        </div>
+    );
 }

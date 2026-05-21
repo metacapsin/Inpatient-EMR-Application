@@ -192,7 +192,7 @@ const Header = () => {
 
     return (
         <header
-            className={`app-layout-header z-40 ${themeConfig.semidark && themeConfig.menu === 'horizontal' ? 'dark' : ''}`}
+            className={`app-layout-header z-50 ${themeConfig.semidark && themeConfig.menu === 'horizontal' ? 'dark' : ''}`}
         >
             <div className="app-layout-header-bar">
                 <div className="relative flex h-11 w-full min-w-0 items-center gap-2 px-3 sm:px-4 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(220px,400px)_auto] lg:items-center lg:gap-4 lg:px-5">

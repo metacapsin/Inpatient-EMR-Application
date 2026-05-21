@@ -1,6 +1,7 @@
+import { ClipboardList } from 'lucide-react';
 import { useCarePlan } from '../state/CarePlanContext';
 import { carePlanReviewStatus } from '../utils/goalProgress';
-
+import { CARE_PLAN_PAGE_HEADER_CLASS } from '../constants/carePlanLayout';
 type CarePlanHeaderProps = {
     patientName: string;
     mrn: string;
@@ -36,21 +37,29 @@ export function CarePlanHeader({ patientName, mrn, encounterLabel, admissionStat
                 : 'Up to date';
 
     return (
-        <header className="sticky top-0 z-20 border-b border-gray-200/90 bg-white/95 px-4 py-3 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-[#0f0d0b]/95">
+        <header className={`${CARE_PLAN_PAGE_HEADER_CLASS} sticky top-0 z-10 shadow-sm`}>
             <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">Structured Care Plan</p>
-                    <h1 className="truncate text-lg font-bold text-gray-900 dark:text-white">{patientName || 'Patient'}</h1>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                        <span>
-                            MRN <strong className="text-gray-800 dark:text-gray-200">{mrn || '—'}</strong>
-                        </span>
-                        <span className="text-gray-300 dark:text-gray-600">|</span>
-                        <span>
-                            Encounter <strong className="text-gray-800 dark:text-gray-200">{encounterLabel}</strong>
-                        </span>
-                        <span className="text-gray-300 dark:text-gray-600">|</span>
-                        <span>{admissionStatus}</span>
+                <div className="flex min-w-0 items-start gap-2.5">
+                    <div
+                        className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/5 text-primary dark:border-primary/30 dark:bg-primary/10"
+                        aria-hidden
+                    >
+                        <ClipboardList className="h-4 w-4" strokeWidth={2.25} />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">Structured Care Plan</p>
+                        <h1 className="truncate text-lg font-bold text-gray-900 dark:text-white">{patientName || 'Patient'}</h1>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                            <span>
+                                MRN <strong className="text-gray-800 dark:text-gray-200">{mrn || '—'}</strong>
+                            </span>
+                            <span className="text-gray-300 dark:text-gray-600">|</span>
+                            <span>
+                                Encounter <strong className="text-gray-800 dark:text-gray-200">{encounterLabel}</strong>
+                            </span>
+                            <span className="text-gray-300 dark:text-gray-600">|</span>
+                            <span>{admissionStatus}</span>
+                        </div>
                     </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -71,6 +80,5 @@ export function CarePlanHeader({ patientName, mrn, encounterLabel, admissionStat
                     ) : null}
                 </div>
             </div>
-        </header>
-    );
+        </header>    );
 }

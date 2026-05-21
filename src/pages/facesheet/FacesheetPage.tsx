@@ -34,6 +34,7 @@ const CarePlanFacesheetRedirect = lazy(() =>
 );
 const DietaryTab = lazy(() => import('./DietaryTab'));
 const Radiology = lazy(() => import('../patient/Radiology'));
+const Consents = lazy(() => import('../patient/Consents'));
 
 function ModuleFallback() {
     return (
@@ -135,6 +136,7 @@ const FacesheetPage = () => {
                         <Route path="radiology" element={<Radiology />} />
                         <Route path="clinical/unified-orders" element={<Navigate to="../../radiology" replace />} />
                         <Route path="documents" element={<Documents />} />
+                        <Route path="consents" element={<Consents />} />
                         <Route path="notes" element={<Notes />} />
                         <Route path="preventive-screening" element={<PreventiveScreening />} />
                         <Route path="visitors-contacts" element={<VisitorsContacts />} />

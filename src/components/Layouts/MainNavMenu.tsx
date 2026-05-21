@@ -108,7 +108,7 @@ function TopNavDropdown({
 
             className={[
 
-                'absolute left-0 top-full z-50 pt-1.5',
+                'absolute left-0 top-full z-[60] pt-1.5',
 
                 open ? 'pointer-events-auto' : 'pointer-events-none',
 

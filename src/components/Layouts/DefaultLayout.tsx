@@ -93,7 +93,7 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
                         }`}
                     >
                         {/* BEGIN TOP NAVBAR */}
-                        <div className="shrink-0">
+                        <div className="relative z-50 shrink-0 overflow-visible">
                             <Header />
                         </div>
                         {/* END TOP NAVBAR */}

@@ -5,6 +5,7 @@ import { useDischargeReadiness } from '../../../contexts/DischargeReadinessConte
 import { useDischargeFinalizeFlow } from '../../../hooks/useDischargeFinalizeFlow';
 import { fetchCarePlan } from '../../../features/care-plan/api/carePlanWithFallback';
 import { carePlanDischargeWarnings } from '../../../features/care-plan/utils/dischargeCarePlanCheck';
+import { getConsentCompleteness, consentDischargeBlockingMessages } from '../../../services/consent.service';
 
 export function DischargeReadinessBlockingAlert() {
     const { encounterId, view } = useDischargeReadiness();
@@ -18,10 +19,22 @@ export function DischargeReadinessBlockingAlert() {
         staleTime: 60_000,
     });
 
+    const consentQuery = useQuery({
+        queryKey: ['consentCompletenessDischarge', encounterId],
+        queryFn: async () => {
+            const r = await getConsentCompleteness(encounterId);
+            if (!r.ok) throw new Error(r.message);
+            return r.data;
+        },
+        enabled: Boolean(encounterId.trim()),
+        staleTime: 60_000,
+    });
+
     const blockingReasons = useMemo(() => {
         const care = carePlanDischargeWarnings(carePlanQuery.data);
-        return [...flow.blockingReasons, ...care];
-    }, [flow.blockingReasons, carePlanQuery.data]);
+        const consent = consentDischargeBlockingMessages(consentQuery.data);
+        return [...flow.blockingReasons, ...care, ...consent];
+    }, [flow.blockingReasons, carePlanQuery.data, consentQuery.data]);
 
     if (flow.readinessQuery.isLoading) return null;
     if (blockingReasons.length === 0) return null;

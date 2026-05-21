@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { FACESHEET_MODULES } from '../../facesheet/facesheetModules';
+import { visibleFacesheetModules } from '../../facesheet/facesheetModules';
 
 interface FacesheetModuleTabsProps {
     base: string;
@@ -22,7 +22,7 @@ export function FacesheetModuleTabs({ base, className = '' }: FacesheetModuleTab
                 role="tablist"
                 aria-label="Chart modules"
             >
-                {FACESHEET_MODULES.map((m) => {
+                {visibleFacesheetModules().map((m) => {
                     const Icon = m.icon;
                     return (
                         <NavLink

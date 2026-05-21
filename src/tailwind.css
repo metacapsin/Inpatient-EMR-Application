@@ -73,7 +73,7 @@
      */
     .navbar-sticky header.app-layout-header,
     .navbar-floating header.app-layout-header {
-        @apply sticky top-0 z-20;
+        @apply sticky top-0 z-50 overflow-visible;
     }
     .navbar-floating header.app-layout-header {
         @apply bg-[#f8f6f4]/95 px-6 pt-4 dark:bg-[#0f0d0b]/95;
@@ -116,7 +116,7 @@
         box-shadow: none !important;
     }
     header.app-layout-header .app-layout-header-bar {
-        @apply border-b border-emr-border/80 bg-emr-topnav/95 backdrop-blur-md backdrop-saturate-150;
+        @apply overflow-visible border-b border-emr-border/80 bg-emr-topnav/95 backdrop-blur-md backdrop-saturate-150;
         box-shadow:
             0 1px 0 rgba(255, 255, 255, 0.65) inset,
             0 1px 3px rgba(31, 41, 55, 0.04);

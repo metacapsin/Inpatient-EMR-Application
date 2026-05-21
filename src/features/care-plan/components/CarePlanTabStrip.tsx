@@ -15,7 +15,7 @@ type CarePlanTabStripProps = {
 export function CarePlanTabStrip({ tab, onTabChange }: CarePlanTabStripProps) {
     return (
         <div
-            className="mb-3 inline-flex max-w-full flex-wrap rounded-lg border border-gray-200/90 bg-gray-50/90 p-0.5 dark:border-gray-700 dark:bg-gray-900/40"
+            className="mb-3 inline-flex max-w-full flex-wrap gap-0.5 rounded-lg border border-gray-200/90 bg-gray-50/80 p-0.5 dark:border-white/10 dark:bg-[#0c0a08]/60"
             role="tablist"
             aria-label="Care plan diagnosis sections"
         >
@@ -28,10 +28,10 @@ export function CarePlanTabStrip({ tab, onTabChange }: CarePlanTabStripProps) {
                         role="tab"
                         aria-selected={active}
                         onClick={() => onTabChange(b.id)}
-                        className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition sm:text-xs ${
+                        className={`rounded-md px-3 py-1.5 text-[11px] font-semibold transition sm:text-xs ${
                             active
-                                ? 'bg-white text-primary shadow-sm ring-1 ring-primary/15 dark:bg-[#1a1816] dark:text-primary-200'
-                                : 'text-gray-600 hover:bg-white/80 dark:text-gray-400 dark:hover:bg-white/5'
+                                ? 'bg-white text-primary shadow-sm ring-1 ring-primary/20 dark:bg-[#1a1816] dark:text-primary-200'
+                                : 'text-gray-600 hover:bg-white/90 hover:text-primary/90 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-primary-200/90'
                         }`}
                     >
                         {b.label}
