@@ -10,9 +10,18 @@ const DEBOUNCE_MS = 280;
 type HeaderGlobalSearchProps = {
     className?: string;
     id?: string;
+    /** Focus input when mounted (mobile search strip). */
+    autoFocus?: boolean;
+    /** Called when search should close (Escape, result pick, view all). */
+    onDismiss?: () => void;
 };
 
-export function HeaderGlobalSearch({ className = '', id = 'header-global-search' }: HeaderGlobalSearchProps) {
+export function HeaderGlobalSearch({
+    className = '',
+    id = 'header-global-search',
+    autoFocus = false,
+    onDismiss,
+}: HeaderGlobalSearchProps) {
     const navigate = useNavigate();
     const inputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -55,6 +64,14 @@ export function HeaderGlobalSearch({ className = '', id = 'header-global-search'
     }, [debounced, runSearch]);
 
     useEffect(() => {
+        if (autoFocus) {
+            const t = window.setTimeout(() => inputRef.current?.focus(), 50);
+            setOpen(true);
+            return () => window.clearTimeout(t);
+        }
+    }, [autoFocus]);
+
+    useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
                 e.preventDefault();
@@ -70,11 +87,12 @@ export function HeaderGlobalSearch({ className = '', id = 'header-global-search'
         const onPointerDown = (e: MouseEvent) => {
             if (!containerRef.current?.contains(e.target as Node)) {
                 setOpen(false);
+                onDismiss?.();
             }
         };
         document.addEventListener('mousedown', onPointerDown);
         return () => document.removeEventListener('mousedown', onPointerDown);
-    }, []);
+    }, [onDismiss]);
 
     const goToPatient = (p: PatientListItem) => {
         const id = getPatientListRowId(p);
@@ -83,6 +101,7 @@ export function HeaderGlobalSearch({ className = '', id = 'header-global-search'
         setResults([]);
         setOpen(false);
         setActiveIndex(-1);
+        onDismiss?.();
     };
 
     const goToListSearch = () => {
@@ -90,6 +109,7 @@ export function HeaderGlobalSearch({ className = '', id = 'header-global-search'
         if (!term) return;
         navigate(`/app/patients/list?search=${encodeURIComponent(term)}`);
         setOpen(false);
+        onDismiss?.();
     };
 
     const showPanel = open && (loading || results.length > 0 || debounced.length >= 2);
@@ -111,6 +131,7 @@ export function HeaderGlobalSearch({ className = '', id = 'header-global-search'
         } else if (e.key === 'Escape') {
             setOpen(false);
             inputRef.current?.blur();
+            onDismiss?.();
         }
     };
 
@@ -120,8 +141,8 @@ export function HeaderGlobalSearch({ className = '', id = 'header-global-search'
                 Global patient search
             </label>
             <div className="relative">
-                <span className="pointer-events-none absolute inset-y-0 left-0 flex w-8 items-center justify-center text-emr-muted dark:text-gray-500">
-                    <IconSearch className="h-3.5 w-3.5" duotone={false} />
+                <span className="pointer-events-none absolute inset-y-0 left-0 flex w-9 items-center justify-center text-emr-muted dark:text-gray-500">
+                    <IconSearch className="h-4 w-4" duotone={false} />
                 </span>
                 <input
                     ref={inputRef}

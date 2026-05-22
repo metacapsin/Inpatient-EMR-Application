@@ -27,8 +27,11 @@ function IpdAlertsStripInner({ alerts }: Props) {
     } as const;
 
     return (
-        <div className="shrink-0 rounded-xl border border-white-light dark:border-dark bg-white dark:bg-black/20 px-3 py-2 sm:px-4">
-            <div className="flex flex-wrap gap-x-4 gap-y-2 items-start">
+        <div className="shrink-0 rounded-xl border border-emr-border/90 bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(31,41,55,0.04)] dark:border-white/10 dark:bg-[#161412]/90 sm:px-3.5">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-emr-muted dark:text-gray-500">
+                Operational alerts
+            </p>
+            <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
                 {groups.map((g) => (
                     <div
                         key={g.title}

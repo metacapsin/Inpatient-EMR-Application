@@ -26,6 +26,7 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
     const isStaffSchedulingPage = location.pathname === '/app/staff-scheduling';
     const isIpdDashboardPage = location.pathname === '/app/dashboard';
     const isCarePlanPage = location.pathname.startsWith('/app/inpatient/care-plan');
+    const isQualityMeasuresPage = location.pathname === '/app/reports/quality-measures';
 
     const [showTopButton, setShowTopButton] = useState(false);
 
@@ -111,7 +112,8 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
                                               isAppointmentsListPage ||
                                               isStaffSchedulingPage ||
                                               isIpdDashboardPage ||
-                                              isCarePlanPage
+                                              isCarePlanPage ||
+                                              isQualityMeasuresPage
                                             ? 'min-h-0 overflow-x-hidden overflow-y-hidden'
                                             : 'min-h-0 overflow-y-auto overflow-x-hidden'
                                 } ${
@@ -123,8 +125,11 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
                                               isAppointmentsListPage ||
                                               isStaffSchedulingPage ||
                                               isIpdDashboardPage ||
-                                              isCarePlanPage
-                                            ? 'p-4 sm:p-5'
+                                              isCarePlanPage ||
+                                              isQualityMeasuresPage
+                                            ? isIpdDashboardPage || isQualityMeasuresPage
+                                              ? 'p-3 sm:p-4'
+                                              : 'p-4 sm:p-5'
                                             : 'p-6'
                                 }`}
                             >
@@ -134,7 +139,7 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
                                 isAppointmentsListPage ||
                                 isStaffSchedulingPage ||
                                 isIpdDashboardPage ||
-                                isCarePlanPage ? (
+                                isCarePlanPage || isQualityMeasuresPage ? (
                                     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
                                 ) : (
                                     children

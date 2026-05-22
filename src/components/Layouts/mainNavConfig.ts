@@ -38,9 +38,14 @@ export const PATIENT_SUB_LINKS = [
         label: 'Infection analytics',
         title: 'HAI event summary and unit infection quality metrics',
     },
+    {
+        to: '/app/reports/quality-measures',
+        label: 'Quality measures',
+        title: 'Inpatient bundle compliance dashboard (SEP-1, VTE, CAUTI, and related measures)',
+    },
 ] as const;
 
-const PATIENT_ACTIVE_PREFIXES = ['/app/patients', '/app/bed-board', '/app/inpatient', '/app/quality'] as const;
+const PATIENT_ACTIVE_PREFIXES = ['/app/patients', '/app/bed-board', '/app/inpatient', '/app/quality', '/app/reports'] as const;
 
 export function isPatientsSectionActive(pathname: string): boolean {
     return PATIENT_ACTIVE_PREFIXES.some(

@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
+import { Activity } from 'lucide-react';
 import { FaClipboardList } from 'react-icons/fa';
 import { IpdAlertsStrip } from '../components/ipd/IpdAlertsStrip';
 import { IpdPpeAlertStrip } from '../components/ipd/IpdPpeAlertStrip';
@@ -22,6 +23,17 @@ import { fetchIpdDashboard } from '../services/ipdDashboard.service';
 import { formatAdtUserMessage, transferPatient } from '../services/adtWorkflowService';
 import type { AppDispatch } from '../store';
 import type { IpdBedRow, IpdDashboardPayload } from '../types/ipdDashboard';
+import {
+    ipdBedBoardColClass,
+    ipdEyebrowClass,
+    ipdMainGridClass,
+    ipdMetricsBandClass,
+    ipdPageHeaderClass,
+    ipdPageSubtitleClass,
+    ipdPageTitleClass,
+    ipdPatientColClass,
+    ipdShellClass,
+} from '../styles/ipdDashboardClasses';
 
 const emptyPayload = (): IpdDashboardPayload => ({
     kpis: {
@@ -130,44 +142,55 @@ const Dashboard: React.FC = () => {
 
     if (loading && payload.bedBoard.length === 0 && !payload.kpis.totalAdmittedPatients) {
         return (
-            <div className="flex flex-1 min-h-0 items-center justify-center rounded-xl border border-white-light dark:border-dark bg-white/50 dark:bg-black/10">
+            <div className="ipd-operations-shell flex flex-1 min-h-0 items-center justify-center rounded-xl border border-emr-border/90 bg-white shadow-sm dark:border-white/10 dark:bg-[#161412]/80">
                 <div className="text-center">
-                    <div className="relative mx-auto w-12 h-12">
+                    <div className="relative mx-auto h-12 w-12">
                         <div className="absolute inset-0 rounded-full border-2 border-primary/20" />
-                        <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-primary animate-spin" />
-                        <div className="absolute inset-2 rounded-full bg-primary/5 flex items-center justify-center">
-                            <FaClipboardList className="text-primary text-base" />
+                        <div className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-primary" />
+                        <div className="absolute inset-2 flex items-center justify-center rounded-full bg-primary/5">
+                            <FaClipboardList className="text-base text-primary" />
                         </div>
                     </div>
-                    <p className="mt-4 text-sm font-medium text-gray-600 dark:text-gray-400">Loading IPD dashboard…</p>
+                    <p className="mt-4 text-sm font-semibold text-emr-text dark:text-gray-300">Loading operations center…</p>
+                    <p className="mt-1 text-xs text-emr-muted dark:text-gray-500">Census, bed board, and alerts</p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 sm:gap-4">
-            <div className="shrink-0 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tracking-tight">In-Patient Dashboard</h1>
+        <div className={ipdShellClass}>
+            <div className={ipdPageHeaderClass}>
+                <div className="min-w-0">
+                    <p className={ipdEyebrowClass}>Inpatient operations</p>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                        <h1 className={ipdPageTitleClass}>In-Patient Dashboard</h1>
                         <IpdActiveCodeBadges events={activeCodeEvents} />
+                        {dashboardQuery.isFetching && !dashboardQuery.isLoading ? (
+                            <span
+                                className="inline-flex items-center gap-1 rounded-md border border-emr-border/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-emr-muted dark:border-white/10 dark:bg-[#1c1916] dark:text-gray-400"
+                                aria-live="polite"
+                            >
+                                <Activity className="h-3 w-3 animate-pulse text-emr-accent" aria-hidden />
+                                Syncing
+                            </span>
+                        ) : null}
                     </div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Real-time hospital operations overview</p>
+                    <p className={`${ipdPageSubtitleClass} mt-0.5`}>Real-time hospital operations overview</p>
                 </div>
                 <CodeActivateButton label="Activate Code" size="md" onClick={() => setCodeModalOpen(true)} />
             </div>
 
             <IpdCodeAlertStrip events={activeCodeEvents} />
 
-            <IpdKpiRow kpis={payload.kpis} loading={dashboardQuery.isFetching && !dashboardQuery.isLoading} />
+            <div className={ipdMetricsBandClass}>
+                <IpdKpiRow kpis={payload.kpis} loading={dashboardQuery.isFetching && !dashboardQuery.isLoading} />
+                <IpdPpeAlertStrip bedRows={payload.bedBoard} />
+                <StaffCoverageWidget />
+            </div>
 
-            <IpdPpeAlertStrip bedRows={payload.bedBoard} />
-
-            <StaffCoverageWidget />
-
-            <div className="grid grid-cols-1 lg:grid-cols-10 gap-3 sm:gap-4 flex-1 min-h-0">
-                <div className="lg:col-span-7 min-h-0 flex flex-col min-h-[220px]">
+            <div className={ipdMainGridClass}>
+                <div className={ipdBedBoardColClass}>
                     <IpdBedBoardTable
                         rows={payload.bedBoard}
                         selectedId={selectedId}
@@ -175,7 +198,7 @@ const Dashboard: React.FC = () => {
                         loading={dashboardQuery.isFetching}
                     />
                 </div>
-                <div className="lg:col-span-3 min-h-0 flex flex-col min-h-[260px] lg:min-h-0">
+                <div className={ipdPatientColClass}>
                     <IpdPatientDetailsPanel
                         row={selectedRow}
                         transferBusy={transferMutation.isPending}

@@ -25,6 +25,7 @@ const Settings = lazy(() => import('../pages/Settings'));
 const FacilitySettingsPage = lazy(() => import('../modules/settings/facility/FacilitySettingsPage'));
 const EVSQueuePage = lazy(() => import('../pages/operations/EVSQueuePage'));
 const InfectionDashboardPage = lazy(() => import('../pages/quality/InfectionDashboardPage'));
+const QualityMeasuresPage = lazy(() => import('../pages/reports/QualityMeasuresPage'));
 const Demographic = lazy(() => import('../pages/patient/Demographic'));
 const Vitals = lazy(() => import('../pages/patient/Vitals'));
 const History = lazy(() => import('../pages/patient/History'));
@@ -179,6 +180,11 @@ const routes = [
     {
         path: '/app/quality/infection-dashboard',
         element: guard(<InfectionDashboardPage />),
+        layout: 'default' as const,
+    },
+    {
+        path: '/app/reports/quality-measures',
+        element: guard(<QualityMeasuresPage />),
         layout: 'default' as const,
     },
     {

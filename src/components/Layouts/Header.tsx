@@ -14,9 +14,11 @@ import IconLaptop from '../Icon/IconLaptop';
 import IconMailDot from '../Icon/IconMailDot';
 import IconInfoCircle from '../Icon/IconInfoCircle';
 import IconLogout from '../Icon/IconLogout';
+import { Search } from 'lucide-react';
 import { HeaderTopBar } from './HeaderTopBar';
 import { HeaderGlobalSearch } from './HeaderGlobalSearch';
 import { emrHeaderUtilityBtnClass } from '../../styles/emrLayoutClasses';
+import { cn } from '@/lib/utils';
 
 const Header = () => {
     const location = useLocation();
@@ -71,6 +73,10 @@ const Header = () => {
         }
     }, [location]);
 
+    useEffect(() => {
+        setMobileSearchOpen(false);
+    }, [location.pathname]);
+
     const isRtl = useSelector((state: IRootState) => state.themeConfig.rtlClass) === 'rtl' ? true : false;
 
     const themeConfig = useSelector((state: IRootState) => state.themeConfig);
@@ -93,6 +99,7 @@ const Header = () => {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [loadingNotifications, setLoadingNotifications] = useState(false);
     const [showMore, setShowMore] = useState(false);
+    const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
     const unreadNotifications = notifications.filter((notif) => !notif.isRead);
 
@@ -195,11 +202,11 @@ const Header = () => {
             className={`app-layout-header z-50 ${themeConfig.semidark && themeConfig.menu === 'horizontal' ? 'dark' : ''}`}
         >
             <div className="app-layout-header-bar">
-                <div className="relative flex h-11 w-full min-w-0 items-center gap-2 px-3 sm:px-4 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(220px,400px)_auto] lg:items-center lg:gap-4 lg:px-5">
+                <div className="relative flex h-12 w-full min-w-0 items-center gap-2 px-3 sm:px-4 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(260px,440px)_auto] lg:items-center lg:gap-4 lg:px-5">
                     <HeaderTopBar />
 
                     <div className="hidden min-w-0 justify-center lg:flex">
-                        <HeaderGlobalSearch className="w-full max-w-[400px]" />
+                        <HeaderGlobalSearch className="w-full max-w-[440px]" />
                     </div>
 
                     <div
@@ -207,6 +214,25 @@ const Header = () => {
                         role="toolbar"
                         aria-label="Application utilities"
                     >
+                        <button
+                            type="button"
+                            className={cn(
+                                emrHeaderUtilityBtnClass,
+                                'lg:hidden',
+                                mobileSearchOpen &&
+                                    'border-emr-accent/30 bg-emr-active text-emr-accent dark:border-primary/40 dark:bg-primary/15',
+                            )}
+                            aria-label={mobileSearchOpen ? 'Close search' : 'Open patient search'}
+                            aria-expanded={mobileSearchOpen}
+                            aria-controls="header-mobile-search-panel"
+                            onClick={() => setMobileSearchOpen((open) => !open)}
+                        >
+                            <Search className="h-4 w-4" strokeWidth={2} aria-hidden />
+                        </button>
+                        <span
+                            className="mx-0.5 hidden h-5 w-px shrink-0 bg-emr-border/80 lg:hidden dark:bg-white/10"
+                            aria-hidden
+                        />
                         <div>
                             {themeConfig.theme === 'light' ? (
                                 <button
@@ -452,9 +478,20 @@ const Header = () => {
                     </div>
                 </div>
 
-                <div className="border-t border-emr-border/70 px-3 py-2 lg:hidden dark:border-white/10">
-                    <HeaderGlobalSearch id="header-global-search-mobile" />
-                </div>
+                {mobileSearchOpen ? (
+                    <div
+                        id="header-mobile-search-panel"
+                        className="animate-fade-in-down border-t border-emr-border/70 px-3 py-2 lg:hidden dark:border-white/10"
+                        role="region"
+                        aria-label="Patient search"
+                    >
+                        <HeaderGlobalSearch
+                            id="header-global-search-mobile"
+                            autoFocus
+                            onDismiss={() => setMobileSearchOpen(false)}
+                        />
+                    </div>
+                ) : null}
             </div>
         </header>
     );
