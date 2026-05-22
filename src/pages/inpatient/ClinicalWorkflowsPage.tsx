@@ -39,10 +39,11 @@ import SearchableSelect from '@/components/ui/SearchableSelect';
 import AppButton from '@/components/ui/AppButton';
 import { InpatientRadiologyQuickWorkflow } from '../../features/clinical-workflows/components/InpatientRadiologyQuickWorkflow';
 import { InpatientCodeEventWorkflow } from '../../features/code-event/components/InpatientCodeEventWorkflow';
+import { AlliedHealthNotesTab } from '../../features/allied-health-notes/components/AlliedHealthNotesTab';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
-type TabId = 'physician' | 'nursing' | 'vitals' | 'orders' | 'Result' | 'Medication' | 'alerts' | 'codeEvent';
+type TabId = 'physician' | 'nursing' | 'vitals' | 'orders' | 'Result' | 'Medication' | 'alerts' | 'codeEvent' | 'alliedHealth';
 
 const selectClass =
     'h-10 w-full max-w-md rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100';
@@ -584,7 +585,7 @@ function ClinicalWorkflowsPage() {
                 {loading && <p className="mt-2 text-sm text-gray-500">Loading clinical data…</p>}
 
                 <div className="mt-4 flex flex-wrap gap-2 border-b border-gray-200 pb-2 dark:border-gray-700">
-                    {(['physician', 'nursing', 'vitals', 'orders', 'Result', 'Medication', 'codeEvent', 'alerts'] as TabId[]).map((t) => (
+                    {(['physician', 'nursing', 'vitals', 'orders', 'Result', 'Medication', 'codeEvent', 'alliedHealth', 'alerts'] as TabId[]).map((t) => (
                         <button
                             key={t}
                             type="button"
@@ -593,7 +594,7 @@ function ClinicalWorkflowsPage() {
                             }`}
                             onClick={() => setTab(t)}
                         >
-                            {t === 'codeEvent' ? 'Code event' : t}
+                            {t === 'codeEvent' ? 'Code event' : t === 'alliedHealth' ? 'Allied Health' : t}
                         </button>
                     ))}
                 </div>
@@ -607,6 +608,10 @@ function ClinicalWorkflowsPage() {
                             }}
                         />
                     </div>
+                )}
+
+                {tab === 'alliedHealth' && (
+                    <AlliedHealthNotesTab patientId={patientId} encounterId={encounterId} />
                 )}
 
                 {tab === 'physician' && (
