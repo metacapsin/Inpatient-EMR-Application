@@ -15,13 +15,11 @@ import {
     CARE_PLAN_MODAL_ATTR_GRID_CLASS,
     CARE_PLAN_MODAL_BODY_CLASS,
 } from '../constants/carePlanLayout';
-
 type CarePlanAddDiagnosisDialogProps = {
     visible: boolean;
     onHide: () => void;
     prefill?: NandaSearchResult | null;
 };
-
 export function CarePlanAddDiagnosisDialog({ visible, onHide, prefill }: CarePlanAddDiagnosisDialogProps) {
     const { searchNanda, addDiagnosisFromNanda } = useCarePlan();
     const baseId = useId();
@@ -30,7 +28,6 @@ export function CarePlanAddDiagnosisDialog({ visible, onHide, prefill }: CarePla
     const [evidencedBy, setEvidencedBy] = useState('');
     const [priority, setPriority] = useState<'High' | 'Medium' | 'Low'>('Medium');
     const [status, setStatus] = useState<'Active' | 'Resolved' | 'Discontinued'>('Active');
-
     useEffect(() => {
         if (!visible) return;
         setSelected(prefill || null);
@@ -39,7 +36,7 @@ export function CarePlanAddDiagnosisDialog({ visible, onHide, prefill }: CarePla
         setPriority('Medium');
         setStatus('Active');
     }, [visible, prefill]);
-
+    
     const submit = () => {
         if (!selected?.code || !selected.label) return;
         addDiagnosisFromNanda(selected, { relatedTo, evidencedBy, priority, status });

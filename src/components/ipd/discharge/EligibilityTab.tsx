@@ -1,8 +1,10 @@
 import React, { memo, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { Button } from '../../ui/button';
 import type { EligibilityRecord } from '../../../types/dischargeReadiness';
 import { useDischargeReadinessOptional } from '../../../contexts/DischargeReadinessContext';
+import { facesheetPriorAuthPath } from '../../../features/prior-auth/services/priorAuth.service';
 import { eligibilityExpiresAtMs, formatEligibilityExpiryLabel } from '../../../utils/dischargeReadinessValidation';
 
 type RunResult = { ok: true } | { ok: false; message: string };
@@ -37,11 +39,38 @@ function EligibilityTabInner({ history, canRun, onRunCheck }: Props) {
         return g.message;
     }, [ctx?.snapshot]);
 
+    const priorAuthGateMsg = useMemo(() => {
+        const g = ctx?.snapshot.gates.find((x) => x.id === 'gate-prior-auth');
+        if (!g || g.resolved) return null;
+        return g.message;
+    }, [ctx?.snapshot]);
+
+    const patientId = ctx?.view.context.patientId?.trim() ?? '';
+
     const now = Date.now();
     const latestExpired = latest ? now >= eligibilityExpiresAtMs(latest) : false;
 
     return (
-        <div className="space-y-3" data-insurance-tab>
+        <div className="space-y-3" data-insurance-tab data-prior-auth-gate>
+            {priorAuthGateMsg ? (
+                <div
+                    className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100"
+                    role="alert"
+                >
+                    <p className="font-medium">Prior authorization (discharge gate)</p>
+                    <p className="mt-1">{priorAuthGateMsg}</p>
+                    {patientId ? (
+                        <p className="mt-2">
+                            <Link
+                                to={facesheetPriorAuthPath(patientId)}
+                                className="font-semibold text-primary underline-offset-2 hover:underline"
+                            >
+                                Open Prior Auth on chart
+                            </Link>
+                        </p>
+                    ) : null}
+                </div>
+            ) : null}
             {gateMsg ? (
                 <div
                     className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100"

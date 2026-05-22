@@ -5,6 +5,8 @@ import type {
     EligibilityRecord,
     ReadinessGate,
 } from '../types/dischargeReadiness';
+import { evaluatePriorAuthGate } from '../features/prior-auth/utils/priorAuthDischargeGate';
+import { ensureEncounterPriorAuths } from '../features/prior-auth/mock/priorAuthMockStore';
 
 function dedupePreserveOrder(messages: string[]): string[] {
     const seen = new Set<string>();
@@ -292,6 +294,20 @@ export function computeReadinessGates(p: DischargeReadinessPayload, nowMs: numbe
         ownerRole: 'billing',
     });
 
+    const encId = p.context.encounterId?.trim() ?? '';
+    if (encId && p.context.patientId) {
+        ensureEncounterPriorAuths(encId, p.context.patientId);
+    }
+    const paGate = evaluatePriorAuthGate(encId, nowMs);
+    gates.push({
+        id: 'gate-prior-auth',
+        category: 'financial',
+        severity: 'hard',
+        message: paGate.message,
+        resolved: paGate.resolved,
+        ownerRole: 'billing',
+    });
+
     const principalOk = principalDxValid(p.claimPrep);
     gates.push({
         id: 'gate-principal-dx',
@@ -330,6 +346,7 @@ const CLAIM_SUBMIT_GATE_ORDER: string[] = [
     'gate-charges-positive-total',
     'gate-charges-pending',
     'gate-eligibility',
+    'gate-prior-auth',
     'gate-encounter-claim-routing',
     'gate-claim-ub04-context',
     'gate-principal-dx',
@@ -344,6 +361,7 @@ export const DISCHARGE_WORKSPACE_GATE_DISPLAY_ORDER: readonly string[] = [
     'gate-charges-positive-total',
     'gate-charges-pending',
     'gate-eligibility',
+    'gate-prior-auth',
     'gate-encounter-claim-routing',
     'gate-claim-ub04-context',
     'gate-principal-dx',
@@ -527,6 +545,7 @@ export function scrollToFirstReadinessIssue(snapshot: ReadinessSnapshot): void {
         'gate-charges-positive-total',
         'gate-charges-pending',
         'gate-eligibility',
+        'gate-prior-auth',
         'gate-encounter-claim-routing',
         'gate-claim-ub04-context',
         'gate-principal-dx',
@@ -543,6 +562,7 @@ export function scrollToFirstReadinessIssue(snapshot: ReadinessSnapshot): void {
                     'gate-charges-positive-total': '[data-charges-tab]',
                     'gate-charges-pending': '[data-charges-tab]',
                     'gate-eligibility': '[data-insurance-tab]',
+                    'gate-prior-auth': '[data-prior-auth-gate]',
                     'gate-encounter-claim-routing': '[data-encounter-claim-context]',
                     'gate-claim-ub04-context': '[data-claim-ub04-context]',
                     'gate-principal-dx': '[data-billing-field="principalDxCode"]',
