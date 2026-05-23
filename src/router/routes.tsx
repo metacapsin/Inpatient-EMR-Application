@@ -46,6 +46,8 @@ const HealthTrends = lazy(() => import('../pages/patient/HealthTrends'));
 const AIAssistantPage = lazy(() => import('../pages/AIAssistantPage'));
 const SubscriptionPage = lazy(() => import('../pages/subscription/SubscriptionPage'));
 const SubscriptionSuccessPage = lazy(() => import('../pages/subscription/SubscriptionSuccessPage'));
+const DenialWorklistPage = lazy(() => import('../pages/billing/DenialWorklistPage'));
+const CDIWorklistPage = lazy(() => import('../pages/billing/CDIWorklistPage'));
 
 function guard(page: ReactNode) {
     return <ProtectedRoute>{page}</ProtectedRoute>;
@@ -105,6 +107,16 @@ const routes = [
     {
         path: '/app/inpatient/discharge-readiness',
         element: guard(<DischargeReadinessPage />),
+        layout: 'default' as const,
+    },
+    {
+        path: '/app/billing/denials',
+        element: guard(<DenialWorklistPage />),
+        layout: 'default' as const,
+    },
+    {
+        path: '/app/billing/cdi',
+        element: guard(<CDIWorklistPage />),
         layout: 'default' as const,
     },
     {

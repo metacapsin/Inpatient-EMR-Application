@@ -14,6 +14,8 @@ import {
     APPOINTMENT_SUB_LINKS,
     CLINICAL_SUB_LINKS,
     isAppointmentsSectionActive,
+    BILLING_SUB_LINKS,
+    isBillingSectionActive,
     isClinicalSectionActive,
     isDropdownGroupActive,
     isOperationsSectionActive,
@@ -38,6 +40,7 @@ const DROPDOWN_ICONS = {
     patients: IconMenuUsers,
     clinical: IconMenuNotes,
     operations: IconMenuApps,
+    billing: IconMenuPages,
 } as const;
 
 export function MainNavMenu({ variant }: MainNavMenuProps) {
@@ -58,6 +61,7 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
             patients: isPatientsSectionActive(pathname) ? true : prev.patients,
             clinical: isClinicalSectionActive(pathname) ? true : prev.clinical,
             operations: isOperationsSectionActive(pathname) ? true : prev.operations,
+            billing: isBillingSectionActive(pathname) ? true : prev.billing,
             appointments: isAppointmentsSectionActive(pathname) ? true : prev.appointments,
         }));
     }, [pathname]);
@@ -177,6 +181,8 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
             {renderSidebarDropdown('clinical', 'Clinical', IconMenuNotes, CLINICAL_SUB_LINKS)}
 
             {renderSidebarDropdown('operations', 'Operations', IconMenuApps, OPERATIONS_SUB_LINKS)}
+
+            {renderSidebarDropdown('billing', 'Billing', IconMenuPages, BILLING_SUB_LINKS)}
 
             <li className="nav-item">
                 <NavLink to="/app/settings" className="group" onClick={closeMobileSidebar}>

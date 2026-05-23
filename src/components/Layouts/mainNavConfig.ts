@@ -102,6 +102,31 @@ export function isOperationsSectionActive(pathname: string): boolean {
     return isSectionActive(pathname, OPERATIONS_ACTIVE_PREFIXES);
 }
 
+/** Revenue cycle — prior auth, denials, CDI. */
+export const BILLING_SUB_LINKS: readonly MainNavLink[] = [
+    // {
+    //     to: '/app/inpatient/discharge-readiness',
+    //     label: 'Prior Auth',
+    //     title: 'Discharge readiness eligibility and prior authorization',
+    // },
+    {
+        to: '/app/billing/denials',
+        label: 'Denials',
+        title: 'Denial management worklist and appeals',
+    },
+    {
+        to: '/app/billing/cdi',
+        label: 'CDI Worklist',
+        title: 'Clinical documentation improvement queries',
+    },
+];
+
+export const BILLING_ACTIVE_PREFIXES = ['/app/billing', '/app/inpatient/discharge-readiness'] as const;
+
+export function isBillingSectionActive(pathname: string): boolean {
+    return isSectionActive(pathname, BILLING_ACTIVE_PREFIXES);
+}
+
 /** Top-nav dropdown groups (order = display order). Extend items/activePrefixes per module. */
 export const MAIN_NAV_DROPDOWN_GROUPS: readonly MainNavDropdownGroup[] = [
     {
@@ -121,6 +146,12 @@ export const MAIN_NAV_DROPDOWN_GROUPS: readonly MainNavDropdownGroup[] = [
         label: 'Operations',
         items: OPERATIONS_SUB_LINKS,
         activePrefixes: OPERATIONS_ACTIVE_PREFIXES,
+    },
+    {
+        id: 'billing',
+        label: 'Billing',
+        items: BILLING_SUB_LINKS,
+        activePrefixes: BILLING_ACTIVE_PREFIXES,
     },
 ];
 

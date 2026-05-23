@@ -40,7 +40,7 @@ interface FileUploadSectionProps {
   inputId: string;
 }
 
-function FileUploadSection({
+export function FileUploadSection({
   title,
   description,
   files,

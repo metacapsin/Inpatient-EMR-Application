@@ -37,6 +37,7 @@ const InfectionControlTab = lazy(() => import('./InfectionControlTab'));
 const Radiology = lazy(() => import('../patient/Radiology'));
 const Consents = lazy(() => import('../patient/Consents'));
 const PriorAuth = lazy(() => import('../patient/PriorAuth'));
+const Invoices = lazy(() => import('../patient/Invoices'));
 
 function ModuleFallback() {
     return (
@@ -125,6 +126,7 @@ const FacesheetPage = () => {
                         <Route path="location" element={<PatientLocation />} />
                         <Route path="adt" element={<Adt />} />
                         <Route path="prior-auth" element={<PriorAuth />} />
+                        <Route path="invoices" element={<Invoices />} />
                         <Route path="history" element={<History />} />
                         <Route path="diagnoses" element={<Diagnoses />} />
                         <Route path="medications" element={<Medications />} />

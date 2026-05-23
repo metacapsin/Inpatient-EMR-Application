@@ -40,10 +40,22 @@ import AppButton from '@/components/ui/AppButton';
 import { InpatientRadiologyQuickWorkflow } from '../../features/clinical-workflows/components/InpatientRadiologyQuickWorkflow';
 import { InpatientCodeEventWorkflow } from '../../features/code-event/components/InpatientCodeEventWorkflow';
 import { AlliedHealthNotesTab } from '../../features/allied-health-notes/components/AlliedHealthNotesTab';
+import { PhysicianQueryInbox } from '../../features/cdi/components/PhysicianQueryInbox';
+import { tenantIdFromUser } from '../../features/consent/utils/consentLinks';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
-type TabId = 'physician' | 'nursing' | 'vitals' | 'orders' | 'Result' | 'Medication' | 'alerts' | 'codeEvent' | 'alliedHealth';
+type TabId =
+    | 'physician'
+    | 'physicianInbox'
+    | 'nursing'
+    | 'vitals'
+    | 'orders'
+    | 'Result'
+    | 'Medication'
+    | 'alerts'
+    | 'codeEvent'
+    | 'alliedHealth';
 
 const selectClass =
     'h-10 w-full max-w-md rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100';
@@ -87,6 +99,7 @@ function ClinicalWorkflowsPage() {
 
     const authRole = useSelector((s: IRootState) => s.auth.role);
     const user = useSelector((s: IRootState) => s.auth.user);
+    const tenantId = tenantIdFromUser(user);
     const rolesNorm = useMemo(() => normalizeRoles(authRole, user), [authRole, user]);
     const showSign = canSignPhysicianNote(rolesNorm);
     const showOrders = canCreateOrders(rolesNorm);
@@ -585,7 +598,20 @@ function ClinicalWorkflowsPage() {
                 {loading && <p className="mt-2 text-sm text-gray-500">Loading clinical data…</p>}
 
                 <div className="mt-4 flex flex-wrap gap-2 border-b border-gray-200 pb-2 dark:border-gray-700">
-                    {(['physician', 'nursing', 'vitals', 'orders', 'Result', 'Medication', 'codeEvent', 'alliedHealth', 'alerts'] as TabId[]).map((t) => (
+                    {(
+                        [
+                            'physician',
+                            'physicianInbox',
+                            'nursing',
+                            'vitals',
+                            'orders',
+                            'Result',
+                            'Medication',
+                            'codeEvent',
+                            'alliedHealth',
+                            'alerts',
+                        ] as TabId[]
+                    ).map((t) => (
                         <button
                             key={t}
                             type="button"
@@ -594,7 +620,13 @@ function ClinicalWorkflowsPage() {
                             }`}
                             onClick={() => setTab(t)}
                         >
-                            {t === 'codeEvent' ? 'Code event' : t === 'alliedHealth' ? 'Allied Health' : t}
+                            {t === 'codeEvent'
+                                ? 'Code event'
+                                : t === 'alliedHealth'
+                                  ? 'Allied Health'
+                                  : t === 'physicianInbox'
+                                    ? 'Physician Inbox'
+                                    : t}
                         </button>
                     ))}
                 </div>
@@ -612,6 +644,12 @@ function ClinicalWorkflowsPage() {
 
                 {tab === 'alliedHealth' && (
                     <AlliedHealthNotesTab patientId={patientId} encounterId={encounterId} />
+                )}
+
+                {tab === 'physicianInbox' && (
+                    <div className="mt-4">
+                        <PhysicianQueryInbox tenantId={tenantId} />
+                    </div>
                 )}
 
                 {tab === 'physician' && (

@@ -1,4 +1,5 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
@@ -6,6 +7,7 @@ import type { ClaimPrepState } from '../../../types/dischargeReadiness';
 import AppButton from '@/components/ui/AppButton';
 import { useDischargeReadiness } from '../../../contexts/DischargeReadinessContext';
 import { getClaimSubmitValidationMessages, getIcd10CmValidationError } from '../../../utils/dischargeReadinessValidation';
+import { billingCdiPath } from '../../../features/denial-management/services/denial.service';
 
 type Props = {
     claimPrep: ClaimPrepState;
@@ -143,6 +145,15 @@ function BillingTabInner({ claimPrep, canEdit, onSaveClaimPrep, onSubmitClaim }:
                     {encounterRoutingGate.message}
                 </p>
             ) : null}
+
+            <div className="flex flex-wrap gap-2">
+                <Link
+                    to={billingCdiPath()}
+                    className="inline-flex h-8 items-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:bg-[#1a1816] dark:text-gray-200"
+                >
+                    CDI Worklist
+                </Link>
+            </div>
 
             <div className="rounded-lg border border-gray-200/90 p-3 dark:border-gray-700">
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">

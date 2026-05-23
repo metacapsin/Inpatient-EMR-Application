@@ -79,7 +79,14 @@ export function CarePlanReadOnlyField(props: {
     );
 }
 
-export function CarePlanDateField(props: {
+export function CarePlanDateField({
+    fieldId,
+    label,
+    value,
+    onChange,
+    disabled,
+    hasError,
+}: {
     fieldId: string;
     label: string;
     value: Date | null;
@@ -90,11 +97,11 @@ export function CarePlanDateField(props: {
     return (
         <div className={classNames(hasError && 'rounded-lg ring-2 ring-primary/20')}>
             <FlowsheetOutlinedCalendar
-                fieldId={props.fieldId}
-                label={props.label}
-                value={props.value}
-                onChange={props.onChange}
-                disabled={props.disabled}
+                fieldId={fieldId}
+                label={label}
+                value={value}
+                onChange={onChange}
+                disabled={disabled}
             />
         </div>
     );
