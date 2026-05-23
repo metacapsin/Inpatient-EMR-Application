@@ -27,6 +27,7 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
     const isIpdDashboardPage = location.pathname === '/app/dashboard';
     const isCarePlanPage = location.pathname.startsWith('/app/inpatient/care-plan');
     const isQualityMeasuresPage = location.pathname === '/app/reports/quality-measures';
+    const isSettingsHubPage = location.pathname === '/app/settings';
 
     const [showTopButton, setShowTopButton] = useState(false);
 
@@ -113,7 +114,8 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
                                               isStaffSchedulingPage ||
                                               isIpdDashboardPage ||
                                               isCarePlanPage ||
-                                              isQualityMeasuresPage
+                                              isQualityMeasuresPage ||
+                                              isSettingsHubPage
                                             ? 'min-h-0 overflow-x-hidden overflow-y-hidden'
                                             : 'min-h-0 overflow-y-auto overflow-x-hidden'
                                 } ${
@@ -121,16 +123,18 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
                                         ? 'py-4 sm:py-6 ltr:pl-4 ltr:pr-6 rtl:pr-4 rtl:pl-6'
                                         : isFacesheet
                                           ? 'p-0'
-                                          : isBedBoardPage ||
-                                              isAppointmentsListPage ||
-                                              isStaffSchedulingPage ||
-                                              isIpdDashboardPage ||
-                                              isCarePlanPage ||
-                                              isQualityMeasuresPage
-                                            ? isIpdDashboardPage || isQualityMeasuresPage
-                                              ? 'p-3 sm:p-4'
-                                              : 'p-4 sm:p-5'
-                                            : 'p-6'
+                                          : isSettingsHubPage
+                                            ? 'p-0'
+                                            : isBedBoardPage ||
+                                                isAppointmentsListPage ||
+                                                isStaffSchedulingPage ||
+                                                isIpdDashboardPage ||
+                                                isCarePlanPage ||
+                                                isQualityMeasuresPage
+                                              ? isIpdDashboardPage || isQualityMeasuresPage
+                                                ? 'p-3 sm:p-4'
+                                                : 'p-4 sm:p-5'
+                                              : 'p-6'
                                 }`}
                             >
                                 {isFacesheet ||
@@ -139,7 +143,9 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
                                 isAppointmentsListPage ||
                                 isStaffSchedulingPage ||
                                 isIpdDashboardPage ||
-                                isCarePlanPage || isQualityMeasuresPage ? (
+                                isCarePlanPage ||
+                                isQualityMeasuresPage ||
+                                isSettingsHubPage ? (
                                     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
                                 ) : (
                                     children
@@ -149,7 +155,7 @@ function DefaultLayoutInner({ children }: PropsWithChildren) {
                         {/* END CONTENT AREA */}
 
                         {/* BEGIN FOOTER */}
-                        {!isFacesheet && <Footer />}
+                        {!isFacesheet && !isSettingsHubPage && <Footer />}
                         {/* END FOOTER */}
                         <Portals />
                     </div>

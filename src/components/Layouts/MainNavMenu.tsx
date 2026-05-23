@@ -75,7 +75,7 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
     if (variant === 'top') {
         return (
             <nav className="hidden min-w-0 flex-1 lg:block" aria-label="Main navigation">
-                <ul className="flex items-center gap-0.5">
+                <ul className="flex items-center gap-1.5">
                     <li>
                         <NavLink to="/app/dashboard" className={({ isActive }) => emrTopNavLinkClass(isActive)}>
                             <IconMenuDashboard className={navIconClass} />

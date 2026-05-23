@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Building2, Pencil, Plus, Trash2, AlertTriangle, X, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -24,6 +25,7 @@ import { DEFAULT_ROOM_TYPE, ROOM_TYPES } from '../../../constants/facility';
 import IconSearch from '@/components/Icon/IconSearch';
 import AppButton from '@/components/ui/AppButton';
 import { FacilityManagementNav } from '../../../components/evs/FacilityManagementNav';
+import { SettingsCardHeader } from '../components/SettingsCardHeader';
 
 type TabId = 'wards' | 'rooms' | 'beds';
 
@@ -175,10 +177,30 @@ const Pagination = ({
     );
 };
 
-const FacilitySettingsPage = () => {
+function parseFacilityTab(value: string | null): TabId {
+    if (value === 'rooms' || value === 'beds' || value === 'wards') return value;
+    return 'wards';
+}
+
+export function FacilityManagementPanel({ embedded = false }: { embedded?: boolean }) {
     const queryClient = useQueryClient();
     const canEdit = useCanEditPatientLocation();
-    const [tab, setTab] = useState<TabId>('wards');
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [localTab, setLocalTab] = useState<TabId>('wards');
+    const urlTab = parseFacilityTab(searchParams.get('tab'));
+    const tab = embedded ? localTab : urlTab;
+
+    useEffect(() => {
+        if (!embedded) setLocalTab(urlTab);
+    }, [embedded, urlTab]);
+
+    const selectTab = (next: TabId) => {
+        if (embedded) {
+            setLocalTab(next);
+            return;
+        }
+        setSearchParams({ tab: next }, { replace: true });
+    };
 
     const wardsQuery = useQuery({ queryKey: ['settings', 'facility', 'wards'], queryFn: getWards });
     const roomsQuery = useQuery({ queryKey: ['settings', 'facility', 'rooms'], queryFn: getAllRooms });
@@ -349,56 +371,60 @@ const FacilitySettingsPage = () => {
         });
     };
 
-    return (
-        <div className="panel">
-            <div className="mb-5 flex flex-wrap items-center gap-2 text-sm">
-                <a href="/app/dashboard" className="text-primary hover:underline">Dashboard</a>
-                <span className="text-gray-400">/</span>
-                <a href="/app/settings" className="text-primary hover:underline">Settings</a>
-                <span className="text-gray-400">/</span>
-                <span className="font-medium text-gray-900 dark:text-white">Facility</span>
-            </div>
+    const wardCount = wardsQuery.data?.length ?? 0;
+    const roomCount = roomsQuery.data?.length ?? 0;
+    const bedCount = bedsQuery.data?.length ?? 0;
+    const metricsLoading = wardsQuery.isLoading || roomsQuery.isLoading || bedsQuery.isLoading;
 
-            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary dark:bg-primary/25">
-                        <Building2 className="h-5 w-5" aria-hidden />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Facility management</h1>
-                        {/* <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                            Configure wards, rooms, and beds. Data is loaded from Wards, Rooms, and Beds APIs (set{' '}
-                            <code className="rounded bg-gray-100 px-1 dark:bg-white/10">VITE_USE_MOCK_FACILITY=true</code> for offline mock mode).
-                        </p> */}
-                    </div>
-                </div>
-            </div>
+    const tabBar = (
+        <div
+            className={`flex flex-wrap items-end gap-0 border-b ${
+                embedded ? 'border-emr-border/80 dark:border-white/10' : 'border-gray-200 pb-3 dark:border-[#191e3a]'
+            }`}
+            role="tablist"
+            aria-label="Facility tables"
+        >
+            {tabs.map((t) => (
+                <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === t.id}
+                    onClick={() => selectTab(t.id)}
+                    className={
+                        embedded
+                            ? `inline-flex items-center border-b-2 px-3 py-2.5 text-[12px] font-semibold transition-colors sm:px-4 sm:text-[13px] ${
+                                  tab === t.id
+                                      ? 'border-primary text-primary'
+                                      : 'border-transparent text-emr-muted hover:border-emr-border hover:text-emr-text dark:text-gray-400'
+                              }`
+                            : `rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                                  tab === t.id
+                                      ? 'bg-primary text-white shadow-sm'
+                                      : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5'
+                              }`
+                    }
+                >
+                    {t.label}
+                </button>
+            ))}
+        </div>
+    );
 
-            <FacilityManagementNav />
+    const readOnlyBanner = !canEdit ? (
+        <div
+            className={`rounded-xl border px-4 py-3 text-sm ${
+                embedded
+                    ? 'border-emr-border/80 bg-[#faf9f7]/80 text-emr-muted dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300'
+                    : 'border-gray-200 bg-gray-50/80 text-gray-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200'
+            }`}
+        >
+            Read-only: your role cannot modify facility structure.
+        </div>
+    ) : null;
 
-            {!canEdit ? (
-                <div className="mb-6 rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-3 text-sm text-gray-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200">
-                    Read-only: your role cannot modify facility structure.
-                </div>
-            ) : null}
-
-            <div className="mb-6 flex flex-wrap gap-2 border-b border-gray-200 pb-3 dark:border-[#191e3a]">
-                {tabs.map((t) => (
-                    <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => setTab(t.id)}
-                        className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                            tab === t.id
-                                ? 'bg-primary text-white shadow-sm'
-                                : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5'
-                        }`}
-                    >
-                        {t.label}
-                    </button>
-                ))}
-            </div>
-
+    const tables = (
+        <>
             {tab === 'wards' ? (
                 <WardsSection
                     canEdit={canEdit}
@@ -408,6 +434,7 @@ const FacilitySettingsPage = () => {
                     onEdit={(w) => setWardModal({ mode: 'edit', ward: w })}
                     onDelete={handleDeleteWard}
                     deleting={wardDel.isPending}
+                    compact={embedded}
                 />
             ) : null}
 
@@ -421,6 +448,7 @@ const FacilitySettingsPage = () => {
                     onEdit={(r) => setRoomModal({ mode: 'edit', room: r })}
                     onDelete={handleDeleteRoom}
                     deleting={roomDel.isPending}
+                    compact={embedded}
                 />
             ) : null}
 
@@ -434,9 +462,14 @@ const FacilitySettingsPage = () => {
                     onEdit={(b) => setBedModal({ mode: 'edit', bed: b })}
                     onDelete={handleDeleteBed}
                     deleting={bedDel.isPending}
+                    compact={embedded}
                 />
             ) : null}
+        </>
+    );
 
+    const modals = (
+        <>
             <WardFormModal
                 open={wardModal !== null}
                 mode={wardModal?.mode ?? 'add'}
@@ -502,9 +535,90 @@ const FacilitySettingsPage = () => {
                 onCancel={() => setConfirmDialog({ open: false, title: '', message: '', onConfirm: () => {} })}
                 isDeleting={wardDel.isPending || roomDel.isPending || bedDel.isPending}
             />
+        </>
+    );
+
+    if (embedded) {
+        return (
+            <section
+                id="settings-facility"
+                className="overflow-hidden rounded-xl border border-emr-border/90 bg-white shadow-[0_1px_2px_rgba(31,41,55,0.04),0_4px_12px_-2px_rgba(31,41,55,0.06)] dark:border-white/10 dark:bg-[#161412]/95"
+            >
+                <SettingsCardHeader
+                    title="Facility Management"
+                    description="Wards, rooms, beds & occupancy"
+                />
+
+                <div className="grid grid-cols-3 gap-2 border-b border-emr-border/70 p-4 dark:border-white/10 sm:gap-3 sm:p-5">
+                    {[
+                        { label: 'Wards', value: wardCount },
+                        { label: 'Rooms', value: roomCount },
+                        { label: 'Beds', value: bedCount },
+                    ].map(({ label, value }) => (
+                        <div
+                            key={label}
+                            className="rounded-lg border border-emr-border/60 bg-[#faf9f7]/80 px-2.5 py-2.5 dark:border-white/[0.06] dark:bg-white/[0.03] sm:px-3"
+                        >
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-emr-muted dark:text-gray-500">
+                                {label}
+                            </p>
+                            {metricsLoading ? (
+                                <div className="mt-1.5 h-7 w-12 animate-pulse rounded bg-emr-border/50 dark:bg-white/10" />
+                            ) : (
+                                <p className="mt-1 text-lg font-bold tabular-nums text-emr-text dark:text-white">{value}</p>
+                            )}
+                        </div>
+                    ))}
+                </div>
+
+                <div className="px-4 sm:px-5">{tabBar}</div>
+
+                <div className="space-y-4 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
+                    {readOnlyBanner}
+                    {tables}
+                </div>
+
+                {modals}
+            </section>
+        );
+    }
+
+    return (
+        <div className="panel">
+            <div className="mb-5 flex flex-wrap items-center gap-2 text-sm">
+                <a href="/app/dashboard" className="text-primary hover:underline">Dashboard</a>
+                <span className="text-gray-400">/</span>
+                <a href="/app/settings" className="text-primary hover:underline">Settings</a>
+                <span className="text-gray-400">/</span>
+                <span className="font-medium text-gray-900 dark:text-white">Facility</span>
+            </div>
+
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary dark:bg-primary/25">
+                        <Building2 className="h-5 w-5" aria-hidden />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Facility management</h1>
+                    </div>
+                </div>
+            </div>
+
+            <FacilityManagementNav />
+
+            {readOnlyBanner ? <div className="mb-6">{readOnlyBanner}</div> : null}
+
+            <div className="mb-6">{tabBar}</div>
+
+            {tables}
+            {modals}
         </div>
     );
-};
+}
+
+export default function FacilitySettingsPage() {
+    return <Navigate to="/app/settings" replace />;
+}
 
 
 
@@ -516,6 +630,7 @@ function WardsSection({
     onEdit,
     onDelete,
     deleting,
+    compact = false,
 }: {
     canEdit: boolean;
     loading: boolean;
@@ -524,6 +639,7 @@ function WardsSection({
     onEdit: (w: FacilityWard) => void;
     onDelete: (w: FacilityWard) => void;
     deleting: boolean;
+    compact?: boolean;
 }) {
     const [currentPage, setCurrentPage] = useState(1);
     const [search, setSearch] = useState("");
@@ -552,10 +668,10 @@ const currentItems = filteredItems.slice(startIndex, endIndex);
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Wards</h2>
+            <div className={`flex flex-wrap items-center gap-3 ${compact ? '' : 'justify-between'}`}>
+                {!compact ? <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Wards</h2> : null}
 
-         <div className="relative w-full md:max-w-md mr-auto">
+         <div className={`relative w-full ${compact ? 'max-w-md flex-1' : 'md:max-w-md mr-auto'}`}>
                 <input
                   type="text"
                   className="form-input pl-10 w-full"
@@ -640,6 +756,7 @@ function RoomsSection({
     onEdit,
     onDelete,
     deleting,
+    compact = false,
 }: {
     canEdit: boolean;
     loading: boolean;
@@ -649,6 +766,7 @@ function RoomsSection({
     onEdit: (r: FacilityRoom) => void;
     onDelete: (r: FacilityRoom) => void;
     deleting: boolean;
+    compact?: boolean;
 }) {
     const [currentPage, setCurrentPage] = useState(1);
     const [search, setSearch] = useState("");
@@ -676,10 +794,10 @@ const currentItems = filteredRooms.slice(startIndex, endIndex);
     return (
 
         <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Rooms</h2>
-         
-          <div className="relative w-full md:max-w-md mr-auto">
+            <div className={`flex flex-wrap items-center gap-3 ${compact ? '' : 'justify-between'}`}>
+                {!compact ? <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Rooms</h2> : null}
+
+          <div className={`relative w-full ${compact ? 'max-w-md flex-1' : 'md:max-w-md mr-auto'}`}>
                 <input
                   type="text"
                   className="form-input pl-10 w-full"
@@ -764,6 +882,7 @@ function BedsSection({
     onEdit,
     onDelete,
     deleting,
+    compact = false,
 }: {
     canEdit: boolean;
     loading: boolean;
@@ -773,6 +892,7 @@ function BedsSection({
     onEdit: (b: FacilityBed) => void;
     onDelete: (b: FacilityBed) => void;
     deleting: boolean;
+    compact?: boolean;
 }) {
     const [currentPage, setCurrentPage] = useState(1);
 const [search, setSearch] = useState("");
@@ -798,10 +918,10 @@ const currentItems = filteredBeds.slice(startIndex, endIndex);
     return (
         
         <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Beds</h2>
-        
-                  <div className="relative w-full md:max-w-md mr-auto">
+            <div className={`flex flex-wrap items-center gap-3 ${compact ? '' : 'justify-between'}`}>
+                {!compact ? <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Beds</h2> : null}
+
+                  <div className={`relative w-full ${compact ? 'max-w-md flex-1' : 'md:max-w-md mr-auto'}`}>
                 <input
                   type="text"
                   className="form-input pl-10 w-full"
@@ -1253,5 +1373,3 @@ function BedFormModal({
         </AppModal>
     );
 }
-
-export default FacilitySettingsPage;
