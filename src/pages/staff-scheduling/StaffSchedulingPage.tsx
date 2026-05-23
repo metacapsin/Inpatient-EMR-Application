@@ -12,9 +12,10 @@ import { CoverageSummaryChips } from '../../features/staff-scheduling/components
 import { StaffScheduleWeekView } from '../../features/staff-scheduling/components/StaffScheduleWeekView';
 import { StaffRosterPanel } from '../../features/staff-scheduling/components/StaffRosterPanel';
 import { OpenShiftsPanel } from '../../features/staff-scheduling/components/OpenShiftsPanel';
+import { LiveAssignmentsPanel } from '../../features/staff-scheduling/live-assignments/components/LiveAssignmentsPanel';
 import { ShiftFormModal, type ShiftFormDefaults } from '../../features/staff-scheduling/components/ShiftFormModal';
 
-type TabId = 'calendar' | 'roster' | 'open-shifts';
+type TabId = 'calendar' | 'roster' | 'open-shifts' | 'live-assignments';
 
 const tabBtnBase =
     'inline-flex h-8 shrink-0 items-center justify-center rounded-lg px-3 text-xs font-semibold transition';
@@ -33,7 +34,7 @@ function defaultRange(): { start: string; end: string } {
 }
 
 function parseTab(raw: string | null): TabId {
-    if (raw === 'roster' || raw === 'open-shifts') return raw;
+    if (raw === 'roster' || raw === 'open-shifts' || raw === 'live-assignments') return raw;
     return 'calendar';
 }
 
@@ -44,6 +45,11 @@ export default function StaffSchedulingPage() {
 
     const canView = canViewStaffSchedule(role, user);
     const canManage = canManageStaffSchedule(role, user);
+    const tenantId = String(
+        (user as { tenant?: { id?: string }; tenantId?: string } | null)?.tenant?.id ??
+            (user as { tenantId?: string } | null)?.tenantId ??
+            'tenant-demo-01'
+    );
 
     const tab = parseTab(searchParams.get('tab'));
     const range = defaultRange();
@@ -197,6 +203,7 @@ export default function StaffSchedulingPage() {
                             ['calendar', 'Calendar'],
                             ['roster', 'Roster'],
                             ['open-shifts', 'Open shifts'],
+                            ['live-assignments', 'Live assignments'],
                         ] as const
                     ).map(([id, label]) => (
                         <button
@@ -210,7 +217,7 @@ export default function StaffSchedulingPage() {
                     ))}
                 </div>
 
-                {tab !== 'calendar' ? (
+                {tab !== 'calendar' && tab !== 'live-assignments' ? (
                     <div className="border-t border-gray-200/50 pt-3 dark:border-white/[0.06]">
                         <ScheduleFiltersBar filters={filters} wards={wards} onChange={patchFilters} />
                     </div>
@@ -261,6 +268,18 @@ export default function StaffSchedulingPage() {
                                     openEdit(row.shift);
                                 }
                             }}
+                        />
+                    </div>
+                ) : null}
+
+                {tab === 'live-assignments' ? (
+                    <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-5">
+                        <LiveAssignmentsPanel
+                            wards={wards}
+                            tenantId={tenantId}
+                            openShiftCount={summary?.openShiftCount ?? 0}
+                            canManage={canManage}
+                            defaultWardId={filters.wardId || undefined}
                         />
                     </div>
                 ) : null}
