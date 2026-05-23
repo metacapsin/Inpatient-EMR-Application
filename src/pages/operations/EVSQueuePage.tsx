@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { FacilityManagementNav } from '../../components/evs/FacilityManagementNav';
 import { EVSAssignModal } from '../../components/evs/EVSAssignModal';
 import { EVSEmptyState } from '../../components/evs/EVSEmptyState';
 import { EVSMetricsBar } from '../../components/evs/EVSMetricsBar';
@@ -108,11 +107,9 @@ const EVSQueuePage = () => {
                     Dashboard
                 </Link>
                 <span className="text-gray-400">/</span>
-                <Link to="/app/settings" className="text-primary hover:underline">
-                    Settings
-                </Link>
+                <span className="font-medium text-gray-500 dark:text-gray-400">Operations</span>
                 <span className="text-gray-400">/</span>
-                <span className="font-medium text-gray-900 dark:text-white">EVS queue</span>
+                <span className="font-medium text-gray-900 dark:text-white">EVS Queue</span>
             </div>
 
             <div className="mb-4 flex items-start gap-3">
@@ -127,8 +124,6 @@ const EVSQueuePage = () => {
                     </p>
                 </div>
             </div>
-
-            <FacilityManagementNav />
 
             <EVSMetricsBar metrics={metricsQuery.data} loading={metricsQuery.isLoading && !metricsQuery.data} />
 

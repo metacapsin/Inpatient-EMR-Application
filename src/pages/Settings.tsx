@@ -323,12 +323,6 @@ const Settings: React.FC = () => {
                         >
                             Wards, rooms & beds
                         </NavLink>
-                        <NavLink
-                            to="/app/operations/evs-queue"
-                            className="inline-flex items-center rounded-lg border border-primary/30 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/10"
-                        >
-                            EVS / bed turnaround
-                        </NavLink>
                     </div>
                 </div>
 
