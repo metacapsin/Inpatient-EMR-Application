@@ -79,7 +79,5 @@ const carePlanSchema = new mongoose.Schema(
 );
 
 carePlanSchema.index({ tenantId: 1, encounterId: 1 });
-
 const CarePlan = mongoose.models.CarePlan || mongoose.model('CarePlan', carePlanSchema);
-
 module.exports = { CarePlan, carePlanSchema };

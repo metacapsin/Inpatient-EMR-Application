@@ -12,7 +12,7 @@ import {
     nextPriorAuthId,
     upsertPriorAuth,
 } from '../mock/priorAuthMockStore';
-import { computeUsedUnitsDummy } from '../utils/priorAuthFormDefaults';
+import { computeUsedUnitsDummy } from '../Prior/priorAuthFormDefaults';
 import type { ServiceResult } from '../../../types/dischargeReadiness';
 
 export type PriorAuthUpdatePatch = Partial<

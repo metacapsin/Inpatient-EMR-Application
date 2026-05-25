@@ -271,6 +271,7 @@ export function AdtPatientWorkflowModal({
                                 }))}
                                 onChange={(v) => setAdmitBedId(String(v))}
                                 disabled={busy || bedsQuery.isLoading || admitBlocked}
+                                appendMenuToBody
                             />
                         </div>
                         <NewDropdown
@@ -281,6 +282,7 @@ export function AdtPatientWorkflowModal({
                             options={ADMISSION_TYPES.map((t) => ({ value: t.value, label: t.label }))}
                             onChange={(v) => setAdmissionType(v as AdmissionType)}
                             disabled={busy || admitBlocked}
+                            appendMenuToBody
                         />
                     </div>
                 ) : null}

@@ -1,5 +1,5 @@
 import type { PriorAuthDashboardSummary, PriorAuthExpiringItem, PriorAuthRecord } from '../types/priorAuth.types';
-import { daysUntilEnd } from '../utils/priorAuthDates';
+import { daysUntilEnd } from '../Prior/priorAuthDates';
 import { buildPriorAuthMockSeed } from './priorAuthMockSeed';
 
 const byEncounter = new Map<string, PriorAuthRecord[]>();

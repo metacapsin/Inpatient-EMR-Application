@@ -1,6 +1,6 @@
 import { Button } from '../../../components/ui/button';
 import type { PriorAuthRecord } from '../types/priorAuth.types';
-import { daysUntilEnd, expiryAlertTone, formatAuthPeriod } from '../utils/priorAuthDates';
+import { daysUntilEnd, expiryAlertTone, formatAuthPeriod } from '../Prior/priorAuthDates';
 type Props = {
     rows: PriorAuthRecord[];
     busy: boolean;

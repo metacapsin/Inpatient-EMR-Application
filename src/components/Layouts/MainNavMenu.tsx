@@ -78,8 +78,8 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
 
     if (variant === 'top') {
         return (
-            <nav className="hidden min-w-0 flex-1 lg:block" aria-label="Main navigation">
-                <ul className="flex items-center gap-1.5">
+            <nav className="hidden min-w-0 lg:block" aria-label="Main navigation">
+                <ul className="flex flex-nowrap items-center gap-1 lg:gap-1.5 [&>li]:shrink-0">
                     <li>
                         <NavLink to="/app/dashboard" className={({ isActive }) => emrTopNavLinkClass(isActive)}>
                             <IconMenuDashboard className={navIconClass} />
@@ -107,14 +107,15 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
                                 sectionActive={isDropdownGroupActive(pathname, group)}
                                 icon={<Icon className={navIconClass} />}
                                 minWidthClass={minWidth}
+                                menuAlign={group.menuAlign}
                             />
                         );
                     })}
 
-                    <li>
+                    <li className="shrink-0">
                         <NavLink to="/app/settings" className={({ isActive }) => emrTopNavLinkClass(isActive)}>
                             <IconMenuPages className={navIconClass} />
-                            <span>Settings</span>
+                            <span className="whitespace-nowrap">Settings</span>
                         </NavLink>
                     </li>
                 </ul>

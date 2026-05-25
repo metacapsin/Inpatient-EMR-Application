@@ -202,15 +202,15 @@ const Header = () => {
             className={`app-layout-header z-50 ${themeConfig.semidark && themeConfig.menu === 'horizontal' ? 'dark' : ''}`}
         >
             <div className="app-layout-header-bar">
-                <div className="relative flex h-12 w-full min-w-0 items-center gap-2 px-3 sm:px-4 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(260px,440px)_auto] lg:items-center lg:gap-4 lg:px-5">
+                <div className="relative flex h-12 w-full min-w-0 items-center gap-2 px-3 sm:px-4 lg:gap-3 xl:gap-4 xl:px-5">
                     <HeaderTopBar />
 
-                    <div className="hidden min-w-0 justify-center lg:flex">
-                        <HeaderGlobalSearch className="w-full max-w-[440px]" />
+                    <div className="relative hidden min-w-[8rem] flex-1 basis-0 xl:block xl:max-w-[440px]">
+                        <HeaderGlobalSearch className="w-full min-w-0" />
                     </div>
 
                     <div
-                        className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1 lg:ml-0 rtl:space-x-reverse dark:text-[#d0d2d6]"
+                        className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1 rtl:space-x-reverse dark:text-[#d0d2d6]"
                         role="toolbar"
                         aria-label="Application utilities"
                     >
@@ -218,7 +218,7 @@ const Header = () => {
                             type="button"
                             className={cn(
                                 emrHeaderUtilityBtnClass,
-                                'lg:hidden',
+                                'xl:hidden',
                                 mobileSearchOpen &&
                                     'border-emr-accent/30 bg-emr-active text-emr-accent dark:border-primary/40 dark:bg-primary/15',
                             )}
@@ -230,7 +230,7 @@ const Header = () => {
                             <Search className="h-4 w-4" strokeWidth={2} aria-hidden />
                         </button>
                         <span
-                            className="mx-0.5 hidden h-5 w-px shrink-0 bg-emr-border/80 lg:hidden dark:bg-white/10"
+                            className="mx-0.5 hidden h-5 w-px shrink-0 bg-emr-border/80 xl:hidden dark:bg-white/10"
                             aria-hidden
                         />
                         <div>
@@ -481,7 +481,7 @@ const Header = () => {
                 {mobileSearchOpen ? (
                     <div
                         id="header-mobile-search-panel"
-                        className="animate-fade-in-down border-t border-emr-border/70 px-3 py-2 lg:hidden dark:border-white/10"
+                        className="animate-fade-in-down border-t border-emr-border/70 px-3 py-2.5 xl:hidden dark:border-white/10"
                         role="region"
                         aria-label="Patient search"
                     >

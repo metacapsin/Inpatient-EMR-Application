@@ -13,6 +13,8 @@ export interface MainNavDropdownGroup {
     readonly label: string;
     readonly items: readonly MainNavLink[];
     readonly activePrefixes: readonly string[];
+    /** Align flyout to the trigger's trailing edge when near the global search field. */
+    readonly menuAlign?: 'start' | 'end';
 }
 
 export const DASHBOARD_LINK: MainNavLink = { to: '/app/dashboard', label: 'Dashboard' };
@@ -146,12 +148,14 @@ export const MAIN_NAV_DROPDOWN_GROUPS: readonly MainNavDropdownGroup[] = [
         label: 'Operations',
         items: OPERATIONS_SUB_LINKS,
         activePrefixes: OPERATIONS_ACTIVE_PREFIXES,
+        menuAlign: 'end',
     },
     {
         id: 'billing',
         label: 'Billing',
         items: BILLING_SUB_LINKS,
         activePrefixes: BILLING_ACTIVE_PREFIXES,
+        menuAlign: 'end',
     },
 ];
 

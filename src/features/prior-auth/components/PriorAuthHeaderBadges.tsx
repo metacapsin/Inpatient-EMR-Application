@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { PriorAuthRecord } from '../types/priorAuth.types';
-import { daysUntilEnd, parseAuthDate } from '../utils/priorAuthDates';
+import { daysUntilEnd, parseAuthDate } from '../Prior/priorAuthDates';
 
 type Props = {
     records: PriorAuthRecord[];

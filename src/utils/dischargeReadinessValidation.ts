@@ -5,7 +5,7 @@ import type {
     EligibilityRecord,
     ReadinessGate,
 } from '../types/dischargeReadiness';
-import { evaluatePriorAuthGate } from '../features/prior-auth/utils/priorAuthDischargeGate';
+import { evaluatePriorAuthGate } from '../features/prior-auth/Prior/priorAuthDischargeGate';
 import { ensureEncounterPriorAuths } from '../features/prior-auth/mock/priorAuthMockStore';
 
 function dedupePreserveOrder(messages: string[]): string[] {

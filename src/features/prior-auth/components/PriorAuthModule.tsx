@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
+import { AppModal } from '../../../components/shared/AppModal';
 import { patientDataAPI } from '../../../services/api';
 import type { IRootState } from '../../../store';
 import { selectAdtEncounter } from '../../../store/adtEncounterSlice';
 import { tenantIdFromUser } from '../../consent/utils/consentLinks';
 import type { PriorAuthFormValues, PriorAuthRecord } from '../types/priorAuth.types';
-import { emptyPriorAuthForm, recordToFormValues } from '../utils/priorAuthFormDefaults';
-import { insuranceDefaultsFromDemographicsPayload } from '../utils/priorAuthInsuranceFill';
+import { emptyPriorAuthForm, recordToFormValues } from '../Prior/priorAuthFormDefaults';
+import { insuranceDefaultsFromDemographicsPayload } from '../Prior/priorAuthInsuranceFill';
 import {
     createPriorAuth,
     fetchExpiringPriorAuths,
@@ -18,7 +19,7 @@ import {
 } from '../services/priorAuth.service';
 import { PriorAuthHeaderBadges } from './PriorAuthHeaderBadges';
 import { PriorAuthEntryForm } from './PriorAuthEntryForm';
-import { PriorAuthStatusTable } from './PriorAuthStatusTable';
+import { PriorAuthStatusCard } from './PriorAuthStatusCard';
 import { PriorAuthExpiringAlerts } from './PriorAuthExpiringAlerts';
 import { PriorAuthDashboardSummary } from './PriorAuthDashboardSummary';
 import type { PriorAuthDashboardSummary as SummaryType, PriorAuthExpiringItem } from '../types/priorAuth.types';
@@ -40,11 +41,17 @@ export function PriorAuthModule({ patientId }: Props) {
     const [busy, setBusy] = useState(false);
     const [summary, setSummary] = useState<SummaryType | null>(null);
     const [expiring, setExpiring] = useState<PriorAuthExpiringItem[]>([]);
+    const [formModalOpen, setFormModalOpen] = useState(false);
+    const [insuranceDefaults, setInsuranceDefaults] = useState<{
+        insurancePayer: string;
+        payerName: string;
+    } | null>(null);
 
     const loadInsuranceDefaults = useCallback(async () => {
         try {
             const res = await patientDataAPI.getPatientDemographics(patientId);
             const ins = insuranceDefaultsFromDemographicsPayload(res.data);
+            setInsuranceDefaults(ins);
             setForm((f) => ({
                 ...f,
                 insurancePayer: f.insurancePayer || ins.insurancePayer,
@@ -107,7 +114,13 @@ export function PriorAuthModule({ patientId }: Props) {
             }
             toast.success('Prior authorization created');
             setEditingAuthId(null);
-            setForm(emptyPriorAuthForm({ insurancePayer: form.insurancePayer, payerName: form.payerName }));
+            setForm(
+                emptyPriorAuthForm({
+                    insurancePayer: form.insurancePayer,
+                    payerName: form.payerName,
+                })
+            );
+            setFormModalOpen(false);
             await refresh();
         } finally {
             setBusy(false);
@@ -137,15 +150,35 @@ export function PriorAuthModule({ patientId }: Props) {
             }
             toast.success('Prior authorization updated');
             setEditingAuthId(null);
+            setFormModalOpen(false);
             await refresh();
         } finally {
             setBusy(false);
         }
     };
 
+    const closeFormModal = () => {
+        setFormModalOpen(false);
+        setEditingAuthId(null);
+    };
+
+    const openCreateModal = () => {
+        setEditingAuthId(null);
+        setForm(
+            emptyPriorAuthForm(
+                insuranceDefaults ?? {
+                    insurancePayer: form.insurancePayer,
+                    payerName: form.payerName,
+                }
+            )
+        );
+        setFormModalOpen(true);
+    };
+
     const onEdit = (row: PriorAuthRecord) => {
         setEditingAuthId(row.authId);
         setForm(recordToFormValues(row));
+        setFormModalOpen(true);
     };
 
     const onPeerToPeer = async (row: PriorAuthRecord) => {
@@ -213,29 +246,46 @@ export function PriorAuthModule({ patientId }: Props) {
                 <PriorAuthHeaderBadges records={records} />
             </section>
 
-            <PriorAuthEntryForm
-                values={form}
-                editingAuthId={editingAuthId}
-                busy={busy}
-                onChange={patchForm}
-                onCreate={() => void onCreate()}
-                onUpdate={() => void onUpdate()}
-            />
-
             {loading ? (
                 <div className="flex items-center justify-center gap-2 py-8 text-sm text-gray-500">
                     <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
                     Loading prior authorizations…
                 </div>
             ) : (
-                <PriorAuthStatusTable
+                <PriorAuthStatusCard
                     rows={records}
                     busy={busy}
+                    onCreate={openCreateModal}
                     onEdit={onEdit}
                     onPeerToPeer={(r) => void onPeerToPeer(r)}
                     onMarkReceived={(r) => void onMarkReceived(r)}
                 />
             )}
+
+            <AppModal
+                open={formModalOpen}
+                title={editingAuthId ? 'Edit Prior Authorization' : 'Prior Authorization Entry'}
+                description={
+                    editingAuthId
+                        ? 'Update authorization details for this encounter.'
+                        : 'Enter service, payer, and authorization details.'
+                }
+                onClose={closeFormModal}
+                size="xl"
+                className="max-w-4xl"
+                bodyClassName="overflow-y-auto"
+            >
+                <PriorAuthEntryForm
+                    values={form}
+                    editingAuthId={editingAuthId}
+                    busy={busy}
+                    variant="embedded"
+                    onChange={patchForm}
+                    onCreate={() => void onCreate()}
+                    onUpdate={() => void onUpdate()}
+                    onCancel={closeFormModal}
+                />
+            </AppModal>
         </div>
     );
 }

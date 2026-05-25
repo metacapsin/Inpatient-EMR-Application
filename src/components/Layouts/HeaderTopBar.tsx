@@ -11,7 +11,7 @@ export function HeaderTopBar() {
     const dispatch = useDispatch();
 
     return (
-        <div className="flex min-w-0 flex-1 items-center gap-2 lg:gap-3">
+        <div className="flex min-w-0 shrink-0 items-center gap-2 lg:gap-3">
             <div className="flex shrink-0 items-center gap-1 lg:hidden">
                 <button
                     type="button"
@@ -40,7 +40,9 @@ export function HeaderTopBar() {
                 aria-hidden
             />
 
-            <MainNavMenu variant="top" />
+            <div className="min-w-0">
+                <MainNavMenu variant="top" />
+            </div>
         </div>
     );
 }

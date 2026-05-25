@@ -136,13 +136,13 @@ export function HeaderGlobalSearch({
     };
 
     return (
-        <div ref={containerRef} className={`relative w-full ${className}`} role="search">
+        <div ref={containerRef} className={`relative w-full min-w-0 ${className}`} role="search">
             <label htmlFor={id} className="sr-only">
                 Global patient search
             </label>
-            <div className="relative">
+            <div className="relative flex h-8 min-w-0 w-full items-center">
                 <span className="pointer-events-none absolute inset-y-0 left-0 flex w-9 items-center justify-center text-emr-muted dark:text-gray-500">
-                    <IconSearch className="h-4 w-4" duotone={false} />
+                    <IconSearch className="h-4 w-4 shrink-0" duotone={false} />
                 </span>
                 <input
                     ref={inputRef}

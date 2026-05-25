@@ -21,7 +21,7 @@ export const emrModuleSurfaceClass =
 
 /** Top nav primary link — compact enterprise density */
 export const emrTopNavItemBaseClass =
-    'group relative flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-semibold tracking-tight transition-all duration-200 ease-out';
+    'group relative flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-[12.5px] font-semibold tracking-tight transition-all duration-200 ease-out';
 
 export const emrTopNavItemActiveClass =
     'bg-emr-active text-emr-accent shadow-[0_1px_2px_rgba(154,107,63,0.14),inset_0_1px_0_rgba(255,255,255,0.65)] ring-1 ring-emr-accent/20 dark:bg-primary/20 dark:text-primary-200 dark:shadow-[0_1px_4px_rgba(0,0,0,0.4)] dark:ring-primary/30';
@@ -35,7 +35,7 @@ export const emrHeaderUtilityBtnClass =
 
 /** Enterprise global search field in header */
 export const emrHeaderSearchInputClass =
-    'h-9 w-full rounded-lg border border-emr-border/90 bg-white py-0 pl-9 pr-3 text-[12.5px] font-medium text-emr-text shadow-[inset_0_1px_2px_rgba(31,41,55,0.05),0_1px_2px_rgba(31,41,55,0.04)] outline-none transition placeholder:font-normal placeholder:text-emr-muted/80 focus:border-emr-accent/40 focus:bg-white focus:shadow-[0_0_0_3px_rgba(154,107,63,0.1)] focus:ring-2 focus:ring-emr-accent/15 dark:border-white/10 dark:bg-[#1a1816]/95 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-primary/45 dark:focus:ring-primary/20';
+    'h-8 w-full min-w-0 max-w-full flex-1 rounded-lg border border-emr-border/90 bg-white py-0 pl-9 pr-3 text-[12.5px] font-medium leading-none text-emr-text shadow-[inset_0_1px_2px_rgba(31,41,55,0.05),0_1px_2px_rgba(31,41,55,0.04)] outline-none transition placeholder:font-normal placeholder:text-emr-muted/80 focus:border-emr-accent/40 focus:bg-white focus:shadow-[0_0_0_3px_rgba(154,107,63,0.1)] focus:ring-2 focus:ring-emr-accent/15 dark:border-white/10 dark:bg-[#1a1816]/95 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-primary/45 dark:focus:ring-primary/20';
 
 /** Dropdown / mega-menu panel */
 export const emrTopNavDropdownClass =

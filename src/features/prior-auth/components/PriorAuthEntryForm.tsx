@@ -12,7 +12,7 @@ import { FlowsheetOutlinedTextarea } from '../../io-tracking/components/Flowshee
 import { Icd10MultiTypeahead } from '../../radiology/components/Icd10MultiTypeahead';
 import type { PriorAuthFormValues } from '../types/priorAuth.types';
 import { PRIOR_AUTH_SERVICE_TYPES, PRIOR_AUTH_STATUSES } from '../constants/priorAuthOptions';
-import { computeUsedUnitsDummy } from '../utils/priorAuthFormDefaults';
+import { computeUsedUnitsDummy } from '../Prior/priorAuthFormDefaults';
 import { CptMultiTypeahead } from './CptMultiTypeahead';
 
 type Props = {
@@ -22,9 +22,21 @@ type Props = {
     onChange: (patch: Partial<PriorAuthFormValues>) => void;
     onCreate: () => void;
     onUpdate: () => void;
+    /** Renders fields only (no card shell) — for dialogs. */
+    variant?: 'card' | 'embedded';
+    onCancel?: () => void;
 };
 
-export function PriorAuthEntryForm({ values, editingAuthId, busy, onChange, onCreate, onUpdate }: Props) {
+export function PriorAuthEntryForm({
+    values,
+    editingAuthId,
+    busy,
+    onChange,
+    onCreate,
+    onUpdate,
+    variant = 'card',
+    onCancel,
+}: Props) {
     const usedUnits = useMemo(() => computeUsedUnitsDummy(values.approvedUnits), [values.approvedUnits]);
 
     const serviceOptions = PRIOR_AUTH_SERVICE_TYPES.map((s) => ({ label: s, value: s }));
@@ -34,9 +46,8 @@ export function PriorAuthEntryForm({ values, editingAuthId, busy, onChange, onCr
         onChange({ [key]: d ? d.toISOString() : '' });
     };
 
-    return (
-        <div className="rounded-lg border border-emr-border/90 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#161412]/80">
-            <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">Prior Authorization Entry</h3>
+    const body = (
+        <>
             <div className={NFS_SECTION_GRID_CLASS}>
                 <div className="col-span-12 md:col-span-4">
                     <FlowsheetLabeledDropdown
@@ -210,13 +221,32 @@ export function PriorAuthEntryForm({ values, editingAuthId, busy, onChange, onCr
                 </div>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-                <Button type="button" disabled={busy} onClick={onCreate}>
-                    Create Prior Auth
-                </Button>
-                <Button type="button" variant="secondary" disabled={busy || !editingAuthId} onClick={onUpdate}>
-                    Update Prior Auth
-                </Button>
+                {onCancel ? (
+                    <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
+                        Cancel
+                    </Button>
+                ) : null}
+                {!editingAuthId ? (
+                    <Button type="button" disabled={busy} onClick={onCreate}>
+                        Create Prior Auth
+                    </Button>
+                ) : (
+                    <Button type="button" disabled={busy} onClick={onUpdate}>
+                        Update Prior Auth
+                    </Button>
+                )}
             </div>
+        </>
+    );
+
+    if (variant === 'embedded') {
+        return body;
+    }
+
+    return (
+        <div className="rounded-lg border border-emr-border/90 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#161412]/80">
+            <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">Prior Authorization Entry</h3>
+            {body}
         </div>
     );
 }

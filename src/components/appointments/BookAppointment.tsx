@@ -514,6 +514,7 @@ export default function BookAppointment() {
               fieldSize="md"
               hasError={!!errors.patientId}
               label="Patient *"
+              allowEmpty={false}
               options={[
                 { value: '', label: 'Select Patient' },
                 ...patients.map((p) => ({
@@ -522,7 +523,7 @@ export default function BookAppointment() {
                 })),
               ]}    
               value={form.patientId}
-              placeholder="Select Patient"
+              // placeholder="Select Patient"Select Patient
               onChange={(value) => {
                 setForm((prev) => ({
                   ...prev,

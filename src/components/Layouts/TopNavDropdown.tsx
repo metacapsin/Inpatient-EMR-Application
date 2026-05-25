@@ -23,16 +23,20 @@ export function TopNavDropdownPanel({
     children,
     className = '',
     menuId = 'top-nav-dropdown-menu',
+    align = 'start',
 }: {
     open: boolean;
     children: ReactNode;
     className?: string;
     menuId?: string;
+    /** `end` anchors the panel to the trigger's right edge (nav items near global search). */
+    align?: 'start' | 'end';
 }) {
     return (
         <div
             className={[
-                'absolute left-0 top-full z-[60] pt-1.5',
+                'absolute top-full z-[60] pt-1.5',
+                align === 'end' ? 'right-0 left-auto' : 'left-0',
                 open ? 'pointer-events-auto' : 'pointer-events-none',
             ].join(' ')}
         >
@@ -59,6 +63,7 @@ interface TopNavDropdownProps {
     sectionActive: boolean;
     icon: ReactNode;
     minWidthClass?: string;
+    menuAlign?: 'start' | 'end';
     onNavigate?: () => void;
 }
 
@@ -68,6 +73,7 @@ export function TopNavDropdown({
     sectionActive,
     icon,
     minWidthClass = 'min-w-[220px]',
+    menuAlign = 'start',
     onNavigate,
 }: TopNavDropdownProps) {
     const menuId = useId();
@@ -156,7 +162,7 @@ export function TopNavDropdown({
 
     return (
         <li
-            className="relative"
+            className="relative shrink-0"
             onMouseEnter={() => setHover(true)}
             onMouseLeave={() => setHover(false)}
         >
@@ -171,14 +177,14 @@ export function TopNavDropdown({
                 onKeyDown={handleTriggerKeyDown}
             >
                 {icon}
-                <span>{label}</span>
+                <span className="whitespace-nowrap">{label}</span>
                 <IconCaretDown
                     className={`h-3 w-3 shrink-0 opacity-50 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
                     aria-hidden
                 />
             </button>
 
-            <TopNavDropdownPanel open={isOpen} menuId={menuId} className={minWidthClass}>
+            <TopNavDropdownPanel open={isOpen} menuId={menuId} className={minWidthClass} align={menuAlign}>
                 <ul
                     ref={menuRef}
                     className="py-0.5"

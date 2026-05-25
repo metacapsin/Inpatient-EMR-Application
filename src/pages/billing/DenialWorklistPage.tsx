@@ -140,7 +140,7 @@ export default function DenialWorklistPage() {
                 </div>
             ) : (
                 <>
-                    <DenialWorklistTable
+                    <DenialWorklistTable 
                         rows={rows}
                         busy={busy}
                         onView={(row) => openPanel(row, 'view')}
