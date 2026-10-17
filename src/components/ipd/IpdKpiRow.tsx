@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { BedDouble, DoorOpen, LogOut, Users } from 'lucide-react';
+import { BedDouble, DoorOpen, LogOut, Users, type LucideIcon } from 'lucide-react';
 import type { IpdKpis } from '../../types/ipdDashboard';
 import { ipdKpiCardClass } from '../../styles/ipdDashboardClasses';
 import { cn } from '@/lib/utils';
@@ -13,7 +13,7 @@ type KpiDef = {
     key: keyof IpdKpis;
     title: string;
     shortLabel: string;
-    icon: React.ComponentType<{ className?: string }>;
+    icon: LucideIcon;
     accent: string;
     iconBg: string;
     barClass?: string;

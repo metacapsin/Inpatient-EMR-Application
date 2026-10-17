@@ -134,7 +134,8 @@ function ClinicalWorkflowsPage() {
     const [vitals, setVitals] = useState<InpatientVitalRow[]>([]);
     const [chartVitalType, setChartVitalType] = useState<string>('HR');
 
-    const [orderTab, setOrderTab] = useState<' Ordes' | 'lab' | 'radiology' | 'pro'>('medication');
+    const [orderTab, setOrderTab] = useState<'medication' | 'medication Orders' | 'lab' | 'radiology' | 'Procredures' | 'History'>('medication');
+    const [resultTab, setResultTab] = useState<'Lab Result' | 'Radiology Report'>('Lab Result');
     const [orderPriority, setOrderPriority] = useState<'routine' | 'urgent' | 'stat'>('routine');
     const [orderJson, setOrderJson] = useState('');
     const [orders, setOrders] = useState<CpoeOrderRow[]>([]);
@@ -240,8 +241,8 @@ function ClinicalWorkflowsPage() {
                     refreshNursing(),
                     refreshVitals(),
                     refreshOrders(),
-                    refreshResult(),
-                    refreshMedication(),
+                    // refreshResult(),
+                    // refreshMedication(),
                     refreshAlerts(),
                     // refreshProcedures(),
                 ]);
@@ -975,8 +976,8 @@ function ClinicalWorkflowsPage() {
                                 <button
                                     key={t}
                                     type="button"
-                                    className={`rounded px-3 py-1 text-sm capitalize ${orderTab === t ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'}`}
-                                    onClick={() => setOrderTab(t)}
+                                    className={`rounded px-3 py-1 text-sm capitalize ${resultTab === t ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'}`}
+                                    onClick={() => setResultTab(t)}
                                 >
                                     {t}
                                 </button>

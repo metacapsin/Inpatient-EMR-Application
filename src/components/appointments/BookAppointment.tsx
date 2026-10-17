@@ -511,9 +511,6 @@ export default function BookAppointment() {
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 md:gap-6">
           <div className="min-w-0">
             <SearchableSelect
-              fieldSize="md"
-              hasError={!!errors.patientId}
-              label="Patient *"
               allowEmpty={false}
               options={[
                 { value: '', label: 'Select Patient' },

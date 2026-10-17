@@ -337,11 +337,10 @@ export function HealthIntakeForm({ formik }: HealthIntakeFormProps) {
               </Label>
               <SearchableSelect
                 value={hi.chiefComplaint.severity}
-                onValueChange={(v) => formik.setFieldValue('healthIntake.chiefComplaint.severity', v)}
+                onChange={(v) => formik.setFieldValue('healthIntake.chiefComplaint.severity', v)}
                 options={severityOptions}
                 placeholder="Select 1-10"
-                side="top"
-                triggerClassName={cn(
+                className={cn(
                   'w-full bg-gray-50 h-10',
                   getTouched('chiefComplaint.severity') && getError('chiefComplaint.severity') && 'border-primary-600'
                 )}

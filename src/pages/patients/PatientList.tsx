@@ -103,7 +103,7 @@ function readListQuery(sp: URLSearchParams): ListQueryState {
             return parsed ?? 'createdDate';
         })(),
         // sortOrder: sp.get('sortOrder') === 'desc' ? 'desc' : 'asc',
-        sortOrder: sp.get('sortOrder') || 'desc',
+        sortOrder: sp.get('sortOrder') === 'asc' ? 'asc' : 'desc',
         search: sp.get('search') || '',
     };
 }

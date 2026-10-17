@@ -1493,10 +1493,10 @@ dispatch(logout());
                           <Label htmlFor="prefix" className="text-sm font-medium mb-1">Prefix</Label>
                           <SearchableSelect
                             value={formik.values.prefix}
-                            onValueChange={(v) => formik.setFieldValue('prefix', v)}
+                            onChange={(v) => formik.setFieldValue('prefix', v)}
                             options={prefixes}
                             placeholder="Select"
-                            triggerClassName={cn("w-full bg-gray-50 h-10", getFieldError('prefix') && "border-primary-600")}
+                            className={cn("w-full bg-gray-50 h-10", getFieldError('prefix') && "border-primary-600")}
                           />
                           {getFieldError('prefix') && <p className="text-xs text-primary-600 mt-1">{getFieldError('prefix')}</p>}
                        </div>
@@ -1540,10 +1540,10 @@ dispatch(logout());
                           <Label htmlFor="suffix" className="text-sm font-medium mb-1">Suffix</Label>
                           <SearchableSelect
                             value={formik.values.suffix}
-                            onValueChange={(v) => formik.setFieldValue('suffix', v)}
+                            onChange={(v) => formik.setFieldValue('suffix', v)}
                             options={suffixes}
                             placeholder="Select"
-                            triggerClassName={cn("w-full bg-gray-50 h-10", getFieldError('suffix') && "border-primary-600")}
+                            className={cn("w-full bg-gray-50 h-10", getFieldError('suffix') && "border-primary-600")}
                           />
                           {getFieldError('suffix') && <p className="text-xs text-primary-600 mt-1">{getFieldError('suffix')}</p>}
                        </div>
@@ -1564,13 +1564,13 @@ dispatch(logout());
                           <Label htmlFor="gender" className="text-sm font-medium mb-1">Gender <span className="text-primary-600">*</span></Label>
                           <SearchableSelect
                             value={formik.values.gender}
-                            onValueChange={(v) => {
+                            onChange={(v) => {
                               formik.setFieldValue('gender', v);
                               formik.setFieldTouched('gender', true);
                             }}
                             options={genderOptions}
                             placeholder="Select"
-                            triggerClassName={cn("w-full bg-gray-50 h-10", getFieldError('gender') && "border-primary-600")}
+                            className={cn("w-full bg-gray-50 h-10", getFieldError('gender') && "border-primary-600")}
                           />
                           {getFieldError('gender') && <p className="text-xs text-primary-600 mt-1">{getFieldError('gender')}</p>}
                        </div>
@@ -1578,10 +1578,10 @@ dispatch(logout());
                           <Label htmlFor="maritalStatus" className="text-sm font-medium mb-1">Marital Status <span className="text-primary-600">*</span></Label>
                           <SearchableSelect
                             value={formik.values.maritalStatus}
-                            onValueChange={(v) => handleSelectChange('maritalStatus', v)}
+                            onChange={(v) => handleSelectChange('maritalStatus', String(v))}
                             options={MaritalList}
                             placeholder="Select"
-                            triggerClassName={cn("w-full bg-gray-50 h-10", getFieldError('maritalStatus') && "border-primary-600")}
+                            className={cn("w-full bg-gray-50 h-10", getFieldError('maritalStatus') && "border-primary-600")}
                           />
                           {getFieldError('maritalStatus') && <p className="text-xs text-primary-600 mt-1">{getFieldError('maritalStatus')}</p>}
                        </div>
@@ -1665,10 +1665,10 @@ dispatch(logout());
                            <Label htmlFor="state" className="text-sm font-medium mb-1">State/Province <span className="text-primary-600">*</span></Label>
                            <SearchableSelect
                             value={formik.values.state}
-                            onValueChange={(v) => handleSelectChange('state', v)}
+                            onChange={(v) => handleSelectChange('state', String(v))}
                             options={statesData}
                             placeholder="--Select State--"
-                            triggerClassName={cn("w-full bg-gray-50 h-10", getFieldError('state') && "border-primary-600")}
+                            className={cn("w-full bg-gray-50 h-10", getFieldError('state') && "border-primary-600")}
                           />
                           {getFieldError('state') && <p className="text-xs text-primary-600 mt-1">{getFieldError('state')}</p>}
                         </div>
@@ -1750,10 +1750,10 @@ dispatch(logout());
                                <Label htmlFor="mailingState" className="text-sm font-medium mb-1">State/Province</Label>
                                <SearchableSelect
                                 value={formik.values.mailingState}
-                                onValueChange={(v) => formik.setFieldValue('mailingState', v)}
+                                onChange={(v) => formik.setFieldValue('mailingState', v)}
                                 options={statesData}
                                 placeholder="--Select State--"
-                                triggerClassName={cn("w-full bg-gray-50 h-10", getFieldError('mailingState') && "border-primary-600")}
+                                className={cn("w-full bg-gray-50 h-10", getFieldError('mailingState') && "border-primary-600")}
                               />
                               {getFieldError('mailingState') && <p className="text-xs text-primary-600 mt-1">{getFieldError('mailingState')}</p>}
                             </div>
@@ -1852,10 +1852,10 @@ dispatch(logout());
                             <div className="flex flex-col">
                               <SearchableSelect
                                 value={formik.values.advanceDirective}
-                                onValueChange={(v) => formik.setFieldValue('advanceDirective', v)}
+                                onChange={(v) => formik.setFieldValue('advanceDirective', v)}
                                 options={advancedHealthCareDirectiveList}
                                 placeholder="Select"
-                                triggerClassName={cn("w-full bg-gray-50 h-10", getFieldError('advanceDirective') && "border-primary-600")}
+                                className={cn("w-full bg-gray-50 h-10", getFieldError('advanceDirective') && "border-primary-600")}
                               />
                               {getFieldError('advanceDirective') && <p className="text-xs text-primary-600 mt-1">{getFieldError('advanceDirective')}</p>}
                             </div>
@@ -1865,10 +1865,10 @@ dispatch(logout());
                             <div className="flex flex-col">
                               <SearchableSelect
                                 value={formik.values.language}
-                                onValueChange={(v) => formik.setFieldValue('language', v)}
+                                onChange={(v) => formik.setFieldValue('language', v)}
                                 options={languageData}
                                 placeholder="Select"
-                                triggerClassName={cn("w-full bg-gray-50 h-10", getFieldError('language') && "border-primary-600")}
+                                className={cn("w-full bg-gray-50 h-10", getFieldError('language') && "border-primary-600")}
                               />
                               {getFieldError('language') && <p className="text-xs text-primary-600 mt-1">{getFieldError('language')}</p>}
                             </div>
@@ -1878,10 +1878,10 @@ dispatch(logout());
                             <div className="flex flex-col">
                               <SearchableSelect
                                 value={formik.values.ethnicity}
-                                onValueChange={(v) => formik.setFieldValue('ethnicity', v)}
+                                onChange={(v) => formik.setFieldValue('ethnicity', v)}
                                 options={ethnicityData}
                                 placeholder="Select"
-                                triggerClassName={cn("w-full bg-gray-50 h-10", getFieldError('ethnicity') && "border-primary-600")}
+                                className={cn("w-full bg-gray-50 h-10", getFieldError('ethnicity') && "border-primary-600")}
                               />
                               {getFieldError('ethnicity') && <p className="text-xs text-primary-600 mt-1">{getFieldError('ethnicity')}</p>}
                             </div>
@@ -1891,10 +1891,10 @@ dispatch(logout());
                             <div className="flex flex-col">
                               <SearchableSelect
                                 value={formik.values.race}
-                                onValueChange={(v) => formik.setFieldValue('race', v)}
+                                onChange={(v) => formik.setFieldValue('race', v)}
                                 options={raceData}
                                 placeholder="Select"
-                                triggerClassName={cn("w-full bg-gray-50 h-10", getFieldError('race') && "border-primary-600")}
+                                className={cn("w-full bg-gray-50 h-10", getFieldError('race') && "border-primary-600")}
                               />
                               {getFieldError('race') && <p className="text-xs text-primary-600 mt-1">{getFieldError('race')}</p>}
                             </div>
@@ -1919,10 +1919,10 @@ dispatch(logout());
                             <div className="flex flex-col">
                               <SearchableSelect
                                 value={formik.values.countryOfBirth}
-                                onValueChange={(v) => formik.setFieldValue('countryOfBirth', v)}
+                                onChange={(v) => formik.setFieldValue('countryOfBirth', v)}
                                 options={countryOfBirthOptions}
                                 placeholder="Select"
-                                triggerClassName={cn("w-full bg-gray-50 h-10", getFieldError('countryOfBirth') && "border-primary-600")}
+                                className={cn("w-full bg-gray-50 h-10", getFieldError('countryOfBirth') && "border-primary-600")}
                               />
                               {getFieldError('countryOfBirth') && <p className="text-xs text-primary-600 mt-1">{getFieldError('countryOfBirth')}</p>}
                             </div>
@@ -1969,10 +1969,10 @@ dispatch(logout());
                             <Label htmlFor="emergencyRelation" className="text-sm font-medium mb-1">Relationship With Patient <span className="text-primary-600">*</span></Label>
                             <SearchableSelect
                               value={formik.values.emergencyRelation}
-                              onValueChange={(v) => handleSelectChange('emergencyRelation', v)}
+                              onChange={(v) => handleSelectChange('emergencyRelation', String(v))}
                               options={relationshipToPatientList}
                               placeholder="Select"
-                              triggerClassName={cn("w-full bg-gray-50 h-10", getFieldError('emergencyRelation') && "border-primary-600")}
+                              className={cn("w-full bg-gray-50 h-10", getFieldError('emergencyRelation') && "border-primary-600")}
                             />
                             {getFieldError('emergencyRelation') && <p className="text-xs text-primary-600 mt-1">{getFieldError('emergencyRelation')}</p>}
                          </div>
@@ -2004,10 +2004,10 @@ dispatch(logout());
                             <Label htmlFor="emergencyState" className="text-sm font-medium mb-1">State/Province</Label>
                             <SearchableSelect
                               value={formik.values.emergencyState}
-                              onValueChange={(v) => formik.setFieldValue('emergencyState', v)}
+                              onChange={(v) => formik.setFieldValue('emergencyState', v)}
                               options={statesData}
                               placeholder="--Select State--"
-                              triggerClassName={cn("w-full bg-gray-50 h-10", getFieldError('emergencyState') && "border-primary-600")}
+                              className={cn("w-full bg-gray-50 h-10", getFieldError('emergencyState') && "border-primary-600")}
                             />
                             {getFieldError('emergencyState') && <p className="text-xs text-primary-600 mt-1">{getFieldError('emergencyState')}</p>}
                          </div>

@@ -51,10 +51,12 @@ export function isQueueOverdue(minutes: number): boolean {
 export function getActionsForStatus(status: EvsStatus, hasAssignee: boolean): EvsQueueActionDef[] {
     switch (status) {
         case EVS_STATUS.DIRTY:
-            return [
-                { id: 'assign', label: 'Assign' },
-                { id: 'start', label: 'Start Cleaning' },
-            ].filter((a) => (a.id === 'start' ? hasAssignee : true));
+            return (
+                [
+                    { id: 'assign', label: 'Assign' },
+                    { id: 'start', label: 'Start Cleaning' },
+                ] satisfies EvsQueueActionDef[]
+            ).filter((a) => (a.id === 'start' ? hasAssignee : true));
         case EVS_STATUS.IN_CLEANING:
             return [{ id: 'complete', label: 'Complete Cleaning' }];
         case EVS_STATUS.PENDING_INSPECTION:

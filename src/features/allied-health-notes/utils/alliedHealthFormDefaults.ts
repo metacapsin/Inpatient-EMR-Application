@@ -75,7 +75,7 @@ export function localDateTimeToIso(local: string): string {
     return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
 }
 
-export function noteToFormState(note: AlliedHealthNote) {
+export function noteToFormState(note: AlliedHealthNote): AlliedHealthFormState {
     return {
         discipline: note.discipline,
         visitType: note.visitType,
@@ -92,7 +92,12 @@ export function noteToFormState(note: AlliedHealthNote) {
     };
 }
 
-export type AlliedHealthFormState = ReturnType<typeof emptyFormState>;
+/** Editable fields of a note; every discipline section is filled so switching discipline keeps its inputs. */
+export type AlliedHealthFormState = Pick<
+    AlliedHealthNote,
+    'discipline' | 'visitType' | 'visitDateTime' | 'subjective' | 'objective' | 'assessment' | 'plan'
+> &
+    Required<Pick<AlliedHealthNote, 'ptFields' | 'otFields' | 'rtFields' | 'socialWorkFields' | 'dietitianFields'>>;
 
 export function emptyFormState(discipline: AlliedHealthDiscipline = 'Physical Therapy'): AlliedHealthFormState {
     return {

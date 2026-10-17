@@ -90,7 +90,9 @@ export function IoTrackingTab({ patientId, encounterId }: IoTrackingTabProps) {
                         recordedBy={recorded.id}
                         recordedByName={recorded.name}
                         shift={shift}
-                        onAddRecord={addRecord}
+                        onAddRecord={async (payload) => {
+                            await addRecord(payload);
+                        }}
                     />
                 </div>
             </div>

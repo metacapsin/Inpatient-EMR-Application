@@ -16,7 +16,7 @@ import { hasFormErrors, validateInfectionForm } from '../../lib/infectionControl
 import { recordLocalHaiEvent } from '../../services/haiEvent.service';
 import type { IRootState } from '../../store';
 import { selectAdtEncounter } from '../../store/adtEncounterSlice';
-import type { InfectionFormValues, InfectionRecord } from '../../types/infectionControl';
+import type { InfectionFormValues, InfectionRecord, IsolationType } from '../../types/infectionControl';
 
 const DEMO_ENCOUNTER = 'ENC001';
 
@@ -70,9 +70,9 @@ export default function InfectionControlSection({ patientIdOverride }: Infection
             return;
         }
 
-        const isolationType =
+        const isolationType: IsolationType =
             form.isolationRequired && form.isolationType !== 'None'
-                ? form.isolationType
+                ? (form.isolationType as IsolationType)
                 : form.isolationRequired
                   ? 'Contact'
                   : 'None';

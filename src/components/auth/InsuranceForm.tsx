@@ -121,10 +121,10 @@ export function InsuranceForm({
 
         <SearchableSelect
           value={formik.values.hasInsurance || ""}
-          onValueChange={(value) => handleSelectChange("hasInsurance", value)}
+          onChange={(value) => handleSelectChange("hasInsurance", String(value))}
           options={hasInsuranceOptions}
           placeholder="Select"
-          triggerClassName={cn(
+          className={cn(
             "w-full max-w-xs bg-gray-50",
             getFieldError("hasInsurance") && "border-primary-600"
           )}

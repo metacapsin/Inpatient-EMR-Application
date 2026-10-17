@@ -36,7 +36,7 @@ export function normalizeBalanceSummary(raw: unknown): IoBalanceSummary {
 
 export function mapTimelineRows(raw: unknown): IoTimelineRow[] {
     const list = Array.isArray(raw) ? raw : isRecord(raw) && Array.isArray(raw.records) ? raw.records : isRecord(raw) && Array.isArray(raw.items) ? raw.items : [];
-    const rows = list.map((row, i) => {
+    const rows = list.map((row, i): IoTimelineRow => {
         const r = isRecord(row) ? row : {};
         const recordType = str(r.recordType) === 'Output' ? 'Output' : 'Intake';
         const category =
