@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 40">
+  <rect x="0" y="2" width="36" height="36" rx="10" fill="#3B2317"></rect>
+  <path d="M21 12a8 8 0 1 0 0 16" stroke="#E2621B" stroke-width="3.4" stroke-linecap="round" fill="none"></path>
+  <path d="M21 20h6" stroke="#E2621B" stroke-width="3.4" stroke-linecap="round"></path>
+  <path d="M27 15v10" stroke="#E2621B" stroke-width="3.4" stroke-linecap="round"></path>
+  <circle cx="27" cy="20" r="2.7" fill="#F2A25E"></circle>
+  <text x="48" y="20" font-family="'Space Grotesk', sans-serif" font-size="19" font-weight="700" letter-spacing="-0.3" fill="#3B2317">Codavia Health</text>
+  <text x="48" y="33" font-family="'IBM Plex Mono', monospace" font-size="8.5" letter-spacing="1.6" fill="#9A7B62">AI-NATIVE EMR</text>
+</svg>

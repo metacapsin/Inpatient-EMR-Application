@@ -25,3 +25,7 @@ dist-ssr
 *.sw?
 .env
 .env
+
+# Backend (local database + secrets)
+backend/.env
+backend/.pgdata
