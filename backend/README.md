@@ -97,6 +97,7 @@ IDs are text UUIDs. Every clinical table carries `tenant_id` and every query is 
 | Patient records | `patient_documents` (file bytes in `BYTEA`), `patient_allergies`, `patient_immunizations`, `history_categories`, `patient_history`, `lab_orders`, `lab_documents` |
 | Staffing | `staff_profiles` (clinical role, certifications, float pool), `staff_shifts`, `staff_coverage_rules`, `staffing_assignments` + `staffing_nurse_assignments`; `wards.care_model` drives nurse:patient ratios |
 | Orders / events | `radiology_orders`, `code_events` (timeline and team as JSONB) |
+| Problem list | `icd10_codes` (CMS/NCHS reference), `problems` (patient medical problem list; distinct from NANDA) |
 
 Nested documents that the UI treats as one unit (care-plan diagnoses/goals, flowsheet sections, consent form extras) are
 stored as `JSONB` next to the indexed columns used for lookups.
@@ -130,6 +131,14 @@ Public: `GET /health`, `GET /health/db`, `POST /login`, `POST /auth/refresh`, `P
 | Live staffing | `/api/Staffing/{assignment/:unitId/:date/:shift,assignment,assignment/:id,floatPool/:tenantId,ratioCheck/:unitId,unit/:id/careModel}` (`unitId` = ward id) |
 | Radiology | `/api/Radiology/{order,encounter/:id,order/:id,order/:id/acknowledge,.../result,.../cancel,.../critical}` |
 | Code events | `/api/CodeEvent/{activate,active/:unitId,patient/:id,:id,:id/timeline,:id/team,:id/close,:id/generate-note}` |
+| Problem list / ICD-10 | `GET /api/icd10/search?q=`, `GET|POST /api/patients/:patientId/problems`, `PATCH /api/problems/:id` (no hard delete; use `entered_in_error`) |
+
+ICD-10-CM catalog import (after migrate):
+
+```bash
+# Place icd10cm-order-YYYY.txt under backend/data/icd10/ (see that folder's README), or:
+ICD10_AUTO_DOWNLOAD=1 npm run db:seed:icd10
+```
 
 Roles: `admin` can do everything; facility management and user administration are admin-only; clinical writes need
 `physician`/`nurse`/`staff` as appropriate (see `requireRole` in each route file); pharmacy dispensing needs

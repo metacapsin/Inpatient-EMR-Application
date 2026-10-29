@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AutoComplete } from 'primereact/autocomplete';
 import { classNames } from 'primereact/utils';
 import { NFS_FLOAT_FIELD_LABEL, NFS_OUTLINED_FIELD_FRAME } from '../../nursing-flowsheet/components/FlowsheetStyledFields';
-import { COMMON_ICD10_SUGGESTIONS } from '../constants/radiologyOptions';
 import { getIcd10CmValidationError } from '../../../utils/dischargeReadinessValidation';
+import { searchIcd10 } from '../../../services/problemsApi';
 
 export type Icd10Option = { code: string; label: string };
 
@@ -12,6 +12,7 @@ type Icd10MultiTypeaheadProps = {
     label: string;
     value: string[];
     onChange: (codes: string[]) => void;
+    /** Optional extras merged into suggestions (e.g. patient's active problem codes). */
     extraSuggestions?: Icd10Option[];
     disabled?: boolean;
     hasError?: boolean;
@@ -32,26 +33,60 @@ export function Icd10MultiTypeahead({
 }: Icd10MultiTypeaheadProps) {
     const [query, setQuery] = useState('');
     const [filtered, setFiltered] = useState<Icd10Option[]>([]);
+    const searchSeq = useRef(0);
+    const abortRef = useRef<AbortController | null>(null);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const allOptions = useMemo(() => {
-        const map = new Map<string, Icd10Option>();
-        for (const o of [...COMMON_ICD10_SUGGESTIONS, ...extraSuggestions]) {
-            if (o.code?.trim()) map.set(o.code.trim().toUpperCase(), { code: o.code.trim(), label: o.label });
-        }
-        return [...map.values()];
-    }, [extraSuggestions]);
+    useEffect(
+        () => () => {
+            abortRef.current?.abort();
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+        },
+        []
+    );
 
     const search = (event: { query: string }) => {
-        const q = event.query.trim().toLowerCase();
+        const q = event.query.trim();
+        setQuery(event.query);
+        const seq = ++searchSeq.current;
+
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+
         if (!q) {
-            setFiltered(allOptions.slice(0, 25));
+            setFiltered(extraSuggestions.slice(0, 25));
             return;
         }
-        setFiltered(
-            allOptions
-                .filter((o) => o.code.toLowerCase().includes(q) || o.label.toLowerCase().includes(q))
-                .slice(0, 25)
-        );
+
+        debounceRef.current = setTimeout(() => {
+            if (seq !== searchSeq.current) return;
+            abortRef.current?.abort();
+            const ac = new AbortController();
+            abortRef.current = ac;
+            void searchIcd10(q, ac.signal)
+                .then((hits) => {
+                    if (seq !== searchSeq.current) return;
+                    const map = new Map<string, Icd10Option>();
+                    for (const o of extraSuggestions) {
+                        if (o.code?.trim()) {
+                            map.set(o.code.trim().toUpperCase(), { code: o.code.trim(), label: o.label });
+                        }
+                    }
+                    for (const h of hits) {
+                        map.set(h.code.toUpperCase(), { code: h.code, label: h.description });
+                    }
+                    setFiltered([...map.values()].slice(0, 25));
+                })
+                .catch((err: unknown) => {
+                    if ((err as { code?: string })?.code === 'ERR_CANCELED') return;
+                    if (seq !== searchSeq.current) return;
+                    const ql = q.toLowerCase();
+                    setFiltered(
+                        extraSuggestions
+                            .filter((o) => o.code.toLowerCase().includes(ql) || o.label.toLowerCase().includes(ql))
+                            .slice(0, 25)
+                    );
+                });
+        }, 250);
     };
 
     const addCode = (raw: string) => {
@@ -125,4 +160,3 @@ export function Icd10MultiTypeahead({
         </div>
     );
 }
-

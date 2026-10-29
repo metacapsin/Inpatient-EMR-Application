@@ -1,58 +1,116 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { toast } from 'react-hot-toast';
-import { healthConditionsAPI } from '../../services/healthMonitoringService';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
+import { Ban, CheckCircle2, Pencil, RotateCcw, XCircle } from 'lucide-react';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
-import { format } from 'date-fns';
+import { ActionIconTooltip } from '../../components/ui/ActionIconTooltip';
 import IconSearch from '../../components/Icon/IconSearch';
-import IconTrash from '../../components/Icon/IconTrash';
 import IconX from '../../components/Icon/IconX';
+import {
+    createPatientProblem,
+    listPatientProblems,
+    searchIcd10,
+    updateProblem,
+    type Icd10SearchHit,
+    type PatientProblem,
+    type ProblemChronicity,
+    type ProblemStatus,
+} from '../../services/problemsApi';
+import {
+    actionToStatus,
+    availableActions,
+    canEditProblem,
+    filterProblemsBySearch,
+    formatStatusLabel,
+    sortProblemsClinicalOrder,
+    statusBadgeClass,
+    toDateInputValue,
+    type ProblemAction,
+} from './problemListHelpers';
 
-type ConditionType = 'diabetes' | 'hypertension' | 'obesity' | 'asthma' | 'copd' | 'heart_disease' | 'arthritis' | 'depression' | 'anxiety' | 'chronic_kidney_disease' | 'other';
-type StatusType = 'active' | 'inactive' | 'resolved';
+type ListTab = 'active' | 'history';
 
-interface DiagnosisRecord {
-    _id: string;
-    rcopiaId: string;
-    diagnosisCode: string;
-    description: string;
-    onsetDate: string;
-    lastModifiedDate: string;
-    status: StatusType;
+function actionLabel(action: ProblemAction): string {
+    switch (action) {
+        case 'entered_in_error':
+            return 'Entered in Error';
+        case 'reactivate':
+            return 'Make Active';
+        case 'inactivate':
+            return 'Make Inactive';
+        case 'resolve':
+            return 'Resolve';
+    }
 }
 
-const ROWS_PER_PAGE = 4;
+function actionSuccessMessage(action: ProblemAction, code: string): string {
+    switch (action) {
+        case 'entered_in_error':
+            return `${code} marked as entered in error`;
+        case 'resolve':
+            return `${code} resolved successfully`;
+        case 'inactivate':
+            return `${code} inactivated successfully`;
+        case 'reactivate':
+            return `${code} reactivated successfully`;
+    }
+}
+
+function ActionIcon({ action }: { action: ProblemAction }) {
+    const cls = 'h-3.5 w-3.5';
+    switch (action) {
+        case 'resolve':
+            return <CheckCircle2 className={cls} aria-hidden />;
+        case 'inactivate':
+            return <Ban className={cls} aria-hidden />;
+        case 'reactivate':
+            return <RotateCcw className={cls} aria-hidden />;
+        case 'entered_in_error':
+            return <XCircle className={cls} aria-hidden />;
+    }
+}
+
+const iconBtnClass =
+    'inline-flex h-8 w-8 items-center justify-center rounded-md text-primary transition hover:bg-primary/10 disabled:opacity-40';
+
+const ROWS_PER_PAGE = 10;
 
 const Diagnoses: React.FC = () => {
-    const hookPatientId = usePatientId();
+    const patientId = usePatientId();
     const { moduleRootClass } = useFacesheetChartLayout();
-    
-    const patientId = React.useMemo(() => {
-        if (hookPatientId && hookPatientId.trim()) {
-            return hookPatientId;
-        }
-        const urlParams = new URLSearchParams(window.location.search);
-        const queryId = urlParams.get('patientId') || urlParams.get('rcopiaID');
-        if (queryId && queryId.trim()) {
-            return queryId;
-        }
-        return null;
-    }, [hookPatientId]);
 
-    const [diagnosesList, setDiagnosesList] = useState<DiagnosisRecord[]>([]);
-    const [filteredList, setFilteredList] = useState<DiagnosisRecord[]>([]);
-    const [paginatedList, setPaginatedList] = useState<DiagnosisRecord[]>([]);
+    const [problems, setProblems] = useState<PatientProblem[]>([]);
+    const [listTab, setListTab] = useState<ListTab>('active');
     const [searchText, setSearchText] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [loading, setLoading] = useState(false);
-    const [deleting, setDeleting] = useState(false);
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [deletingDiagnosis, setDeletingDiagnosis] = useState<DiagnosisRecord | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-    const formatDate = useCallback((dateString: string): string => {
-        if (!dateString?.trim()) return '';
+    const [showAdd, setShowAdd] = useState(false);
+    const [icdQuery, setIcdQuery] = useState('');
+    const [icdHits, setIcdHits] = useState<Icd10SearchHit[]>([]);
+    const [icdSearching, setIcdSearching] = useState(false);
+    const [selectedCode, setSelectedCode] = useState<Icd10SearchHit | null>(null);
+    const [chronicity, setChronicity] = useState<ProblemChronicity | ''>('');
+    const [onsetDate, setOnsetDate] = useState('');
+    const [saving, setSaving] = useState(false);
+
+    const [editing, setEditing] = useState<PatientProblem | null>(null);
+    const [editStatus, setEditStatus] = useState<ProblemStatus>('active');
+    const [editChronicity, setEditChronicity] = useState<ProblemChronicity | ''>('');
+    const [editOnsetDate, setEditOnsetDate] = useState('');
+    const [editResolvedDate, setEditResolvedDate] = useState('');
+    const [editSaving, setEditSaving] = useState(false);
+
+    const searchSeq = useRef(0);
+    const abortRef = useRef<AbortController | null>(null);
+
+    const formatDate = useCallback((dateString?: string | null): string => {
+        if (!dateString?.trim()) return '—';
         try {
-            const date = new Date(dateString);
+            const date = new Date(dateString.length <= 10 ? `${dateString}T00:00:00` : dateString);
             if (isNaN(date.getTime())) return dateString;
             return format(date, 'MM/dd/yyyy');
         } catch {
@@ -60,372 +118,625 @@ const Diagnoses: React.FC = () => {
         }
     }, []);
 
-    const normalizeStatus = useCallback((status?: string | boolean): StatusType => {
-        if (typeof status === 'boolean') {
-            return status === true ? 'active' : 'inactive';
-        }
-        const normalized = String(status).toLowerCase();
-        if (normalized === 'active' || normalized === 'inactive' || normalized === 'resolved') {
-            return normalized;
-        }
-        return 'active';
-    }, []);
-
-    const capitalizeStatus = useCallback((status: StatusType): string => {
-        return status.charAt(0).toUpperCase() + status.slice(1);
-    }, []);
-
-    const updatePagination = useCallback((list: DiagnosisRecord[], page: number) => {
-        const start = (page - 1) * ROWS_PER_PAGE;
-        const end = start + ROWS_PER_PAGE;
-        setPaginatedList(list.slice(start, end));
-        setCurrentPage(page);
-    }, []);
-
-    const filterDiagnoses = useCallback((list: DiagnosisRecord[], search: string): DiagnosisRecord[] => {
-        if (!search.trim()) return list;
-        const searchLower = search.toLowerCase().trim();
-        return list.filter(
-            (item) =>
-                (item.rcopiaId?.toLowerCase().includes(searchLower)) ||
-                (item.diagnosisCode?.toLowerCase().includes(searchLower)) ||
-                (item.description?.toLowerCase().includes(searchLower))
-        );
-    }, []);
-
-    // 🔴 UPDATED: Map API response to show proper fields 🔴
-    const mapApiToRecord = useCallback((item: any): DiagnosisRecord => {
-        // Extract RcopiaID
-        const rcopiaId = Array.isArray(item.RcopiaID) ? item.RcopiaID[0] : item.RcopiaID || '';
-        
-        // Extract ICD10 Code and Description
-        let diagnosisCode = '';
-        let description = '';
-        if (item.ICD10 && Array.isArray(item.ICD10) && item.ICD10[0]) {
-            const icdData = item.ICD10[0];
-            diagnosisCode = Array.isArray(icdData.Code) ? icdData.Code[0] : icdData.Code || '';
-            description = Array.isArray(icdData.Description) ? icdData.Description[0] : icdData.Description || '';
-        }
-        
-        // Extract Onset Date
-        let onsetDate = '';
-        if (item.OnsetDate && Array.isArray(item.OnsetDate)) {
-            onsetDate = item.OnsetDate[0] || '';
-        }
-        
-        // Extract Last Modified Date: API uses array (e.g. LastModifiedDate[0]); fallback to updatedAt
-        let lastModifiedRaw = '';
-        if (item.LastModifiedDate && Array.isArray(item.LastModifiedDate) && item.LastModifiedDate.length > 0) {
-            const first = item.LastModifiedDate[0];
-            lastModifiedRaw = typeof first === 'string' ? first.trim() : first != null ? String(first).trim() : '';
-        } else if (typeof item.LastModifiedDate === 'string' && item.LastModifiedDate.trim()) {
-            lastModifiedRaw = item.LastModifiedDate.trim();
-        }
-
-        let lastModifiedDate = '';
-        if (lastModifiedRaw) {
-            lastModifiedDate = formatDate(lastModifiedRaw);
-        } else if (item.updatedAt != null && item.updatedAt !== '') {
-            const updated =
-                typeof item.updatedAt === 'string' ? item.updatedAt : String(item.updatedAt);
-            lastModifiedDate = formatDate(updated);
-        }
-
-        // Status from Status[0] Active/Inactive keys (Rcopia shape), not boolean item.status
-        let statusFromApi: string | boolean | undefined;
-        if (item.Status && Array.isArray(item.Status) && item.Status.length > 0) {
-            const statusObj = item.Status[0];
-            if (statusObj && typeof statusObj === 'object' && !Array.isArray(statusObj)) {
-                if (statusObj.Active !== undefined) {
-                    statusFromApi = 'active';
-                } else if (statusObj.Inactive !== undefined) {
-                    statusFromApi = 'inactive';
-                }
-            } else if (typeof statusObj === 'string' && statusObj.trim()) {
-                statusFromApi = statusObj.trim();
-            }
-        }
-        if (statusFromApi === undefined && item.status !== undefined) {
-            statusFromApi = item.status;
-        }
-
-        return {
-            _id: item._id ?? item.id ?? Math.random().toString(),
-            rcopiaId: rcopiaId,
-            diagnosisCode: diagnosisCode,
-            description: description,
-            onsetDate: onsetDate,
-            lastModifiedDate: lastModifiedDate,
-            status: normalizeStatus(statusFromApi),
-        };
-    }, [formatDate, normalizeStatus]);
-
-    const fetchDiagnoses = useCallback(async () => {
-        if (!patientId) {
-            setDiagnosesList([]);
-            setFilteredList([]);
-            updatePagination([], 1);
+    const fetchProblems = useCallback(async () => {
+        if (!patientId?.trim()) {
+            setProblems([]);
+            setError(null);
             return;
         }
-
         setLoading(true);
+        setError(null);
         try {
-            const response = await healthConditionsAPI.getByPatient(patientId);
-            
-            let records: DiagnosisRecord[] = [];
-            const responseData = response.data;
-            
-            if (responseData?.data && Array.isArray(responseData.data)) {
-                records = responseData.data.map(mapApiToRecord);
-            }
-            else if (Array.isArray(responseData)) {
-                records = responseData.map(mapApiToRecord);
-            }
-            else if (responseData && typeof responseData === 'object') {
-                for (const key in responseData) {
-                    if (Array.isArray(responseData[key]) && responseData[key].length > 0) {
-                        records = responseData[key].map(mapApiToRecord);
-                        break;
-                    }
-                }
-            }
-            
-            setDiagnosesList(records);
-            setFilteredList(records);
-            updatePagination(records, 1);
-            
-        } catch (error: any) {
-            console.error('Fetch error:', error);
-            setDiagnosesList([]);
-            setFilteredList([]);
-            updatePagination([], 1);
-            
-            if (error.response?.status === 401) {
-                toast.error('Authentication failed. Please login again.');
-            } else if (error.response?.status === 404) {
-                toast.error('No diagnoses found for this patient');
-            } else {
-                toast.error(error.response?.data?.message || 'Failed to fetch diagnoses');
-            }
+            const rows = await listPatientProblems(patientId, { includeResolved: true });
+            setProblems(rows);
+        } catch (e: unknown) {
+            const msg =
+                (e as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+                'Failed to load problem list';
+            setProblems([]);
+            setError(msg);
+            toast.error(msg);
         } finally {
             setLoading(false);
         }
-    }, [patientId, updatePagination, mapApiToRecord]);
+    }, [patientId]);
 
-    const handlePageChange = useCallback((page: number) => {
-        updatePagination(filteredList, page);
-    }, [filteredList, updatePagination]);
+    useEffect(() => {
+        void fetchProblems();
+    }, [fetchProblems]);
 
-    const handleOpenDeleteConfirm = useCallback((diagnosis: DiagnosisRecord) => {
-        setDeletingDiagnosis(diagnosis);
-        setShowDeleteConfirm(true);
-    }, []);
+    useEffect(() => {
+        if (!showAdd) return;
+        const q = icdQuery.trim();
+        if (q.length < 1) {
+            setIcdHits([]);
+            setIcdSearching(false);
+            return;
+        }
+        const seq = ++searchSeq.current;
+        const t = window.setTimeout(() => {
+            abortRef.current?.abort();
+            const ac = new AbortController();
+            abortRef.current = ac;
+            setIcdSearching(true);
+            void searchIcd10(q, ac.signal)
+                .then((hits) => {
+                    if (seq !== searchSeq.current) return;
+                    setIcdHits(hits);
+                })
+                .catch((err: unknown) => {
+                    if (
+                        (err as { name?: string })?.name === 'CanceledError' ||
+                        (err as { code?: string })?.code === 'ERR_CANCELED'
+                    ) {
+                        return;
+                    }
+                    if (seq !== searchSeq.current) return;
+                    setIcdHits([]);
+                })
+                .finally(() => {
+                    if (seq === searchSeq.current) setIcdSearching(false);
+                });
+        }, 280);
+        return () => window.clearTimeout(t);
+    }, [icdQuery, showAdd]);
 
-    const handleCloseDeleteConfirm = useCallback(() => {
-        setShowDeleteConfirm(false);
-        setDeletingDiagnosis(null);
-    }, []);
+    const tabProblems = useMemo(() => {
+        if (listTab === 'active') return problems.filter((p) => p.status === 'active');
+        return problems.filter((p) => p.status === 'inactive' || p.status === 'resolved');
+    }, [problems, listTab]);
 
-    const handleDelete = useCallback(async () => {
-        if (!deletingDiagnosis) return;
+    const filtered = useMemo(
+        () => sortProblemsClinicalOrder(filterProblemsBySearch(tabProblems, searchText)),
+        [tabProblems, searchText]
+    );
 
-        setDeleting(true);
+    const activeCount = useMemo(() => problems.filter((p) => p.status === 'active').length, [problems]);
+    const historyCount = useMemo(
+        () => problems.filter((p) => p.status === 'inactive' || p.status === 'resolved').length,
+        [problems]
+    );
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
+    const paginated = useMemo(() => {
+        const page = Math.min(currentPage, totalPages);
+        const start = (page - 1) * ROWS_PER_PAGE;
+        return filtered.slice(start, start + ROWS_PER_PAGE);
+    }, [filtered, currentPage, totalPages]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchText, patientId, listTab]);
+
+    useEffect(() => {
+        if (currentPage > totalPages) setCurrentPage(totalPages);
+    }, [currentPage, totalPages]);
+
+    const resetAddForm = () => {
+        setIcdQuery('');
+        setIcdHits([]);
+        setSelectedCode(null);
+        setChronicity('');
+        setOnsetDate('');
+        setSaving(false);
+    };
+
+    const openAdd = () => {
+        resetAddForm();
+        setShowAdd(true);
+    };
+
+    const closeAdd = () => {
+        abortRef.current?.abort();
+        setShowAdd(false);
+        resetAddForm();
+    };
+
+    const handleAdd = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!patientId || !selectedCode || saving) return;
+        setSaving(true);
         try {
-            await healthConditionsAPI.delete(deletingDiagnosis._id);
-            toast.success('Diagnosis deleted successfully');
-            await fetchDiagnoses();
-        } catch (error: any) {
-            console.error('Delete error:', error);
-            toast.error(error.response?.data?.message || 'Failed to delete diagnosis');
+            await createPatientProblem(patientId, {
+                icd10Code: selectedCode.code,
+                chronicity: chronicity || null,
+                onsetDate: onsetDate || null,
+            });
+            toast.success(`${selectedCode.code} added to problem list`);
+            closeAdd();
+            setListTab('active');
+            await fetchProblems();
+        } catch (err: unknown) {
+            const msg =
+                (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+                'Failed to add problem';
+            toast.error(msg);
         } finally {
-            setDeleting(false);
-            handleCloseDeleteConfirm();
+            setSaving(false);
         }
-    }, [deletingDiagnosis, fetchDiagnoses, handleCloseDeleteConfirm]);
+    };
 
-    const getStatusBadgeClass = useCallback((status: StatusType): string => {
-        switch (status) {
-            case 'active':
-                return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
-            case 'inactive':
-                return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400';
-            case 'resolved':
-                return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
-            default:
-                return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
+    const openEdit = (problem: PatientProblem) => {
+        setEditing(problem);
+        setEditStatus(problem.status);
+        setEditChronicity(problem.chronicity ?? '');
+        setEditOnsetDate(toDateInputValue(problem.onsetDate));
+        setEditResolvedDate(toDateInputValue(problem.resolvedDate));
+        setEditSaving(false);
+    };
+
+    const closeEdit = () => {
+        setEditing(null);
+        setEditSaving(false);
+    };
+
+    const handleEditSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editing || editSaving) return;
+        setEditSaving(true);
+        try {
+            await updateProblem(editing.id, {
+                status: editStatus,
+                chronicity: editChronicity || null,
+                onsetDate: editOnsetDate || null,
+                resolvedDate: editStatus === 'resolved' ? editResolvedDate || null : null,
+            });
+            toast.success(`${editing.icd10Code} updated successfully`);
+            closeEdit();
+            if (editStatus === 'active') setListTab('active');
+            else if (editStatus === 'inactive' || editStatus === 'resolved') setListTab('history');
+            await fetchProblems();
+        } catch (err: unknown) {
+            const msg =
+                (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+                'Failed to update problem';
+            toast.error(msg);
+        } finally {
+            setEditSaving(false);
         }
-    }, []);
+    };
 
-    const totalPages = Math.ceil(filteredList.length / ROWS_PER_PAGE) || 1;
+    const handleAction = async (problem: PatientProblem, action: ProblemAction) => {
+        if (updatingId) return;
+        setUpdatingId(problem.id);
+        try {
+            await updateProblem(problem.id, { status: actionToStatus(action) });
+            toast.success(actionSuccessMessage(action, problem.icd10Code));
+            await fetchProblems();
+        } catch (err: unknown) {
+            const msg =
+                (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+                `Failed to ${actionLabel(action).toLowerCase()} problem`;
+            toast.error(msg);
+        } finally {
+            setUpdatingId(null);
+        }
+    };
 
-    useEffect(() => {
-        fetchDiagnoses();
-    }, [fetchDiagnoses]);
-
-    useEffect(() => {
-        const filtered = filterDiagnoses(diagnosesList, searchText);
-        setFilteredList(filtered);
-        updatePagination(filtered, 1);
-    }, [searchText, diagnosesList, filterDiagnoses, updatePagination]);
+    if (!patientId?.trim()) {
+        return (
+            <div className={`${moduleRootClass} facesheet-module-route-root`}>
+                <p className="py-12 text-center text-gray-500 dark:text-gray-400">
+                    Open this module from a patient facesheet to load the problem list.
+                </p>
+            </div>
+        );
+    }
 
     return (
-        <div className={moduleRootClass}>
-            <div className="mb-5">
-                <ul className="flex items-center gap-2 text-sm">
-                    <li>
-                        <a href="#" className="text-primary hover:underline">Patient List</a>
-                    </li>
-                    <li>/</li>
-                    <li className="text-gray-900 dark:text-white font-medium">Diagnoses</li>
-                </ul>
+        <div className={`${moduleRootClass} facesheet-module-route-root gap-3`}>
+            <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 flex-1">
+                    <h3 className="text-base font-semibold tracking-tight text-gray-900 dark:text-white sm:text-lg">
+                        Problem List
+                    </h3>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 sm:text-sm">
+                        ICD-10-CM medical problems for this patient
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:opacity-90"
+                    onClick={openAdd}
+                >
+                    Add problem
+                </button>
             </div>
 
-            <div className="mb-5">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div className="flex flex-col md:flex-row md:items-center gap-3 flex-1">
-                        <h3 className="text-xl font-semibold">Diagnoses</h3>
-                        <div className="relative w-full md:max-w-md">
-                            <input 
-                                type="text" 
-                                className="form-input pl-10 w-full" 
-                                placeholder="Search by Rcopia ID, Code or Description..." 
-                                value={searchText} 
-                                onChange={(e) => setSearchText(e.target.value)} 
-                            />
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                                <IconSearch className="w-4 h-4" />
-                            </span>
-                        </div>
-                    </div>
+            <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="inline-flex rounded-lg border border-gray-200/80 bg-gray-50/80 p-0.5 dark:border-white/[0.08] dark:bg-white/[0.04]">
+                    <button
+                        type="button"
+                        className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                            listTab === 'active'
+                                ? 'bg-primary text-white'
+                                : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'
+                        }`}
+                        onClick={() => setListTab('active')}
+                    >
+                        Active ({activeCount})
+                    </button>
+                    <button
+                        type="button"
+                        className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                            listTab === 'history'
+                                ? 'bg-primary text-white'
+                                : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'
+                        }`}
+                        onClick={() => setListTab('history')}
+                    >
+                        Inactive / Resolved ({historyCount})
+                    </button>
+                </div>
+                <div className="relative w-full sm:max-w-md">
+                    <input
+                        type="text"
+                        className="form-input h-9 w-full py-2 pl-10 text-sm"
+                        placeholder="Search by code or description..."
+                        value={searchText}
+                        onChange={(e) => setSearchText(e.target.value)}
+                    />
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <IconSearch className="h-4 w-4" />
+                    </span>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {loading ? (
-                    <div className="col-span-full flex items-center justify-center py-12">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                        <span className="ml-3 text-gray-600 dark:text-gray-400">Loading diagnoses...</span>
-                    </div>
-                ) : paginatedList.length === 0 ? (
-                    <div className="col-span-full text-center py-12">
-                        <p className="text-gray-500 dark:text-gray-400">
-                            No diagnoses found for this patient.
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200/70 bg-white dark:border-white/[0.08] dark:bg-[#1a1a1a]">
+                <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+                    <table className="w-full min-w-[760px] text-left text-sm">
+                        <thead className="sticky top-0 z-10 border-b border-gray-200/80 bg-gray-50/95 text-[10px] font-bold uppercase tracking-wide text-gray-500 backdrop-blur-sm dark:border-white/[0.06] dark:bg-[#1c1c1c]/95 dark:text-gray-400">
+                            <tr>
+                                <th className="whitespace-nowrap px-3 py-2.5">Code</th>
+                                <th className="px-3 py-2.5">Description</th>
+                                <th className="whitespace-nowrap px-3 py-2.5">Type</th>
+                                <th className="whitespace-nowrap px-3 py-2.5">Onset date</th>
+                                <th className="whitespace-nowrap px-3 py-2.5">Date changed</th>
+                                <th className="whitespace-nowrap px-3 py-2.5">Status</th>
+                                <th className="whitespace-nowrap px-3 py-2.5 text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100/90 dark:divide-white/[0.05]">
+                            {loading ? (
+                                <tr>
+                                    <td colSpan={7} className="px-3 py-10 text-center text-gray-500">
+                                        <span className="inline-flex items-center gap-2">
+                                            <span className="h-5 w-5 animate-spin rounded-full border-b-2 border-primary" />
+                                            Loading problems...
+                                        </span>
+                                    </td>
+                                </tr>
+                            ) : error ? (
+                                <tr>
+                                    <td colSpan={7} className="px-3 py-10 text-center">
+                                        <p className="mb-3 text-danger">{error}</p>
+                                        <button
+                                            type="button"
+                                            className="inline-flex h-8 items-center rounded-md border border-primary px-3 text-xs font-semibold text-primary"
+                                            onClick={() => void fetchProblems()}
+                                        >
+                                            Retry
+                                        </button>
+                                    </td>
+                                </tr>
+                            ) : filtered.length === 0 ? (
+                                <tr>
+                                    <td colSpan={7} className="px-3 py-10 text-center text-gray-500 dark:text-gray-400">
+                                        {tabProblems.length === 0
+                                            ? listTab === 'active'
+                                                ? 'No active problems. Add an ICD-10-CM problem to get started.'
+                                                : 'No inactive or resolved problems yet.'
+                                            : 'No problems match your search.'}
+                                    </td>
+                                </tr>
+                            ) : (
+                                paginated.map((p, idx) => (
+                                    <tr
+                                        key={p.id}
+                                        className={`transition-colors hover:bg-gray-50/90 dark:hover:bg-white/[0.04] ${
+                                            idx % 2 === 1 ? 'bg-gray-50/40 dark:bg-white/[0.02]' : ''
+                                        }`}
+                                    >
+                                        <td className="whitespace-nowrap px-3 py-2 font-semibold text-primary">
+                                            {p.icd10Code}
+                                        </td>
+                                        <td className="max-w-[280px] px-3 py-2 text-gray-900 dark:text-gray-100">
+                                            <span className="line-clamp-2" title={p.icd10Description}>
+                                                {p.icd10Description}
+                                            </span>
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-2 capitalize text-gray-600 dark:text-gray-300">
+                                            {p.chronicity || '—'}
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-2 text-gray-600 dark:text-gray-300">
+                                            {formatDate(p.onsetDate)}
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-2 text-gray-600 dark:text-gray-300">
+                                            {formatDate(p.updatedAt || p.createdAt)}
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-2">
+                                            <span
+                                                className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${statusBadgeClass(p.status)}`}
+                                            >
+                                                {formatStatusLabel(p.status)}
+                                            </span>
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-2">
+                                            <div className="flex items-center justify-center gap-0.5">
+                                                {canEditProblem(p.status) ? (
+                                                    <ActionIconTooltip label="Edit">
+                                                        <button
+                                                            type="button"
+                                                            aria-label="Edit"
+                                                            className={iconBtnClass}
+                                                            onClick={() => openEdit(p)}
+                                                        >
+                                                            <Pencil className="h-3.5 w-3.5" aria-hidden />
+                                                        </button>
+                                                    </ActionIconTooltip>
+                                                ) : null}
+                                                {availableActions(p.status).map((action) => (
+                                                    <ActionIconTooltip key={action} label={actionLabel(action)}>
+                                                        <button
+                                                            type="button"
+                                                            aria-label={actionLabel(action)}
+                                                            disabled={updatingId === p.id}
+                                                            className={iconBtnClass}
+                                                            onClick={() => void handleAction(p, action)}
+                                                        >
+                                                            <ActionIcon action={action} />
+                                                        </button>
+                                                    </ActionIconTooltip>
+                                                ))}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+                {filtered.length > 0 ? (
+                    <div className="flex shrink-0 flex-col gap-2 border-t border-gray-200/80 px-3 py-2.5 dark:border-white/[0.06] sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                            Showing {(Math.min(currentPage, totalPages) - 1) * ROWS_PER_PAGE + 1}–
+                            {Math.min(Math.min(currentPage, totalPages) * ROWS_PER_PAGE, filtered.length)} of{' '}
+                            {filtered.length}
                         </p>
+                        <div className="flex items-center justify-center gap-2">
+                            <button
+                                type="button"
+                                className="inline-flex h-8 items-center rounded-md border border-primary px-3 text-xs font-semibold text-primary transition hover:bg-primary hover:text-white disabled:opacity-40"
+                                disabled={currentPage <= 1}
+                                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                            >
+                                Previous
+                            </button>
+                            <span className="px-2 text-sm text-gray-700 dark:text-gray-300">
+                                Page {Math.min(currentPage, totalPages)} of {totalPages}
+                            </span>
+                            <button
+                                type="button"
+                                className="inline-flex h-8 items-center rounded-md border border-primary px-3 text-xs font-semibold text-primary transition hover:bg-primary hover:text-white disabled:opacity-40"
+                                disabled={currentPage >= totalPages}
+                                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                            >
+                                Next
+                            </button>
+                        </div>
                     </div>
-                ) : (
-                    paginatedList.map((diagnosis) => (
-                        <div key={diagnosis._id} className="panel shadow-equal hover:shadow-equal-lg transition-shadow duration-200">
-                            <div className="flex items-center justify-between mb-4 pb-3 border-b border-white-light dark:border-[#191e3a]">
-                                <div className="flex items-center gap-2">
-                                    <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${getStatusBadgeClass(diagnosis.status)}`}>
-                                        {capitalizeStatus(diagnosis.status)}
-                                    </span>
-                                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                                        Rcopia ID: {diagnosis.rcopiaId}
-                                    </span>
+                ) : null}
+            </div>
+
+            {editing ? (
+                <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
+                    <div
+                        className="max-h-[92vh] w-full overflow-y-auto rounded-t-xl bg-white p-4 dark:bg-[#0e1726] sm:max-w-lg sm:rounded-xl sm:p-6 sm:shadow-lg"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="edit-problem-title"
+                    >
+                        <div className="mb-4 flex items-center justify-between gap-2">
+                            <h4 id="edit-problem-title" className="text-lg font-semibold">
+                                Update problem
+                            </h4>
+                            <button type="button" className="p-1.5" onClick={closeEdit} aria-label="Close">
+                                <IconX className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="mb-4 rounded border border-white-light p-3 dark:border-[#191e3a]">
+                            <div className="font-semibold text-primary">{editing.icd10Code}</div>
+                            <div className="text-sm text-gray-700 dark:text-gray-300">{editing.icd10Description}</div>
+                            <p className="mt-1 text-xs text-gray-500">
+                                ICD-10 code cannot be changed. Use Entered in Error and add a new problem if needed.
+                            </p>
+                        </div>
+                        <form onSubmit={(e) => void handleEditSave(e)} className="space-y-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <div>
+                                    <label className="mb-1 block text-sm font-medium">Status</label>
+                                    <select
+                                        className="form-select w-full"
+                                        value={editStatus}
+                                        onChange={(e) => setEditStatus(e.target.value as ProblemStatus)}
+                                    >
+                                        <option value="active">Active</option>
+                                        <option value="inactive">Inactive</option>
+                                        <option value="resolved">Resolved</option>
+                                        <option value="entered_in_error">Entered in error</option>
+                                    </select>
                                 </div>
+                                <div>
+                                    <label className="mb-1 block text-sm font-medium">Chronicity</label>
+                                    <select
+                                        className="form-select w-full"
+                                        value={editChronicity}
+                                        onChange={(e) => setEditChronicity(e.target.value as ProblemChronicity | '')}
+                                    >
+                                        <option value="">Unspecified</option>
+                                        <option value="acute">Acute</option>
+                                        <option value="chronic">Chronic</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-sm font-medium">Onset date</label>
+                                    <input
+                                        type="date"
+                                        className="form-input w-full"
+                                        value={editOnsetDate}
+                                        onChange={(e) => setEditOnsetDate(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-sm font-medium">Resolved date</label>
+                                    <input
+                                        type="date"
+                                        className="form-input w-full"
+                                        value={editResolvedDate}
+                                        onChange={(e) => setEditResolvedDate(e.target.value)}
+                                        disabled={editStatus !== 'resolved'}
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                                 <button
                                     type="button"
-                                    className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                                    onClick={() => handleOpenDeleteConfirm(diagnosis)}
-                                    title="Delete"
+                                    className="inline-flex h-9 items-center justify-center rounded-lg border border-primary px-3.5 text-sm font-semibold text-primary transition hover:bg-primary hover:text-white"
+                                    onClick={closeEdit}
                                 >
-                                    <IconTrash className="w-4 h-4 text-danger" />
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+                                    disabled={editSaving}
+                                >
+                                    {editSaving ? 'Saving...' : 'Save changes'}
                                 </button>
                             </div>
-                            <div>
-                                <div className="space-y-3">
-                                    {/* Diagnosis Code */}
-                                    <div className="flex items-start">
-                                        <span className="text-gray-600 dark:text-gray-400 text-sm w-24">Code:</span>
-                                        <span className="font-medium text-sm text-gray-900 dark:text-white">
-                                            {diagnosis.diagnosisCode || '---'}
-                                        </span>
-                                    </div>
-                                    
-                                    {/* Description */}
-                                    <div className="flex items-start">
-                                        <span className="text-gray-600 dark:text-gray-400 text-sm w-24">Description:</span>
-                                        <span className="font-medium text-sm text-gray-900 dark:text-white">
-                                            {diagnosis.description || '---'}
-                                        </span>
-                                    </div>
-                                    
-                                    {/* Onset Date */}
-                                    <div className="flex items-start">
-                                        <span className="text-gray-600 dark:text-gray-400 text-sm w-24">Onset Date:</span>
-                                        <span className="font-medium text-sm text-gray-900 dark:text-white">
-                                            {diagnosis.onsetDate || '---'}
-                                        </span>
-                                    </div>
-                                    
-                                    {/* Last Modified */}
-                                    <div className="flex items-start">
-                                        <span className="text-gray-600 dark:text-gray-400 text-sm w-24">Last Modified:</span>
-                                        <span className="font-medium text-sm text-gray-900 dark:text-white">
-                                            {diagnosis.lastModifiedDate || '---'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    ))
-                )}
-            </div>
-
-            {/* Pagination */}
-            {!loading && filteredList.length > ROWS_PER_PAGE && (
-                <div className="flex justify-center items-center gap-2 mt-4">
-                    <button 
-                        type="button" 
-                        className="btn btn-outline-primary" 
-                        onClick={() => handlePageChange(currentPage - 1)} 
-                        disabled={currentPage === 1}
-                    >
-                        Previous
-                    </button>
-                    <span className="text-sm px-4">
-                        Page {currentPage} of {totalPages}
-                    </span>
-                    <button 
-                        type="button" 
-                        className="btn btn-outline-primary" 
-                        onClick={() => handlePageChange(currentPage + 1)} 
-                        disabled={currentPage >= totalPages}
-                    >
-                        Next
-                    </button>
-                </div>
-            )}
-
-            {/* Delete Confirmation Modal */}
-            {showDeleteConfirm && deletingDiagnosis && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={handleCloseDeleteConfirm}>
-                    <div className="bg-white dark:bg-[#0e1726] rounded-lg shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-between p-4 bg-danger text-white rounded-t-lg">
-                            <h5 className="text-lg font-semibold">Confirm Delete</h5>
-                            <button type="button" onClick={handleCloseDeleteConfirm} className="p-1.5 rounded hover:bg-white/20 transition-colors">
-                                <IconX className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="p-6">
-                            <p className="text-gray-700 dark:text-gray-300">Are you sure you want to delete this diagnosis?</p>
-                            <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                                <p className="font-medium">Rcopia ID: {deletingDiagnosis.rcopiaId}</p>
-                                {deletingDiagnosis.description && <p className="text-sm text-gray-500">{deletingDiagnosis.description}</p>}
-                                <p className="text-sm text-gray-500">Status: {capitalizeStatus(deletingDiagnosis.status)}</p>
-                            </div>
-                            <p className="mt-4 text-sm text-gray-500">This action cannot be undone.</p>
-                        </div>
-                        <div className="flex justify-end gap-3 p-4 border-t border-white-light dark:border-[#191e3a]">
-                            <button type="button" className="btn btn-outline-secondary" onClick={handleCloseDeleteConfirm} disabled={deleting}>Cancel</button>
-                            <button type="button" className="btn btn-danger" onClick={handleDelete} disabled={deleting}>
-                                {deleting ? 'Deleting...' : 'Delete Diagnosis'}
-                            </button>
-                        </div>
+                        </form>
                     </div>
                 </div>
-            )}
+            ) : null}
+
+            {showAdd ? (
+                <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
+                    <div
+                        className="max-h-[92vh] w-full overflow-y-auto rounded-t-xl bg-white p-4 dark:bg-[#0e1726] sm:max-w-lg sm:rounded-xl sm:p-6 sm:shadow-lg"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="add-problem-title"
+                    >
+                        <div className="mb-4 flex items-center justify-between gap-2">
+                            <h4 id="add-problem-title" className="text-lg font-semibold">
+                                Add problem
+                            </h4>
+                            <button type="button" className="p-1.5" onClick={closeAdd} aria-label="Close">
+                                <IconX className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <form onSubmit={(e) => void handleAdd(e)} className="space-y-4">
+                            <div>
+                                <label className="mb-1 block text-sm font-medium">ICD-10-CM code</label>
+                                {selectedCode ? (
+                                    <div className="flex items-start justify-between gap-2 rounded border border-white-light p-3 dark:border-[#191e3a]">
+                                        <div className="min-w-0">
+                                            <div className="font-semibold text-primary">{selectedCode.code}</div>
+                                            <div className="text-sm text-gray-700 dark:text-gray-300">
+                                                {selectedCode.description}
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="inline-flex h-8 items-center rounded-md border border-danger px-2 text-xs font-semibold text-danger"
+                                            onClick={() => setSelectedCode(null)}
+                                        >
+                                            Change
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <input
+                                            type="text"
+                                            className="form-input w-full"
+                                            placeholder="Search code or description..."
+                                            value={icdQuery}
+                                            onChange={(e) => setIcdQuery(e.target.value)}
+                                            autoComplete="off"
+                                        />
+                                        {icdSearching ? (
+                                            <p className="mt-2 text-xs text-gray-500">Searching...</p>
+                                        ) : null}
+                                        {icdHits.length > 0 ? (
+                                            <ul className="mt-2 max-h-48 overflow-y-auto rounded border border-white-light dark:border-[#191e3a]">
+                                                {icdHits.map((hit) => (
+                                                    <li key={hit.code}>
+                                                        <button
+                                                            type="button"
+                                                            className="w-full px-3 py-2 text-left text-sm hover:bg-primary/10"
+                                                            onClick={() => {
+                                                                setSelectedCode(hit);
+                                                                setIcdQuery('');
+                                                                setIcdHits([]);
+                                                            }}
+                                                        >
+                                                            <span className="font-medium text-primary">{hit.code}</span>
+                                                            <span className="ml-2 text-gray-700 dark:text-gray-300">
+                                                                {hit.description}
+                                                            </span>
+                                                        </button>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        ) : icdQuery.trim() && !icdSearching ? (
+                                            <p className="mt-2 text-xs text-gray-500">No matching codes</p>
+                                        ) : null}
+                                    </>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <div>
+                                    <label className="mb-1 block text-sm font-medium">Chronicity</label>
+                                    <select
+                                        className="form-select w-full"
+                                        value={chronicity}
+                                        onChange={(e) => setChronicity(e.target.value as ProblemChronicity | '')}
+                                    >
+                                        <option value="">Unspecified</option>
+                                        <option value="acute">Acute</option>
+                                        <option value="chronic">Chronic</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-sm font-medium">Onset date</label>
+                                    <input
+                                        type="date"
+                                        className="form-input w-full"
+                                        value={onsetDate}
+                                        onChange={(e) => setOnsetDate(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                                <button
+                                    type="button"
+                                    className="inline-flex h-9 items-center justify-center rounded-lg border border-primary px-3.5 text-sm font-semibold text-primary transition hover:bg-primary hover:text-white"
+                                    onClick={closeAdd}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+                                    disabled={!selectedCode || saving}
+                                >
+                                    {saving ? 'Saving...' : 'Save problem'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            ) : null}
         </div>
     );
 };

@@ -653,9 +653,9 @@ export const patientDataAPI = {
   getAllMedicationList: (rcopiaID: string) =>
     api.get(`/Patient/getAllMedicationList?rcopiaID=${rcopiaID}`),
   
-  // Diagnoses/Problems
-  getAllDiagnosesList: (rcopiaID: string) =>
-    api.get(`/Patient/getAllDiagnosesList?rcopiaID=${rcopiaID}`),
+  // Diagnoses/Problems — prefer services/problemsApi.ts for new code
+  getAllDiagnosesList: (patientId: string) =>
+    api.get(`/api/patients/${encodeURIComponent(patientId)}/problems`),
   
   // Prescriptions
   getAllPrescriptionList: (rcopiaID: string) =>

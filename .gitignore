@@ -29,3 +29,9 @@ dist-ssr
 # Backend (local database + secrets)
 backend/.env
 backend/.pgdata
+
+# ICD-10-CM official extracts (large; download via seed script / README)
+backend/data/icd10/*.txt
+backend/data/icd10/*.zip
+backend/data/icd10/*.pdf
+!backend/data/icd10/README.md

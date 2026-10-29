@@ -15,18 +15,11 @@ export const healthMetricsAPI = {
     getLatest: (params?: Record<string, any>) => api.get('/api/health/metrics/latest', { params }),
 };
 
-// --- Conditions ---
+// --- Conditions (legacy chronic-care paths; medical problem list uses problemsApi.ts) ---
 export const healthConditionsAPI = {
     create: (data: Record<string, any>) => api.post('/api/health/conditions', data),
-
-    // getByPatient: (patientId: string) =>
-    //   api.get(`/api/health/conditions/patient/${patientId}`),
-
-    // NEW API - Using the external endpoint
-    getByPatient: (patientId: string) => api.get(`/Patient/getAllDiagnosesList?rcopiaID=${patientId}`),
-
+    getByPatient: (patientId: string) => api.get(`/api/health/conditions/patient/${patientId}`),
     update: (id: string, data: Record<string, any>) => api.put(`/api/health/conditions/${id}`, data),
-
     delete: (id: string) => api.delete(`/api/health/conditions/${id}`),
 };
 

@@ -1498,3 +1498,96 @@ test('eligibility: payer search gated on Stedi, inline check validates, persists
     assert.deepEqual((await call('GET', `/Eligibility/historyByPatient/${p.id}`, { token: other.token })).body.data, []);
     assert.equal((await call('GET', `/Eligibility/getById/${saved.body.data.primary.id}`, { token: other.token })).status, 404);
 });
+
+test('problem list / ICD-10: search, CRUD, status lifecycle, roles, tenant isolation', async () => {
+    // Catalog rows for this test only (full CMS import is via db:seed:icd10).
+    await pool.query(
+        `INSERT INTO icd10_codes (code, description, billable, effective_year) VALUES
+            ('E11.9', 'Type 2 diabetes mellitus without complications', true, 2026),
+            ('I10', 'Essential (primary) hypertension', true, 2026),
+            ('J18.9', 'Pneumonia, unspecified organism', true, 2026)
+         ON CONFLICT (code) DO UPDATE SET description = EXCLUDED.description`,
+    );
+
+    const a = await newTenant('prob');
+    const physician = await addUser(a, 'probmd', 'physician');
+    const nurse = await addUser(a, 'probnurse', 'nurse');
+    const billing = await addUser(a, 'probbill', 'billing');
+    const tk = a.token;
+
+    const emptySearch = await call('GET', '/api/icd10/search?q=', { token: tk });
+    assert.equal(emptySearch.status, 200);
+    assert.deepEqual(emptySearch.body.data, []);
+
+    const search = await call('GET', '/api/icd10/search?q=diabetes', { token: tk });
+    assert.equal(search.status, 200);
+    assert.ok(search.body.data.some((r) => r.code === 'E11.9'));
+
+    const codeSearch = await call('GET', '/api/icd10/search?q=I10', { token: tk });
+    assert.ok(codeSearch.body.data.some((r) => r.code === 'I10'));
+
+    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Pat', lastName: 'Problem' } })).body.data;
+    const otherTenant = await newTenant('probB');
+    const foreignPatient = (await call('POST', '/Patient/createPatient', { token: otherTenant.token, body: { firstName: 'X', lastName: 'Y' } })).body.data;
+
+    assert.equal((await call('POST', `/api/patients/${p.id}/problems`, { token: billing.token, body: { icd10Code: 'E11.9' } })).status, 403);
+
+    const badCode = await call('POST', `/api/patients/${p.id}/problems`, { token: physician.token, body: { icd10Code: 'NOTAREAL' } });
+    assert.equal(badCode.status, 400);
+
+    const createdDx = await call('POST', `/api/patients/${p.id}/problems`, {
+        token: physician.token,
+        body: { icd10Code: 'E11.9', chronicity: 'chronic', onsetDate: '2020-01-15' },
+    });
+    assert.equal(createdDx.status, 201, JSON.stringify(createdDx.body));
+    assert.equal(createdDx.body.data.icd10Code, 'E11.9');
+    assert.equal(createdDx.body.data.status, 'active');
+    assert.equal(createdDx.body.data.chronicity, 'chronic');
+    assert.equal(createdDx.body.data.notedBy, physician.id);
+    const problemId = createdDx.body.data.id;
+
+    const dup = await call('POST', `/api/patients/${p.id}/problems`, { token: nurse.token, body: { icd10Code: 'E11.9' } });
+    assert.equal(dup.status, 409);
+
+    await call('POST', `/api/patients/${p.id}/problems`, { token: nurse.token, body: { icd10Code: 'I10', chronicity: 'chronic' } });
+    await call('POST', `/api/patients/${p.id}/problems`, { token: nurse.token, body: { icd10Code: 'J18.9', chronicity: 'acute' } });
+
+    const activeList = await call('GET', `/api/patients/${p.id}/problems`, { token: tk });
+    assert.equal(activeList.status, 200);
+    assert.equal(activeList.body.data.length, 3);
+    assert.equal(activeList.body.data[0].chronicity, 'chronic');
+    // Active chronic before active acute
+    const firstAcuteIdx = activeList.body.data.findIndex((r) => r.chronicity === 'acute');
+    const lastChronicIdx = activeList.body.data.map((r) => r.chronicity).lastIndexOf('chronic');
+    assert.ok(lastChronicIdx < firstAcuteIdx);
+
+    const resolved = await call('PATCH', `/api/problems/${problemId}`, { token: physician.token, body: { status: 'resolved' } });
+    assert.equal(resolved.status, 200);
+    assert.equal(resolved.body.data.status, 'resolved');
+    assert.ok(resolved.body.data.resolvedDate);
+
+    const afterResolve = await call('GET', `/api/patients/${p.id}/problems`, { token: tk });
+    assert.equal(afterResolve.body.data.length, 2);
+    assert.ok(!afterResolve.body.data.some((r) => r.id === problemId));
+
+    const withHistory = await call('GET', `/api/patients/${p.id}/problems?includeResolved=true`, { token: tk });
+    assert.ok(withHistory.body.data.some((r) => r.id === problemId && r.status === 'resolved'));
+
+    const badTransition = await call('PATCH', `/api/problems/${problemId}`, { token: physician.token, body: { status: 'entered_in_error' } });
+    assert.equal(badTransition.status, 200);
+    const errMarked = badTransition.body.data;
+    assert.equal(errMarked.status, 'entered_in_error');
+
+    const historyAfterError = await call('GET', `/api/patients/${p.id}/problems?includeResolved=true`, { token: tk });
+    assert.ok(!historyAfterError.body.data.some((r) => r.id === problemId), 'entered_in_error excluded from clinical views');
+
+    const revive = await call('PATCH', `/api/problems/${problemId}`, { token: physician.token, body: { status: 'active' } });
+    assert.equal(revive.status, 400, 'entered_in_error is terminal');
+
+    assert.equal((await call('GET', `/api/patients/${foreignPatient.id}/problems`, { token: tk })).status, 404);
+    assert.equal((await call('POST', `/api/patients/${foreignPatient.id}/problems`, { token: physician.token, body: { icd10Code: 'I10' } })).status, 404);
+    assert.equal((await call('PATCH', `/api/problems/${problemId}`, { token: otherTenant.token, body: { status: 'inactive' } })).status, 404);
+
+    // NANDA search still works (regression).
+    assert.equal((await call('GET', '/api/CarePlan/nanda/search?q=falls', { token: tk })).status, 200);
+});

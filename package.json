@@ -11,6 +11,7 @@
         "install:all": "npm install && npm --prefix frontend install && npm --prefix backend install",
         "db:migrate": "npm --prefix backend run db:migrate",
         "db:seed": "npm --prefix backend run db:seed",
+        "db:seed:icd10": "npm --prefix backend run db:seed:icd10",
         "db:setup": "npm --prefix backend run db:setup",
         "test:backend": "npm --prefix backend test",
         "build": "npm --prefix frontend run build",

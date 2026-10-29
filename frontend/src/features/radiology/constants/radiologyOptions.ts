@@ -59,19 +59,11 @@ export const TRANSPORT_OPTIONS = [
     { label: 'Yes', value: 'true' },
 ];
 
-/** Common ICD-10-CM codes for imaging indications (type-ahead source). */
-export const COMMON_ICD10_SUGGESTIONS: { code: string; label: string }[] = [
-    { code: 'R07.9', label: 'Chest pain, unspecified' },
-    { code: 'J18.9', label: 'Pneumonia, unspecified organism' },
-    { code: 'S72.001A', label: 'Fracture of unspecified part of neck of right femur, initial' },
-    { code: 'M54.5', label: 'Low back pain' },
-    { code: 'R10.9', label: 'Unspecified abdominal pain' },
-    { code: 'I63.9', label: 'Cerebral infarction, unspecified' },
-    { code: 'C50.911', label: 'Malignant neoplasm of unspecified site of right female breast' },
-    { code: 'K35.80', label: 'Unspecified acute appendicitis' },
-    { code: 'N18.9', label: 'Chronic kidney disease, unspecified' },
-    { code: 'Z87.891', label: 'Personal history of nicotine dependence' },
-];
+/**
+ * Offline fallback only — production typeahead uses GET /api/icd10/search.
+ * Kept for offline/dev when the catalog is empty; not the authoritative catalog.
+ */
+export const COMMON_ICD10_SUGGESTIONS: { code: string; label: string }[] = [];
 
 export function toSelectOptions(values: string[]): { label: string; value: string }[] {
     return values.map((v) => ({ label: v, value: v }));

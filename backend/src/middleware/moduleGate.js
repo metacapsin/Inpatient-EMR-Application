@@ -33,6 +33,10 @@ const MODULE_RULES = [
     { module: 'patients', test: (p) => /^\/api\/(CarePlan|IORecord|NursingFlowsheet|HAIEvent)(\/|$)/.test(p) },
     { module: 'patients', test: (p) => /^\/api\/(Consent|PatientRights)(\/|$)/.test(p) },
     { module: 'patients', test: (p) => /^\/(lab-orders|LabDetails)(\/|$)/.test(p) },
+    // Problem list under /api/patients/:id/problems (must not match medication paths above).
+    { module: 'patients', test: (p) => /^\/api\/patients\/[^/]+\/problems\/?$/.test(p) },
+    { module: 'patients', test: (p) => /^\/api\/problems(\/|$)/.test(p) },
+    { module: 'patients', test: (p) => /^\/api\/icd10(\/|$)/.test(p) },
 ];
 
 export function resolveModule(path) {

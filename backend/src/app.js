@@ -29,6 +29,7 @@ import { bedReservationsRouter } from './routes/bedReservations.js';
 import { evsRouter } from './routes/evs.js';
 import { transferRequestsRouter } from './routes/transferRequests.js';
 import { eligibilityRouter } from './routes/eligibility.js';
+import { problemsRouter } from './routes/problems.js';
 
 export function createApp() {
     const app = express();
@@ -80,7 +81,7 @@ export function createApp() {
     app.use(authRouter); // authenticates itself
     app.use(requireAuth);
     app.use(requireModuleGate);
-    for (const r of [facilityRouter, tenantProfileRouter, patientsRouter, adtRouter, patientDataRouter, inpatientDocsRouter, consentRouter, medicationRouter, revenueRouter, dashboardRouter, appointmentsRouter, recordsRouter, staffingRouter, clinicalOpsRouter, ordersRouter, bedReservationsRouter, evsRouter, transferRequestsRouter, eligibilityRouter]) {
+    for (const r of [facilityRouter, tenantProfileRouter, patientsRouter, adtRouter, patientDataRouter, inpatientDocsRouter, consentRouter, medicationRouter, revenueRouter, dashboardRouter, appointmentsRouter, recordsRouter, staffingRouter, clinicalOpsRouter, ordersRouter, bedReservationsRouter, evsRouter, transferRequestsRouter, eligibilityRouter, problemsRouter]) {
         app.use(r);
     }
 

@@ -179,7 +179,12 @@ const HealthSummary: React.FC = () => {
                   <FaStethoscope className="w-5 h-5 text-primary" />
                 </div>
                 <h4 className="font-semibold">Conditions</h4>
-                <Link to="/app/diagnoses" className="ml-auto text-sm text-primary hover:underline"><span>View all</span></Link>
+                <Link
+                  to={patientId ? `/app/facesheet/${encodeURIComponent(patientId)}/diagnoses` : '/app/patients/list'}
+                  className="ml-auto text-sm text-primary hover:underline"
+                >
+                  <span>View all</span>
+                </Link>
               </Box>
               {conditions.length > 0 ? (
               <ul className="space-y-2 text-sm">

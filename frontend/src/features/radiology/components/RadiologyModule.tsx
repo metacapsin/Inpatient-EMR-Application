@@ -5,7 +5,7 @@ import { TabView, TabPanel } from 'primereact/tabview';
 import type { IRootState } from '../../../store';
 import { selectAdtEncounter } from '../../../store/adtEncounterSlice';
 import { useFacesheetChartLayout } from '../../../hooks/useFacesheetChartLayout';
-import { healthConditionsAPI } from '../../../services/healthMonitoringService';
+import { listPatientProblems } from '../../../services/problemsApi';
 import { useRadiologyData } from '../hooks/useRadiologyData';
 import { resolveOrderedBy } from '../utils/resolveOrderedBy';
 import type { Icd10Option } from './Icd10MultiTypeahead';
@@ -75,28 +75,12 @@ export function RadiologyModule({ patientId, encounterIdProp }: RadiologyModuleP
     useEffect(() => {
         if (!patientId.trim()) return;
         let cancelled = false;
-        void healthConditionsAPI
-            .getByPatient(patientId)
-            .then((res) => {
+        void listPatientProblems(patientId)
+            .then((list) => {
                 if (cancelled) return;
-                const raw = res.data?.data ?? res.data;
-                const list = Array.isArray(raw) ? raw : [];
-                const opts: Icd10Option[] = [];
-                for (const item of list) {
-                    let code = String(item?.icdCode ?? item?.code ?? item?.diagnosisCode ?? '').trim();
-                    let label = String(item?.description ?? item?.name ?? '').trim();
-                    if (item?.ICD10 && Array.isArray(item.ICD10) && item.ICD10[0]) {
-                        const icd = item.ICD10[0] as Record<string, unknown>;
-                        code = String(
-                            Array.isArray(icd.Code) ? icd.Code[0] : icd.Code ?? code
-                        ).trim();
-                        label = String(
-                            Array.isArray(icd.Description) ? icd.Description[0] : icd.Description ?? label
-                        ).trim();
-                    }
-                    if (code) opts.push({ code, label: label || code });
-                }
-                setIcdSuggestions(opts);
+                setIcdSuggestions(
+                    list.map((p) => ({ code: p.icd10Code, label: p.icd10Description || p.icd10Code }))
+                );
             })
             .catch(() => {
                 if (!cancelled) setIcdSuggestions([]);

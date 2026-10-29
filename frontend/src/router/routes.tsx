@@ -36,7 +36,7 @@ const QualityMeasuresPage = lazy(() => import('../pages/reports/QualityMeasuresP
 const Demographic = lazy(() => import('../pages/patient/Demographic'));
 const Vitals = lazy(() => import('../pages/patient/Vitals'));
 const History = lazy(() => import('../pages/patient/History'));
-const Diagnoses = lazy(() => import('../pages/patient/Diagnoses'));
+const DiagnosesLegacyRedirect = lazy(() => import('../pages/patient/DiagnosesLegacyRedirect'));
 const Medications = lazy(() => import('../pages/patient/Medications'));
 const Prescriptions = lazy(() => import('../pages/patient/Prescriptions'));
 const Allergies = lazy(() => import('../pages/patient/Allergies'));
@@ -272,7 +272,7 @@ const routes = [
     },
     {
         path: '/app/diagnoses',
-        element: guard(<Diagnoses />),
+        element: guard(<DiagnosesLegacyRedirect />),
         layout: 'default' as const,
     },
     {
