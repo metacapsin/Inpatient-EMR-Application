@@ -1,6 +1,6 @@
 import type { EvsCleanType, EvsStatus } from '../constants/evs';
 
-/** Temporary frontend fields until EVS backend is live. */
+/** EVS fields for one bed (mirrors backend evs.js queueOut). */
 export interface EvsBedFields {
     evsStatus: EvsStatus;
     assignedHousekeeperId?: string;
@@ -18,6 +18,7 @@ export interface EvsBedFields {
 export interface EvsHousekeeper {
     id: string;
     name: string;
+    role?: string;
 }
 
 export interface EvsQueueItem extends EvsBedFields {
@@ -28,6 +29,7 @@ export interface EvsQueueItem extends EvsBedFields {
     wardName: string;
     dischargedPatientName?: string;
     dischargeTime?: string;
+    encounterId?: string;
 }
 
 export interface EvsQueueMetrics {
@@ -36,6 +38,8 @@ export interface EvsQueueMetrics {
     bedsDirty: number;
     bedsInCleaning: number;
     bedsAvailable: number;
+    bedsPendingInspection?: number;
+    bedsCleanedToday?: number;
 }
 
 export interface AssignHousekeeperPayload {

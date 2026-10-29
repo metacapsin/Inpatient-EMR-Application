@@ -8,6 +8,7 @@ import { formatAdtUserMessage } from '../../services/adt.service';
 import { admitPatient, transferPatient } from '../../services/adtWorkflowService';
 import { fetchEmrBedList } from '../../services/emrBeds.service';
 import { bedOptionsForSelect } from '../../lib/adtBedPicker';
+import { PlacementWarningsBanner } from './PlacementWarningsBanner';
 import type { AdmissionType } from '../../types/adt';
 import type { AppDispatch, IRootState } from '../../store';
 import { fetchFacesheetPatient } from '../../store/facesheetSlice';
@@ -274,6 +275,11 @@ export function AdtPatientWorkflowModal({
                                 appendMenuToBody
                             />
                         </div>
+                        {admitTargetBedId ? (
+                            <div className="sm:col-span-2">
+                                <PlacementWarningsBanner bedId={admitTargetBedId} patientId={patientId.trim()} />
+                            </div>
+                        ) : null}
                         <NewDropdown
                             id="modal-adt-admission-type"
                             label="Admission type (optional)"
@@ -306,6 +312,11 @@ export function AdtPatientWorkflowModal({
                                 disabled={busy || bedsQuery.isLoading || transferBlocked}
                             />
                         </div>
+                        {transferTargetBedId ? (
+                            <div className="sm:col-span-2">
+                                <PlacementWarningsBanner bedId={transferTargetBedId} patientId={patientId.trim()} encounterId={session?.encounterId ?? undefined} />
+                            </div>
+                        ) : null}
                         <div className="space-y-2 sm:col-span-2">
                             <label className="text-sm font-medium text-gray-800 dark:text-gray-200" htmlFor="modal-transfer-reason">
                                 Reason (optional)

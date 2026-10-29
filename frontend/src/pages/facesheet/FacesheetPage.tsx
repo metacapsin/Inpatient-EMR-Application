@@ -35,6 +35,7 @@ const CarePlanFacesheetRedirect = lazy(() =>
 const DietaryTab = lazy(() => import('./DietaryTab'));
 const InfectionControlTab = lazy(() => import('./InfectionControlTab'));
 const Radiology = lazy(() => import('../patient/Radiology'));
+const UnifiedOrders = lazy(() => import('../patient/UnifiedOrders'));
 const Consents = lazy(() => import('../patient/Consents'));
 const PriorAuth = lazy(() => import('../patient/PriorAuth'));
 const Invoices = lazy(() => import('../patient/Invoices'));
@@ -140,7 +141,7 @@ const FacesheetPage = () => {
                         <Route path="labs" element={<Labs />} />
                         <Route path="lab-orders" element={<LabOrders />} />
                         <Route path="radiology" element={<Radiology />} />
-                        <Route path="clinical/unified-orders" element={<Navigate to="../../radiology" replace />} />
+                        <Route path="clinical/unified-orders" element={<UnifiedOrders />} />
                         <Route path="documents" element={<Documents />} />
                         <Route path="consents" element={<Consents />} />
                         <Route path="notes" element={<Notes />} />

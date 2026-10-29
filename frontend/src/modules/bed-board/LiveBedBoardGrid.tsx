@@ -39,6 +39,52 @@ function StatusBadge({ status }: { status: string }) {
     );
 }
 
+function fmtTime(ts: string): string {
+    try {
+        const d = parseISO(ts);
+        return isValid(d) ? format(d, 'HH:mm') : ts;
+    } catch {
+        return ts;
+    }
+}
+
+/** Hold / isolation-room / cleaning context shown under the status badge. */
+function BedFlags({ row }: { row: LiveBedBoardRow }) {
+    const flags: { key: string; cls: string; text: string; title?: string }[] = [];
+    if (row.reservation) {
+        flags.push({
+            key: 'hold',
+            cls: 'border-amber-200/90 bg-amber-50/90 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100',
+            text: `Held for ${row.reservation.patientName ?? 'patient'} · until ${fmtTime(row.reservation.expiresAt)}`,
+            title: `Expires ${row.reservation.expiresAt}`,
+        });
+    }
+    if (row.cleaning && row.cleaning.evsStatus !== 'clean') {
+        flags.push({
+            key: 'clean',
+            cls: 'border-red-200/90 bg-red-50/90 text-red-900 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-100',
+            text: `${row.cleaning.cleaningType ?? 'Routine'} clean · ${row.cleaning.evsStatus.replace(/_/g, ' ')}`,
+        });
+    }
+    if (row.room?.isolationRequired) {
+        flags.push({
+            key: 'iso',
+            cls: 'border-violet-200/90 bg-violet-50/90 text-violet-900 dark:border-violet-900/40 dark:bg-violet-950/30 dark:text-violet-100',
+            text: `Isolation room${row.room.isolationType ? ` · ${row.room.isolationType}` : ''}`,
+        });
+    }
+    if (!flags.length) return null;
+    return (
+        <div className="mt-1 flex flex-wrap gap-1">
+            {flags.map((f) => (
+                <span key={f.key} title={f.title} className={`inline-flex max-w-full items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-tight ${f.cls}`}>
+                    <span className="truncate">{f.text}</span>
+                </span>
+            ))}
+        </div>
+    );
+}
+
 interface LiveBedBoardGridProps {
     rows: LiveBedBoardRow[];
     loading: boolean;
@@ -121,6 +167,7 @@ export function LiveBedBoardGrid({ rows, loading }: LiveBedBoardGridProps) {
                                         <StatusBadge status={row.bed.bedStatus} />
                                     </div>
                                 </div>
+                                <BedFlags row={row} />
                                 <dl className="mt-3 space-y-1 text-xs text-gray-600 dark:text-gray-300">
                                     <div className="flex justify-between gap-2">
                                         <dt className="font-bold text-dark dark:text-gray-200">Patient</dt>
@@ -272,6 +319,7 @@ export function LiveBedBoardGrid({ rows, loading }: LiveBedBoardGridProps) {
                                         <td className="px-2.5 py-1.5 align-middle font-medium text-gray-900 dark:text-white">{row.bed.label}</td>
                                         <td className="px-2.5 py-1.5 align-middle" aria-label={`Bed status ${row.bed.bedStatus}`}>
                                             <StatusBadge status={row.bed.bedStatus} />
+                                            <BedFlags row={row} />
                                         </td>
                                         <td className="max-w-[180px] px-2.5 py-1.5 align-middle text-gray-800 dark:text-gray-200">
                                             <div className="flex min-w-0 flex-wrap items-center gap-1.5">

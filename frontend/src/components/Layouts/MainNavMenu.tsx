@@ -10,6 +10,8 @@ import IconMenuNotes from '../Icon/Menu/IconMenuNotes';
 import IconMenuApps from '../Icon/Menu/IconMenuApps';
 import IconMenuPages from '../Icon/Menu/IconMenuPages';
 import { toggleSidebar } from '../../store/themeConfigSlice';
+import { useTenantModules } from '../../hooks/useTenantModules';
+import type { MainNavLink } from './mainNavConfig';
 import {
     APPOINTMENT_SUB_LINKS,
     CLINICAL_SUB_LINKS,
@@ -47,6 +49,8 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
     const { t } = useTranslation();
     const { pathname } = useLocation();
     const dispatch = useDispatch();
+    const { isModuleEnabled } = useTenantModules();
+    const visible = (links: readonly MainNavLink[]) => links.filter((l) => !l.module || isModuleEnabled(l.module));
 
     const [sidebarSections, setSidebarSections] = useState<Record<string, boolean>>({
         appointments: false,
@@ -96,6 +100,8 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
                     />
 
                     {MAIN_NAV_DROPDOWN_GROUPS.map((group) => {
+                        const items = visible(group.items);
+                        if (items.length === 0) return null;
                         const Icon = DROPDOWN_ICONS[group.id as keyof typeof DROPDOWN_ICONS];
                         const minWidth =
                             group.id === 'clinical' ? 'min-w-[260px]' : group.id === 'patients' ? 'min-w-[200px]' : 'min-w-[210px]';
@@ -103,7 +109,7 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
                             <TopNavDropdown
                                 key={group.id}
                                 label={group.label}
-                                items={group.items}
+                                items={items}
                                 sectionActive={isDropdownGroupActive(pathname, group)}
                                 icon={<Icon className={navIconClass} />}
                                 minWidthClass={minWidth}
@@ -127,42 +133,46 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
         id: string,
         label: string,
         Icon: typeof IconMenuUsers,
-        items: typeof PATIENT_SUB_LINKS,
-    ) => (
-        <li className="menu nav-item" key={id}>
-            <button
-                type="button"
-                className={`group ${sidebarSections[id] ? 'active' : ''}`}
-                onClick={() => toggleSidebarSection(id)}
-                aria-expanded={sidebarSections[id]}
-            >
-                <div className="flex w-full items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center">
-                        <Icon className="shrink-0 text-black/50 group-hover:!text-primary dark:text-white/50" />
-                        <span className={`ltr:pl-3 rtl:pr-3 ${linkClass}`}>{label}</span>
+        allItems: typeof PATIENT_SUB_LINKS,
+    ) => {
+        const items = visible(allItems);
+        if (items.length === 0) return null;
+        return (
+            <li className="menu nav-item" key={id}>
+                <button
+                    type="button"
+                    className={`group ${sidebarSections[id] ? 'active' : ''}`}
+                    onClick={() => toggleSidebarSection(id)}
+                    aria-expanded={sidebarSections[id]}
+                >
+                    <div className="flex w-full items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center">
+                            <Icon className="shrink-0 text-black/50 group-hover:!text-primary dark:text-white/50" />
+                            <span className={`ltr:pl-3 rtl:pr-3 ${linkClass}`}>{label}</span>
+                        </div>
+                        <IconCaretDown
+                            className={`h-4 w-4 shrink-0 text-black/40 transition-transform dark:text-white/40 ${sidebarSections[id] ? 'rotate-180' : ''}`}
+                        />
                     </div>
-                    <IconCaretDown
-                        className={`h-4 w-4 shrink-0 text-black/40 transition-transform dark:text-white/40 ${sidebarSections[id] ? 'rotate-180' : ''}`}
-                    />
-                </div>
-            </button>
-            {sidebarSections[id] && (
-                <ul className="sub-menu">
-                    {items.map((item) => (
-                        <li key={item.to}>
-                            <NavLink
-                                to={item.to}
-                                title={item.title}
-                                onClick={closeMobileSidebar}
-                            >
-                                {item.label}
-                            </NavLink>
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </li>
-    );
+                </button>
+                {sidebarSections[id] && (
+                    <ul className="sub-menu">
+                        {items.map((item) => (
+                            <li key={item.to}>
+                                <NavLink
+                                    to={item.to}
+                                    title={item.title}
+                                    onClick={closeMobileSidebar}
+                                >
+                                    {item.label}
+                                </NavLink>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </li>
+        );
+    };
 
     return (
         <ul className="relative space-y-0.5 p-4 py-0 font-semibold">

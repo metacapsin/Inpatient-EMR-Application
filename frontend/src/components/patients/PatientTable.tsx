@@ -20,7 +20,7 @@ interface PatientTableProps {
 
 /** Column hints for `table-fixed` so the grid fits the viewport without horizontal scroll. */
 function PatientTableColGroup() {
-    const widths = ['22%', '10%', '5%', '9%', '16%', '14%', '12%', '12%'] as const;
+    const widths = ['18%', '12%', '10%', '5%', '8%', '14%', '12%', '11%', '10%'] as const;
     return (
         <colgroup>
             {widths.map((w, i) => (
@@ -38,7 +38,7 @@ function TableSkeleton() {
         <>
             {Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i}>
-                    <td className="px-2.5 py-2" colSpan={8}>
+                    <td className="px-2.5 py-2" colSpan={9}>
                         <div className="flex min-w-0 items-center gap-2">
                             <div className="h-8 w-8 shrink-0 animate-pulse rounded-md bg-gray-200 dark:bg-gray-700" />
                             <div className="min-w-0 flex-1 space-y-1.5">
@@ -94,6 +94,7 @@ const PatientTable = ({
     const headerRow = (
         <tr>
             <SortableHeader isSortable={false}>Patient</SortableHeader>
+            <SortableHeader {...headerProps('mrn')}>MRN</SortableHeader>
             <SortableHeader {...headerProps('dob')}>DOB / Age</SortableHeader>
             <SortableHeader {...headerProps('gender')}>Gender</SortableHeader>
             <SortableHeader {...headerProps('status')}>Status</SortableHeader>
@@ -142,7 +143,7 @@ const PatientTable = ({
                 <DesktopTableCard>
                     {tableShell(
                         <tr>
-                            <td colSpan={8} className="px-2.5 py-6 text-center text-xs text-gray-500 dark:text-gray-400">
+                            <td colSpan={9} className="px-2.5 py-6 text-center text-xs text-gray-500 dark:text-gray-400">
                                 No patients found.
                             </td>
                         </tr>

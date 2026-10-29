@@ -6,6 +6,8 @@ import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
 import { FaUser, FaCalendarCheck, FaHistory, FaShieldAlt } from 'react-icons/fa';
+import { Pencil } from 'lucide-react';
+import { PatientEligibilityCard } from '../../components/patients/PatientEligibilityCard';
 
 interface DemographicData {
   demographics?: any;
@@ -62,27 +64,20 @@ const Demographic: React.FC = () => {
       const response = await patientDataAPI.getPatientDemographics(patientId);
       if (response.data?.data) {
         const data = response.data.data;
+        // The backend returns the enriched flat patient (insurance / secondaryInsurance / emergencyContacts
+        // nested on it). A legacy `demographics` wrapper is still honoured if ever present.
+        const demo = data.demographics ?? data;
+        const withType = (ins: any) =>
+          ins && (ins.insuranceCompany || ins.insuranceType || ins.subscriberId)
+            ? { ...ins, insuranceType: ins.insuranceType || ins.insuranceCompany }
+            : {};
         setDemographicData({
-          demographics: data.demographics || {},
+          demographics: demo,
           additionalInformation: data.additionalInformation || {},
           pastAppointments: data.pastAppointments || [],
           futureAppointments: data.futureAppointments || [],
-        
-          insuranceDetails: {
-            ...data.demographics?.insurance,
-            insuranceType:
-              data.demographics?.insurance?.insuranceType ||
-              data.demographics?.insurance?.insuranceCompany ||
-              'Primary',
-          },
-        
-          secondaryInsuranceDetails: {
-            ...data.demographics?.secondaryInsurance,
-            insuranceType:
-              data.demographics?.secondaryInsurance?.insuranceType ||
-              data.demographics?.secondaryInsurance?.insuranceCompany ||
-              null,
-          },
+          insuranceDetails: withType(demo.insurance),
+          secondaryInsuranceDetails: withType(demo.secondaryInsurance),
         });
       }
     } catch (error: any) {
@@ -147,7 +142,7 @@ const Demographic: React.FC = () => {
     demographics.address2,
     demographics.city,
     demographics.state,
-    demographics.zip
+    demographics.zipCode ?? demographics.zip
   ]
     .filter(Boolean)
     .join(', ');
@@ -163,16 +158,25 @@ const Demographic: React.FC = () => {
     .filter(Boolean)
     .join(' ');
 
-  const sexDisplay = demographics.sex?.toLowerCase() === 'f' 
-    ? 'Female' 
-    : demographics.sex?.toLowerCase() === 'm' 
-    ? 'Male' 
+  const sexDisplay = demographics.sex?.toLowerCase() === 'f'
+    ? 'Female'
+    : demographics.sex?.toLowerCase() === 'm'
+    ? 'Male'
+    : demographics.sex?.toLowerCase() === 'o'
+    ? 'Other'
     : 'Unknown';
+
+  const emergencyContacts: any[] = Array.isArray(demographics.emergencyContacts) && demographics.emergencyContacts.length
+    ? demographics.emergencyContacts
+    : demographics.emergencyContact
+    ? [demographics.emergencyContact]
+    : [];
+  const yesNo = (v: unknown) => (v === true ? 'Yes' : v === false ? 'No' : '--');
 
   return (
     <div className={moduleRootClass}>
-        {/* Breadcrumb */}
-        <div className="mb-5">
+        {/* Breadcrumb + edit */}
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
           <ul className="flex items-center gap-2 text-sm">
             <li>
               <Link to="/app/patients/list" className="text-primary hover:underline">
@@ -182,6 +186,15 @@ const Demographic: React.FC = () => {
             <li>/</li>
             <li className="text-gray-900 dark:text-white font-medium">Demographic</li>
           </ul>
+          {routePatientId ? (
+            <Link
+              to={`/app/patients/${encodeURIComponent(routePatientId)}/edit`}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5"
+            >
+              <Pencil className="h-3.5 w-3.5" aria-hidden />
+              Edit demographics
+            </Link>
+          ) : null}
         </div>
 
         {/* Tabs */}
@@ -309,7 +322,7 @@ const Demographic: React.FC = () => {
                   </div>
                   <div>
                     <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Personal Email:</h4>
-                    <span className="text-gray-900 dark:text-white">{demographics.emailAddress || '--'}</span>
+                    <span className="text-gray-900 dark:text-white">{demographics.email || demographics.emailAddress || '--'}</span>
                   </div>
                   <div>
                     <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Country of Birth:</h4>
@@ -371,6 +384,20 @@ const Demographic: React.FC = () => {
                     <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Advanced Health Care Directive:</h4>
                     <span className="text-gray-900 dark:text-white">{demographics.advancedHealthCareDirective || '--'}</span>
                   </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Notice of Privacy Practices Signed:</h4>
+                    <span className="text-gray-900 dark:text-white">
+                      {demographics.noticeOfPrivacyPracticesDate ? formatDate(demographics.noticeOfPrivacyPracticesDate) : '--'}
+                    </span>
+                  </div>
+                  {demographics.sex?.toLowerCase() === 'f' && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Pregnant / Breastfeeding:</h4>
+                      <span className="text-gray-900 dark:text-white">
+                        {yesNo(demographics.pregnant)} / {yesNo(demographics.breastfeeding)}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -378,40 +405,40 @@ const Demographic: React.FC = () => {
             {/* Emergency Contact Section */}
             {demographics && (
               <div className="mt-8">
-                <h5 className="mb-4 font-semibold text-gray-900 dark:text-white">Emergency Contact</h5>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Contact Name:</h4>
-                    <span className="text-gray-900 dark:text-white">
-                      {demographics.emergencyContact?.contactName || '--'}
-                    </span>
+                <h5 className="mb-4 font-semibold text-gray-900 dark:text-white">Emergency Contacts</h5>
+                {emergencyContacts.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">No emergency contact on file.</p>
+                ) : (
+                  <div className="space-y-6">
+                    {emergencyContacts.map((c: any, idx: number) => (
+                      <div key={c.id || idx}>
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                          {c.rank === 'secondary' || idx === 1 ? 'Secondary contact' : 'Primary contact'}
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Contact Name:</h4>
+                            <span className="text-gray-900 dark:text-white">{c.contactName || '--'}</span>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Contact Phone:</h4>
+                            <span className="text-gray-900 dark:text-white">{c.contactPhone || '--'}</span>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Relationship to Patient:</h4>
+                            <span className="text-gray-900 dark:text-white">{c.relationshipToPatient || '--'}</span>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Address:</h4>
+                            <span className="text-gray-900 dark:text-white">
+                              {[c.street, c.emergencyCity, c.emergencyState, c.emergencyZipCode].filter(Boolean).join(', ') || '--'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Contact Phone:</h4>
-                    <span className="text-gray-900 dark:text-white">
-                      {demographics.emergencyContact?.contactPhone || '--'}
-                    </span>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Relationship to Patient:</h4>
-                    <span className="text-gray-900 dark:text-white">
-                      {demographics.emergencyContact?.relationshipToPatient || '--'}
-                    </span>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Address:</h4>
-                    <span className="text-gray-900 dark:text-white">
-                      {[
-                        demographics.emergencyContact?.street,
-                        demographics.emergencyContact?.emergencyCity,
-                        demographics.emergencyContact?.emergencyState,
-                        demographics.emergencyContact?.emergencyZipCode
-                      ]
-                        .filter(Boolean)
-                        .join(', ') || '--'}
-                    </span>
-                  </div>
-                </div>
+                )}
               </div>
             )}
           </div>
@@ -522,6 +549,14 @@ const Demographic: React.FC = () => {
         {/* Insurance Details Tab */}
         {activeTab === 'insurance' && (
           <div>
+            {routePatientId && demographicData.insuranceDetails?.insuranceType ? (
+              <PatientEligibilityCard
+                patientId={routePatientId}
+                patient={{ firstName: demographics.firstName, lastName: demographics.lastName, dOB: demographics.dOB, sex: demographics.sex }}
+                slot="primary"
+                insurance={demographicData.insuranceDetails}
+              />
+            ) : null}
             {demographicData.insuranceDetails?.insuranceType ? (
               <div className="space-y-6">
                 {/* Primary Insurance */}
@@ -562,12 +597,12 @@ const Demographic: React.FC = () => {
                           {demographicData.insuranceDetails?.subscriberId || '--'}
                         </span>
                       </div>
-                      {/* <div>
+                      <div>
                         <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Insurance Plan:</h4>
                         <span className="text-gray-900 dark:text-white">
                           {demographicData.insuranceDetails?.insurancePlan || '--'}
                         </span>
-                      </div> */}
+                      </div>
                       <div>
                         <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Medical Group / IPA:</h4>
                         <span className="text-gray-900 dark:text-white">
@@ -677,7 +712,15 @@ const Demographic: React.FC = () => {
                 </div>
 
                 {/* Secondary Insurance */}
-                {demographicData.secondaryInsuranceDetails?.insuranceType && (
+                {routePatientId && demographicData.secondaryInsuranceDetails?.insuranceType ? (
+              <PatientEligibilityCard
+                patientId={routePatientId}
+                patient={{ firstName: demographics.firstName, lastName: demographics.lastName, dOB: demographics.dOB, sex: demographics.sex }}
+                slot="secondary"
+                insurance={demographicData.secondaryInsuranceDetails}
+              />
+            ) : null}
+            {demographicData.secondaryInsuranceDetails?.insuranceType && (
                   <div className="mt-6 pt-6 border-t border-white-light dark:border-[#191e3a]">
                     <div className="border-b border-white-light dark:border-[#191e3a] pb-2 mb-4">
                       <h5 className="text-gray-700 dark:text-gray-300 font-semibold">

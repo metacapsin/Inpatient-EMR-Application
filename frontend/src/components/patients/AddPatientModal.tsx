@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import api from '../../services/api';
+import { Link } from 'react-router-dom';
+import { createPatient, type PatientRegistrationPayload } from '../../services/patient.service';
 
 interface AddPatientModalProps {
     open: boolean;
@@ -61,9 +62,8 @@ export default function AddPatientModal({ open, onClose, onCreated }: AddPatient
         if (!validate()) return;
         setSaving(true);
         try {
-            // Empty optional fields are omitted so the API stores NULL instead of empty strings.
-            const payload = Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v.trim()]).filter(([, v]) => v !== ''));
-            await api.post('/Patient/createPatient', payload);
+            // createPatient() drops empty optional fields so the API stores NULL instead of empty strings.
+            await createPatient(form as unknown as PatientRegistrationPayload);
             toast.success('Patient added.');
             setForm(EMPTY);
             setErrors({});
@@ -93,7 +93,16 @@ export default function AddPatientModal({ open, onClose, onCreated }: AddPatient
                 className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-5 shadow-2xl dark:bg-[#141210]"
             >
                 <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-base font-semibold text-gray-900 dark:text-white">Add Patient</h2>
+                    <div>
+                        <h2 className="text-base font-semibold text-gray-900 dark:text-white">Quick Add Patient</h2>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                            Identity and contact only.{' '}
+                            <Link to="/app/patients/register" onClick={close} className="font-medium text-primary hover:underline">
+                                Use full registration
+                            </Link>{' '}
+                            for insurance, emergency contacts and demographics.
+                        </p>
+                    </div>
                     <button type="button" onClick={close} className="rounded-md p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10" aria-label="Close">
                         <X className="h-4 w-4" />
                     </button>

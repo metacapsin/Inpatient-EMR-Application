@@ -17,6 +17,26 @@ export type LiveBedBoardRoom = {
     id: string;
     name: string;
     wardId?: string;
+    roomType?: string;
+    /** Room-level isolation flag (negative pressure / private isolation room). */
+    isolationRequired?: boolean;
+    isolationType?: string | null;
+};
+
+/** Active timed hold on a bed (bed_reservations). */
+export type LiveBedBoardReservation = {
+    id: string;
+    patientId: string | null;
+    patientName: string | null;
+    expiresAt: string;
+};
+
+/** Open housekeeping job on a bed (evs_queue). */
+export type LiveBedBoardCleaning = {
+    id: string;
+    evsStatus: string;
+    cleaningType?: string;
+    dirtyAt?: string;
 };
 
 export type LiveBedBoardBed = {
@@ -39,8 +59,12 @@ export type LiveBedBoardRow = {
     ward: LiveBedBoardWard | null;
     encounter: LiveBedBoardEncounter | null;
     patient: LiveBedBoardPatient | null;
-    /** Mock EVS overlay until GET /api/evs/beds is available. */
+    /** EVS overlay from GET /api/evs/beds (latest job per bed). */
     evs?: EvsBedFields;
+    /** Who the bed is held for, when bedStatus === 'hold'. */
+    reservation?: LiveBedBoardReservation | null;
+    /** Open cleaning job, when bedStatus === 'dirty' (or a hold placed on a dirty bed). */
+    cleaning?: LiveBedBoardCleaning | null;
 };
 
 export type LiveBedBoardSummary = {

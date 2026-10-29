@@ -26,7 +26,9 @@ export function errorHandler(err, _req, res, _next) {
         return res.status(status).json({ status: 'error', message, ...(isProd ? {} : { detail: err.detail }) });
     }
     if (err instanceof ApiError) {
-        return res.status(err.status).json({ status: 'error', message: err.message, ...(err.details ? { details: err.details } : {}) });
+        return res
+            .status(err.status)
+            .json({ status: 'error', message: err.message, ...(err.details ? { details: err.details } : {}), ...(err.code ? { code: err.code } : {}) });
     }
     console.error('[error]', err);
     res.status(500).json({ status: 'error', message: 'Internal server error' });

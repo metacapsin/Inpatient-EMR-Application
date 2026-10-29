@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { loginUser } from '../../store/authSlice';
 import type { AppDispatch, IRootState } from '../../store';
+import api from '../../services/api';
 import AuthCard from '../../components/auth/AuthCard';
 import AuthInputField from '../../components/auth/AuthInputField';
 import AuthButton from '../../components/auth/AuthButton';
@@ -75,8 +76,21 @@ const LoginPage = () => {
       } else {
         localStorage.removeItem('rememberedEmail');
       }
-      await dispatch(loginUser({ email: values.email.trim(), password: values.password })).unwrap();
+      const result = await dispatch(loginUser({ email: values.email.trim(), password: values.password })).unwrap();
       toast.success('Welcome back', { id: toastId });
+
+      // Brand-new tenants land in the onboarding wizard until their admin finishes setup.
+      if (result.role === 'admin') {
+        try {
+          const tenant = (await api.get('/tenants/current')).data.data;
+          if (tenant?.onboardingStatus && tenant.onboardingStatus !== 'complete') {
+            navigate('/app/onboarding', { replace: true });
+            return;
+          }
+        } catch {
+          // If the check fails, fall through to the normal dashboard redirect.
+        }
+      }
       navigate('/app/dashboard', { replace: true });
     } catch (err: unknown) {
       const message =
@@ -188,6 +202,13 @@ const LoginPage = () => {
 </button>
 
         </form>
+
+        <p className="mt-6 text-center text-xs text-slate-400">
+          Platform administrator?{' '}
+          <Link to="/platform/login" className="font-medium text-[#97704f] hover:underline">
+            Sign in to the Super Admin Console
+          </Link>
+        </p>
 
       </div>
     </div>

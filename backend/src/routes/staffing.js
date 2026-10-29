@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { activeIsolationSql } from '../lib/bedManagement.js';
 import { z } from 'zod';
 import { query, withTx } from '../db/pool.js';
 import { badRequest, conflict, forbidden, h, notFound, ok, created, parse } from '../lib/http.js';
@@ -290,14 +291,15 @@ async function loadWard(db, tenantId, unitId) {
 /** Occupied beds of a ward keyed by bed id, with the data needed for a bed chip. */
 async function wardBedChips(db, tenantId, wardId) {
     const r = await db.query(
-        `SELECT b.id AS bed_id, b.label, rm.room_number, p.id AS patient_id, p.first_name, p.last_name, e.admission_type
+        `SELECT b.id AS bed_id, b.label, rm.room_number, p.id AS patient_id, p.first_name, p.last_name, e.admission_type,
+                ${activeIsolationSql('e')} AS isolation
          FROM beds b JOIN rooms rm ON rm.id = b.room_id
          JOIN encounters e ON e.bed_id = b.id AND e.status <> 'discharged'
          JOIN patients p ON p.id = e.patient_id
          WHERE b.tenant_id = $1 AND rm.ward_id = $2 ORDER BY rm.room_number, b.label`,
         [tenantId, wardId],
     );
-    return new Map(r.rows.map((x) => [x.bed_id, { bedId: x.bed_id, roomBedLabel: `${x.room_number}-${x.label}`, patientId: x.patient_id, patientInitials: initials(x.first_name, x.last_name), acuity: ACUITY[x.admission_type] ?? 'medium', isolation: false }]));
+    return new Map(r.rows.map((x) => [x.bed_id, { bedId: x.bed_id, roomBedLabel: `${x.room_number}-${x.label}`, patientId: x.patient_id, patientInitials: initials(x.first_name, x.last_name), acuity: ACUITY[x.admission_type] ?? 'medium', isolation: Boolean(x.isolation) }]));
 }
 
 async function buildBoard(db, tenantId, a) {

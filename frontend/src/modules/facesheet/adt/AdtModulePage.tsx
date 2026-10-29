@@ -17,6 +17,10 @@ import { fetchEmrBedList, filterAvailableBeds, type EmrBedListItem } from '../..
 import { LabeledDropdown } from '../../../components/shared/LabeledDropdown';
 import { bedOptionsForSelect, bedStatusIndicatorClass } from '../../../lib/adtBedPicker';
 import { AdtPatientQuickSearch } from '../../../components/adt/AdtPatientQuickSearch';
+import { BedHoldPanel } from '../../../components/adt/BedHoldPanel';
+import { PlacementWarningsBanner } from '../../../components/adt/PlacementWarningsBanner';
+import { TransferRequestForm } from '../../../components/adt/TransferRequestForm';
+import { listReservations } from '../../../services/bedManagement.service';
 import type { AppDispatch, IRootState } from '../../../store';
 import { fetchFacesheetPatient } from '../../../store/facesheetSlice';
 import {
@@ -120,6 +124,21 @@ const AdtModulePage = () => {
 
     const beds = bedsQuery.data ?? [];
     const availableBeds = useMemo(() => filterAvailableBeds(beds), [beds]);
+
+    // Beds on 'hold' for THIS patient are offered in the pickers — the server only lets the reserved patient in.
+    const heldQuery = useQuery({
+        queryKey: ['bed-reservations', 'patient', patientId?.trim() ?? ''],
+        queryFn: () => listReservations({ status: 'active', patientId: patientId!.trim() }),
+        enabled: Boolean(patientId?.trim()),
+        staleTime: 5_000,
+    });
+    const heldBedIds = useMemo(() => new Set((heldQuery.data ?? []).map((r) => r.bedId)), [heldQuery.data]);
+    const withHeldBeds = (opts: { value: string; label: string }[], excludeId?: string) => {
+        const extra = beds
+            .filter((b) => heldBedIds.has(b.id) && b.id !== excludeId && !opts.some((o) => o.value === b.id))
+            .map((b) => ({ value: b.id, label: `${b.label} (held for this patient)` }));
+        return [...extra, ...opts];
+    };
 
     const admitTargetBedId = admitBedId.trim();
     const transferTargetBedId = transferBedId.trim();
@@ -239,8 +258,8 @@ const AdtModulePage = () => {
     }
 
     const bedsError = bedsQuery.error instanceof Error ? bedsQuery.error.message : null;
-    const admitOptions = bedOptionsForSelect(beds, { onlyAvailable: true });
-    const transferOptions = bedOptionsForSelect(beds, { onlyAvailable: true, excludeId: currentBedId || undefined });
+    const admitOptions = withHeldBeds(bedOptionsForSelect(beds, { onlyAvailable: true }));
+    const transferOptions = withHeldBeds(bedOptionsForSelect(beds, { onlyAvailable: true, excludeId: currentBedId || undefined }), currentBedId || undefined);
 
     const busy = admitMutation.isPending || transferMutation.isPending;
 
@@ -357,6 +376,7 @@ const AdtModulePage = () => {
             </div>
 
             {!adtSession ? (
+                <>
                 <section className={sectionClass}>
                     <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Admit</h3>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -371,7 +391,7 @@ const AdtModulePage = () => {
                                 placeholder={
                                     bedsQuery.isLoading
                                         ? 'Loading beds…'
-                                        : availableBeds.length
+                                        : availableBeds.length || heldBedIds.size
                                           ? 'Select bed'
                                           : 'No available beds in list'
                                 }
@@ -381,6 +401,11 @@ const AdtModulePage = () => {
                                 aria-busy={bedsQuery.isFetching}
                             />
                         </div>
+                        {admitTargetBedId ? (
+                            <div className="sm:col-span-2">
+                                <PlacementWarningsBanner bedId={admitTargetBedId} patientId={patientId.trim()} />
+                            </div>
+                        ) : null}
                         <LabeledDropdown
                             id="adt-admission-type"
                             label="Admission type (optional)"
@@ -433,6 +458,10 @@ const AdtModulePage = () => {
                         {admitMutation.isPending ? 'Admitting…' : 'Admit patient'}
                     </button>
                 </section>
+                <section className={sectionClass}>
+                    <BedHoldPanel patientId={patientId.trim()} beds={beds} disabled={busy} />
+                </section>
+                </>
             ) : (
                 <>
                     <section className={sectionClass}>
@@ -466,6 +495,11 @@ const AdtModulePage = () => {
                                     disabled={busy || bedsQuery.isLoading || adtSession.dischargeInitiated}
                                 />
                             </div>
+                            {transferTargetBedId ? (
+                                <div className="sm:col-span-2">
+                                    <PlacementWarningsBanner bedId={transferTargetBedId} patientId={patientId.trim()} encounterId={adtSession.encounterId} />
+                                </div>
+                            ) : null}
                             <div className="space-y-2 sm:col-span-2">
                                 <label className="text-sm font-medium text-gray-800 dark:text-gray-200" htmlFor="adt-transfer-reason">
                                     Reason (optional)
@@ -487,6 +521,14 @@ const AdtModulePage = () => {
                         >
                             {transferMutation.isPending ? 'Transferring…' : 'Transfer'}
                         </button>
+                    </section>
+
+                    <section className={sectionClass}>
+                        <TransferRequestForm patientId={patientId.trim()} encounterId={adtSession.encounterId} disabled={busy || adtSession.dischargeInitiated} />
+                    </section>
+
+                    <section className={sectionClass}>
+                        <BedHoldPanel patientId={patientId.trim()} encounterId={adtSession.encounterId} beds={beds} disabled={busy || adtSession.dischargeInitiated} />
                     </section>
 
                     <section className={sectionClass}>

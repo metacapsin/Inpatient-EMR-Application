@@ -1,4 +1,4 @@
-/** EVS / bed turnaround workflow statuses (mock + future API). */
+/** EVS / bed turnaround workflow statuses (match backend evs_queue.status). */
 export const EVS_STATUS = {
     DIRTY: 'dirty',
     IN_CLEANING: 'in_cleaning',
@@ -47,4 +47,3 @@ export type EvsCleanType = (typeof EVS_CLEAN_TYPES)[number];
 /** Queue wait turns red after this many minutes. */
 export const EVS_QUEUE_OVERDUE_MINUTES = 120;
 
-export const MOCK_LATENCY_MS = 280;

@@ -1,10 +1,13 @@
 import { ZodError } from 'zod';
 
 export class ApiError extends Error {
-    constructor(status, message, details) {
+    /** `code` is an optional stable machine-readable marker (e.g. 'TENANT_SUSPENDED') for cases
+     *  where the frontend needs to react to a specific error, not just display its message. */
+    constructor(status, message, details, code) {
         super(message);
         this.status = status;
         this.details = details;
+        this.code = code;
     }
 }
 

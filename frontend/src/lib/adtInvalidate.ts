@@ -13,4 +13,8 @@ export function invalidateAdtSurfaces(queryClient: QueryClient): void {
     void queryClient.invalidateQueries({ queryKey: ['activeEncounters'] });
     void queryClient.invalidateQueries({ queryKey: ['ipdDashboard'] });
     void queryClient.invalidateQueries({ queryKey: ['dischargeFinalizeReadiness'] });
+    void queryClient.invalidateQueries({ queryKey: ['bed-reservations'] });
+    void queryClient.invalidateQueries({ queryKey: ['transfer-requests'] });
+    void queryClient.invalidateQueries({ queryKey: ['placement-check'] });
+    void queryClient.invalidateQueries({ queryKey: ['evs'] });
 }

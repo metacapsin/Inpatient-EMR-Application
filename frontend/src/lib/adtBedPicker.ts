@@ -22,7 +22,7 @@ export function bedStatusIndicatorClass(status: string): string {
     if (s === 'occupied' || s === 'assigned' || s === 'held' || s === 'hold') {
         return 'bg-amber-500';
     }
-    if (s === 'maintenance' || s === 'blocked' || s === 'unavailable') {
+    if (s === 'maintenance' || s === 'blocked' || s === 'unavailable' || s === 'dirty') {
         return 'bg-red-500';
     }
     return 'bg-gray-400';
@@ -37,7 +37,7 @@ export function bedStatusPillClass(status: string): string {
     if (s === 'occupied' || s === 'assigned' || s === 'held' || s === 'hold') {
         return 'border border-amber-100/90 bg-amber-50/90 text-amber-900/80 dark:border-amber-900/35 dark:bg-amber-950/30 dark:text-amber-100/90';
     }
-    if (s === 'maintenance' || s === 'blocked' || s === 'unavailable') {
+    if (s === 'maintenance' || s === 'blocked' || s === 'unavailable' || s === 'dirty') {
         return 'border border-rose-100/90 bg-rose-50/90 text-rose-900/80 dark:border-rose-900/40 dark:bg-rose-950/35 dark:text-rose-100/90';
     }
     return 'border border-gray-200/80 bg-gray-50/90 text-gray-700 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-gray-300';

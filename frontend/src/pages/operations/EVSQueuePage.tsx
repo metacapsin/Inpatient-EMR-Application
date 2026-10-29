@@ -19,7 +19,7 @@ import {
     getQueue,
     inspectBed,
     startCleaning,
-} from '../../services/evsMockService';
+} from '../../services/evs.service';
 
 const QUEUE_KEY = ['evs', 'queue'] as const;
 const METRICS_KEY = ['evs', 'metrics'] as const;
@@ -32,14 +32,18 @@ const EVSQueuePage = () => {
 
     const queueQuery = useQuery({
         queryKey: QUEUE_KEY,
-        queryFn: getQueue,
+        queryFn: () => getQueue(),
         staleTime: 5_000,
+        refetchInterval: 15_000,
+        refetchOnWindowFocus: true,
     });
 
     const metricsQuery = useQuery({
         queryKey: METRICS_KEY,
         queryFn: getMetrics,
         staleTime: 5_000,
+        refetchInterval: 15_000,
+        refetchOnWindowFocus: true,
     });
 
     const invalidate = useCallback(() => {
@@ -67,7 +71,7 @@ const EVSQueuePage = () => {
                 case 'complete':
                     return completeCleaning(item.id);
                 case 'inspect':
-                    return inspectBed({ queueItemId: item.id, inspectedBy: 'Charge Nurse (mock)' });
+                    return inspectBed({ queueItemId: item.id, inspectedBy: 'self' });
                 case 'approve':
                     return approveCleaning(item.id);
                 default:
@@ -119,8 +123,8 @@ const EVSQueuePage = () => {
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">EVS / bed turnaround</h1>
                     <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        Track discharged beds through cleaning and inspection. Mock data only — backend integration
-                        pending.
+                        Discharged and vacated beds land here automatically. Assign a housekeeper, start and complete the
+                        clean, then inspect and approve — approval returns the bed to <em>available</em> on the bed board.
                     </p>
                 </div>
             </div>

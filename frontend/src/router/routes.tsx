@@ -1,12 +1,19 @@
 import { lazy, type ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import ProtectedRoute from '../components/auth/ProtectedRoute';
+import PlatformProtectedRoute from '../components/platform/PlatformProtectedRoute';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 
 const LoginPage = lazy(() => import('../pages/auth/LoginPage'));
 const ForgotPasswordPage = lazy(() => import('../pages/auth/ForgotPasswordPage'));
+const SetPasswordPage = lazy(() => import('../pages/auth/SetPasswordPage'));
+const PlatformLoginPage = lazy(() => import('../pages/platform/PlatformLoginPage'));
+const TenantDirectoryPage = lazy(() => import('../pages/platform/TenantDirectoryPage'));
+const TenantProvisioningPage = lazy(() => import('../pages/platform/TenantProvisioningPage'));
+const OnboardingWizardPage = lazy(() => import('../pages/onboarding/OnboardingWizardPage'));
 const Dashboard = lazy(() => import('../pages/Dashboard'));
 const PatientList = lazy(() => import('../pages/patients/PatientList'));
+const PatientRegistrationPage = lazy(() => import('../pages/patients/PatientRegistrationPage'));
 const AdtStandalonePage = lazy(() => import('../pages/adt/AdtStandalonePage'));
 const LiveBedBoardPage = lazy(() => import('../pages/bed-board/LiveBedBoardPage'));
 const ClinicalWorkflowsPage = lazy(() => import('../pages/inpatient/ClinicalWorkflowsPage'));
@@ -53,6 +60,10 @@ function guard(page: ReactNode) {
     return <ProtectedRoute>{page}</ProtectedRoute>;
 }
 
+function platformGuard(page: ReactNode) {
+    return <PlatformProtectedRoute>{page}</PlatformProtectedRoute>;
+}
+
 const routes = [
     {
         path: '/',
@@ -75,6 +86,31 @@ const routes = [
         layout: 'blank' as const,
     },
     {
+        path: '/set-password',
+        element: <SetPasswordPage />,
+        layout: 'blank' as const,
+    },
+    {
+        path: '/platform/login',
+        element: <PlatformLoginPage />,
+        layout: 'blank' as const,
+    },
+    {
+        path: '/platform/tenants',
+        element: platformGuard(<TenantDirectoryPage />),
+        layout: 'blank' as const,
+    },
+    {
+        path: '/platform/tenants/new',
+        element: platformGuard(<TenantProvisioningPage />),
+        layout: 'blank' as const,
+    },
+    {
+        path: '/app/onboarding',
+        element: guard(<OnboardingWizardPage />),
+        layout: 'blank' as const,
+    },
+    {
         path: '/app/dashboard',
         element: guard(<Dashboard />),
         layout: 'default' as const,
@@ -82,6 +118,16 @@ const routes = [
     {
         path: '/app/patients/list',
         element: guard(<PatientList />),
+        layout: 'default' as const,
+    },
+    {
+        path: '/app/patients/register',
+        element: guard(<PatientRegistrationPage />),
+        layout: 'default' as const,
+    },
+    {
+        path: '/app/patients/:id/edit',
+        element: guard(<PatientRegistrationPage />),
         layout: 'default' as const,
     },
     {

@@ -7,6 +7,8 @@ export const BED_STATUS_FILTERS = [
     { value: 'occupied', label: 'Occupied' },
     { value: 'hold', label: 'Hold' },
     { value: 'maintenance', label: 'Maintenance' },
+    { value: 'dirty', label: 'Dirty (awaiting EVS)' },
+    { value: 'blocked', label: 'Blocked' },
 ] as const;
 
 export interface LiveBedBoardFiltersProps {

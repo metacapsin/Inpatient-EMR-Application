@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, UserPlus, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, UserPlus, Users, Zap } from 'lucide-react';
 import { useDispatch } from 'react-redux';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DateRangePicker } from '../../components/patients/DateRangePicker';
 import { SearchInput } from '../../components/patients/SearchInput';
 import PatientTable from '../../components/patients/PatientTable';
@@ -329,6 +329,15 @@ const PatientList = () => {
     };
 
     const [addOpen, setAddOpen] = useState(false);
+    const navigate = useNavigate();
+    // `?quickAdd=1` (linked from the full registration page) opens the quick-add modal directly.
+    useEffect(() => {
+        if (searchParams.get('quickAdd')) {
+            setAddOpen(true);
+            setSearchParams((prev) => { const n = new URLSearchParams(prev); n.delete('quickAdd'); return n; }, { replace: true });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const clearFilters = () => {
         setStatus('all');
@@ -372,10 +381,19 @@ const PatientList = () => {
                         <button
                             type="button"
                             onClick={() => setAddOpen(true)}
+                            title="Quick add: name, DOB and contact only"
+                            className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-white/10 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/5"
+                        >
+                            <Zap className="h-4 w-4" aria-hidden />
+                            Quick Add
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => navigate('/app/patients/register')}
                             className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white shadow-primary transition hover:opacity-90"
                         >
                             <UserPlus className="h-4 w-4" aria-hidden />
-                            Add Patient
+                            Register Patient
                         </button>
                     </div>
                 </div>

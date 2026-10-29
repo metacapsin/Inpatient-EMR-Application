@@ -6,8 +6,8 @@ export function EVSEmptyState() {
             <Sparkles className="mb-3 h-8 w-8 text-gray-400 dark:text-gray-500" aria-hidden />
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">No beds in the EVS queue</h3>
             <p className="mt-1 max-w-sm text-xs text-gray-500 dark:text-gray-400">
-                Discharged beds awaiting environmental services will appear here. Data is mock-backed until EVS APIs are
-                connected.
+                Beds appear here automatically when a patient is discharged or transferred out, or when a bed is
+                manually marked dirty. Nothing is waiting for housekeeping right now.
             </p>
         </div>
     );

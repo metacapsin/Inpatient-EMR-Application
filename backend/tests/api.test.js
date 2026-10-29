@@ -2,24 +2,40 @@
 // Each run creates its own tenants (via /auth/register) and deletes them at the end, so seeded data is untouched.
 import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
+import bcrypt from 'bcryptjs';
 import { createApp } from '../src/app.js';
 import { pool } from '../src/db/pool.js';
+import { boss, startQueue, QUEUES } from '../src/db/queue.js';
 
 let server;
 let base;
 const tenantIds = [];
+const platformAdminIds = [];
 const suffix = Date.now().toString(36);
 
 before(async () => {
     server = createApp().listen(0);
     base = `http://127.0.0.1:${server.address().port}`;
+    await startQueue();
 });
 
 after(async () => {
     for (const id of tenantIds) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
+    for (const id of platformAdminIds) await pool.query('DELETE FROM platform_admins WHERE id = $1', [id]);
     await new Promise((r) => server.close(r));
+    await boss.stop({ graceful: false });
     await pool.end();
 });
+
+/** No self-service signup for platform admins by design (see plan) — bootstrap one directly for tests. */
+async function newPlatformAdmin(label) {
+    const email = `platform-${label}-${suffix}@test.example`;
+    const password = 'Platform-passw0rd!';
+    const hash = await bcrypt.hash(password, 10);
+    const r = await pool.query('INSERT INTO platform_admins (email, password_hash) VALUES ($1,$2) RETURNING id', [email, hash]);
+    platformAdminIds.push(r.rows[0].id);
+    return { email, password };
+}
 
 async function call(method, path, { body, token } = {}) {
     const res = await fetch(base + path, {
@@ -141,7 +157,8 @@ test('facility CRUD, patients, ADT flow and bed board', async () => {
     assert.equal(tr.status, 200, JSON.stringify(tr.body));
     assert.equal(tr.body.data.currentBedId, bed2.id);
     const board2 = (await call('GET', '/Beds/getLiveBedBoard', { token: tk })).body.data;
-    assert.equal(board2.rows.find((r) => r.bed.id === bed1.id).bed.bedStatus, 'available');
+    // A vacated bed is not free yet — it goes to 'dirty' and into the EVS queue until housekeeping approves it.
+    assert.equal(board2.rows.find((r) => r.bed.id === bed1.id).bed.bedStatus, 'dirty');
 
     // discharge: confirm before initiate is rejected
     assert.equal((await call('POST', '/api/discharges/confirm', { token: tk, body: { encounterId: encId } })).status, 409);
@@ -150,7 +167,8 @@ test('facility CRUD, patients, ADT flow and bed board', async () => {
     assert.equal(conf.status, 200);
     assert.equal(conf.body.data.patientId, p1.id);
     assert.equal((await call('GET', '/api/admissions/active', { token: tk })).body.data.length, 0);
-    assert.equal((await call('GET', '/Beds/getLiveBedBoard', { token: tk })).body.data.summary.byStatus.available, 2);
+    // Discharge routes through 'dirty' (bed2) — bed1 is still dirty from the transfer above.
+    assert.equal((await call('GET', '/Beds/getLiveBedBoard', { token: tk })).body.data.summary.byStatus.dirty, 2);
 
     // patient soft delete, facility delete
     assert.equal((await call('DELETE', `/Patient/deletePatientById/${p2.id}`, { token: tk })).status, 200);
@@ -755,4 +773,728 @@ test('radiology orders and code events', async () => {
     assert.equal((await call('GET', `/api/Radiology/order/${o.id}`, { token: b.token })).status, 404);
     assert.equal((await call('GET', `/api/Radiology/encounter/${enc}`, { token: b.token })).body.data.length, 0);
     assert.equal((await call('POST', '/api/CodeEvent/activate', { token: b.token, body: act })).status, 404);
+});
+
+test('starting flow: platform login -> create tenant -> invite admin -> onboarding -> register patient -> admit patient', async () => {
+    // Platform admins aren't self-service (see Phase 1); bootstrap one directly.
+    const platform = await newPlatformAdmin('flow');
+    assert.equal((await call('POST', '/api/platform/login', { body: { email: platform.email, password: 'wrong' } })).status, 401);
+    const platformLogin = await call('POST', '/api/platform/login', { body: { email: platform.email, password: platform.password } });
+    assert.equal(platformLogin.status, 200);
+    const platformToken = platformLogin.body.data.token;
+
+    // A tenant-scoped token must never work as a platform token, and vice versa.
+    const unrelatedTenant = await newTenant('flow-unrelated');
+    assert.equal((await call('GET', '/api/platform/tenants', { token: unrelatedTenant.token })).status, 401);
+    assert.equal((await call('GET', '/tenants/current', { token: platformToken })).status, 401);
+
+    // --- Tenant Onboarding step 1: provision the tenant
+    const createTenant = await call('POST', '/api/platform/tenants', {
+        token: platformToken,
+        body: { name: `Flow Hospital ${suffix}`, plan: 'starter', enabledModules: ['adt', 'patients'] },
+    });
+    assert.equal(createTenant.status, 201, JSON.stringify(createTenant.body));
+    const tenant = createTenant.body.data;
+    tenantIds.push(tenant.id);
+    assert.equal(tenant.status, 'trial');
+    assert.equal(tenant.onboardingStatus, 'provisioned');
+    assert.ok(tenant.stripeSubscriptionId, 'stubbed Stripe subscription id is set');
+
+    const listed = await call('GET', '/api/platform/tenants', { token: platformToken });
+    assert.ok(listed.body.data.some((t) => t.id === tenant.id));
+
+    // --- Tenant Onboarding step 2: invite the tenant's first admin
+    const adminEmail = `flow-admin-${suffix}@test.example`;
+    const invite = await call('POST', `/api/platform/tenants/${tenant.id}/invite-admin`, {
+        token: platformToken,
+        body: { email: adminEmail, firstName: 'Flo', lastName: 'Admin' },
+    });
+    assert.equal(invite.status, 201, JSON.stringify(invite.body));
+    assert.equal(invite.body.data.role, 'admin');
+    const setPasswordToken = invite.body.data.devSetPasswordToken;
+    assert.ok(setPasswordToken, 'dev build exposes the invite token since no mail transport is configured');
+
+    // Invited admin sets their password via the existing reset-password flow (reused, not reinvented).
+    const newPassword = 'Flow-passw0rd!';
+    const resetRes = await call('POST', '/auth/reset-password', { body: { token: setPasswordToken, newPassword, confirmPassword: newPassword } });
+    assert.equal(resetRes.status, 200, JSON.stringify(resetRes.body));
+
+    // --- Admin logs in
+    const adminLogin = await call('POST', '/login', { body: { username: adminEmail, password: newPassword } });
+    assert.equal(adminLogin.status, 200, JSON.stringify(adminLogin.body));
+    assert.equal(adminLogin.body.role, 'admin');
+    const adminToken = adminLogin.body.token;
+
+    const tenantBeforeOnboarding = await call('GET', '/tenants/current', { token: adminToken });
+    assert.equal(tenantBeforeOnboarding.body.data.onboardingStatus, 'provisioned');
+
+    // --- Onboarding wizard: facility setup (ward/room/bed) + staff invite
+    const ward = (await call('POST', '/Wards/CreateWard', { token: adminToken, body: { wardName: 'Flow Ward' } })).body.data;
+    const room = (await call('POST', '/Rooms/CreateRoom', { token: adminToken, body: { wardId: ward.id, roomNumber: 'F1' } })).body.data;
+    const bed = (await call('POST', '/Beds/CreateBed', { token: adminToken, body: { roomId: room.id, bedLabel: 'F1-A' } })).body.data;
+    const staffInvite = await call('POST', '/auth/register-user', {
+        token: adminToken,
+        body: { email: `flow-nurse-${suffix}@test.example`, password: 'Flow-nurse-pass1', role: 'nurse', firstName: 'Flow' },
+    });
+    assert.equal(staffInvite.status, 201);
+
+    // --- Onboarding wizard: mark complete
+    const complete = await call('PUT', '/tenants/current/onboarding-status', { token: adminToken, body: { onboardingStatus: 'complete' } });
+    assert.equal(complete.status, 200);
+    assert.equal(complete.body.data.onboardingStatus, 'complete');
+    assert.equal((await call('GET', '/tenants/current', { token: adminToken })).body.data.onboardingStatus, 'complete');
+
+    // --- Patient Registration: eligibility stub + Rcopia sync job enqueued
+    const patientRes = await call('POST', '/Patient/createPatient', {
+        token: adminToken,
+        body: { firstName: 'Pat', lastName: 'Flowtest', dOB: '1990-01-01', sex: 'F' },
+    });
+    assert.equal(patientRes.status, 201, JSON.stringify(patientRes.body));
+    // No insurance on this registration → nothing to check (Stedi is disabled in tests anyway).
+    assert.deepEqual(patientRes.body.eligibility, { eligible: null, stediEnabled: false });
+    const patient = patientRes.body.data;
+
+    const rcopiaJob = await pool.query(`SELECT 1 FROM pgboss.job WHERE name = $1 AND data->>'patientId' = $2`, [QUEUES.RCOPIA_PATIENT_SYNC, patient.id]);
+    assert.equal(rcopiaJob.rowCount, 1, 'rcopia-patient-sync job was enqueued for the new patient');
+
+    // --- ADT Admission: adt-notification job enqueued
+    const admission = await call('POST', '/api/admissions', { token: adminToken, body: { patientId: patient.id, bedId: bed.id, admissionType: 'elective' } });
+    assert.equal(admission.status, 201, JSON.stringify(admission.body));
+    const encounterId = admission.body.data.encounter.id;
+
+    const adtJob = await pool.query(`SELECT 1 FROM pgboss.job WHERE name = $1 AND data->>'encounterId' = $2`, [QUEUES.ADT_NOTIFICATION, encounterId]);
+    assert.equal(adtJob.rowCount, 1, 'adt-notification job was enqueued for the new admission');
+});
+
+test('tenant governance: disabled modules are blocked, unrelated routes still work, suspension blocks everything', async () => {
+    const platform = await newPlatformAdmin('gov');
+    const platformToken = (await call('POST', '/api/platform/login', { body: { email: platform.email, password: platform.password } })).body.data.token;
+
+    const t = await newTenant('gov');
+    const tenantId = t.user.tenant.id;
+    const p = (await call('POST', '/Patient/createPatient', { token: t.token, body: { firstName: 'Gov', lastName: 'Erned' } })).body.data;
+
+    // Restrict this tenant to patients-only (no adt/medication/billing/staffing).
+    const restrict = await call('PATCH', `/api/platform/tenants/${tenantId}`, { token: platformToken, body: { enabledModules: ['patients'] } });
+    assert.equal(restrict.status, 200);
+
+    // Patients module still works...
+    assert.equal((await call('GET', `/Patient/getPatientById/${p.id}`, { token: t.token })).status, 200);
+    // ...but adt/medication/billing/staffing are now blocked, each with a clear message naming the module.
+    const wardBlocked = await call('POST', '/Wards/CreateWard', { token: t.token, body: { name: 'X' } });
+    assert.equal(wardBlocked.status, 403);
+    assert.match(wardBlocked.body.message, /adt module is not enabled/);
+    assert.equal((await call('GET', `/api/patients/${p.id}/medications`, { token: t.token })).status, 403);
+    assert.equal((await call('GET', `/api/CDI/worklist/${tenantId}`, { token: t.token })).status, 403);
+    assert.equal((await call('GET', `/api/Staffing/floatPool/${tenantId}`, { token: t.token })).status, 403);
+    // Routes outside the 5-module picker (dashboard, appointments, clinicalOps) are never gated.
+    assert.equal((await call('GET', '/dashboard/ipd', { token: t.token })).status, 200);
+
+    // Re-enabling restores access immediately (no re-login needed — checked fresh every request).
+    await call('PATCH', `/api/platform/tenants/${tenantId}`, { token: platformToken, body: { enabledModules: ['adt', 'patients', 'medication', 'billing', 'staffing'] } });
+    assert.equal((await call('POST', '/Wards/CreateWard', { token: t.token, body: { name: 'X' } })).status, 201);
+
+    // Suspension blocks login outright...
+    await call('PATCH', `/api/platform/tenants/${tenantId}`, { token: platformToken, body: { status: 'suspended' } });
+    const blockedLogin = await call('POST', '/login', { body: { username: t.email, password: t.password } });
+    assert.equal(blockedLogin.status, 403);
+    assert.equal(blockedLogin.body.code, 'TENANT_SUSPENDED');
+    // ...and immediately invalidates the already-issued token too, not just new logins.
+    assert.equal((await call('GET', '/dashboard/ipd', { token: t.token })).status, 403);
+
+    // Reactivating restores access.
+    await call('PATCH', `/api/platform/tenants/${tenantId}`, { token: platformToken, body: { status: 'active' } });
+    assert.equal((await call('GET', '/dashboard/ipd', { token: t.token })).status, 200);
+});
+
+test('platform admin: delete tenant shows accurate impact counts and requires exact-name confirmation', async () => {
+    const platform = await newPlatformAdmin('del');
+    const platformToken = (await call('POST', '/api/platform/login', { body: { email: platform.email, password: platform.password } })).body.data.token;
+
+    const t = await newTenant('del');
+    const tenantId = t.user.tenant.id;
+    await call('POST', '/Patient/createPatient', { token: t.token, body: { firstName: 'Del', lastName: 'One' } });
+    await call('POST', '/Patient/createPatient', { token: t.token, body: { firstName: 'Del', lastName: 'Two' } });
+
+    const impact = await call('GET', `/api/platform/tenants/${tenantId}/deletion-impact`, { token: platformToken });
+    assert.equal(impact.status, 200);
+    assert.equal(impact.body.data.patientCount, 2);
+    assert.equal(impact.body.data.userCount, 1);
+    assert.equal(impact.body.data.tenantName, 'Org del');
+
+    // Wrong confirmation name is rejected, tenant survives.
+    const wrongConfirm = await call('DELETE', `/api/platform/tenants/${tenantId}`, { token: platformToken, body: { confirmName: 'not the real name' } });
+    assert.equal(wrongConfirm.status, 400);
+    assert.equal((await call('GET', `/api/platform/tenants/${tenantId}/deletion-impact`, { token: platformToken })).status, 200);
+
+    // Correct confirmation deletes the tenant and (via ON DELETE CASCADE) everything under it.
+    const del = await call('DELETE', `/api/platform/tenants/${tenantId}`, { token: platformToken, body: { confirmName: impact.body.data.tenantName } });
+    assert.equal(del.status, 200);
+    assert.equal((await call('GET', `/api/platform/tenants/${tenantId}/deletion-impact`, { token: platformToken })).status, 404);
+    assert.equal((await call('POST', '/login', { body: { username: t.email, password: t.password } })).status, 401, 'deleted tenant\'s admin can no longer log in');
+    assert.ok(!(await call('GET', '/api/platform/tenants', { token: platformToken })).body.data.some((x) => x.id === tenantId));
+});
+
+test('CPOE: unified order-entry writes the ledger + detail row, encounter timeline aggregates all four types', async () => {
+    const t = await newTenant('cpoe');
+    const doc = await addUser(t, 'doccpoe', 'physician');
+    const nurse = await addUser(t, 'nursecpoe', 'nurse');
+    const tk = t.token;
+    const ward = (await call('POST', '/Wards/CreateWard', { token: tk, body: { name: 'W' } })).body.data;
+    const room = (await call('POST', '/Rooms/CreateRoom', { token: tk, body: { wardId: ward.id, roomNumber: '1' } })).body.data;
+    const bed = (await call('POST', '/Beds/CreateBed', { token: tk, body: { roomId: room.id, bedLabel: 'A' } })).body.data;
+    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Cpoe', lastName: 'Patient' } })).body.data;
+    const enc = (await call('POST', '/api/admissions', { token: tk, body: { patientId: p.id, bedId: bed.id } })).body.data.encounter.id;
+
+    // Radiology stays physician-only even though the router-level gate admits nurses too — this is
+    // the one place this endpoint's role logic is stricter than its own router-level gate.
+    const radBody = { orderType: 'radiology', patientId: p.id, encounterId: enc, modality: 'CT', bodyRegion: 'Chest', clinicalIndication: 'r/o PE', priority: 'STAT' };
+    assert.equal((await call('POST', '/api/orders', { token: nurse.token, body: radBody })).status, 403, 'nurses cannot place radiology orders');
+
+    const medOrder = (await call('POST', '/api/orders', { token: doc.token, body: { orderType: 'medication', patientId: p.id, encounterId: enc, name: 'Lisinopril', dose: '10 mg', route: 'PO', frequency: 'Daily' } })).body.data;
+    assert.equal(medOrder.orderType, 'medication');
+    assert.equal(medOrder.detail.name, 'Lisinopril');
+    assert.equal(medOrder.detail.encounterId, enc, 'medications.encounter_id is backfilled');
+
+    const prnOrder = (await call('POST', '/api/orders', { token: nurse.token, body: { orderType: 'prn_stat', patientId: p.id, encounterId: enc, medicationName: 'Morphine', type: 'STAT', indication: 'Severe pain', orderedTime: new Date().toISOString(), givenBy: 'RN Priya' } })).body.data;
+    assert.equal(prnOrder.detail.medicationName, 'Morphine');
+    assert.equal(prnOrder.detail.encounterId, enc, 'prn_stat_orders.encounter_id is backfilled');
+
+    const labOrder = (await call('POST', '/api/orders', { token: doc.token, body: { orderType: 'lab', patientId: p.id, encounterId: enc, labTests: [{ name: 'CBC' }], priority: 'Urgent' } })).body.data;
+    assert.equal(labOrder.detail.labTests[0].name, 'CBC');
+
+    const radOrder = (await call('POST', '/api/orders', { token: doc.token, body: radBody })).body.data;
+    assert.equal(radOrder.detail.modality, 'CT');
+
+    assert.equal((await call('GET', `/api/patients/${p.id}/medications`, { token: tk })).body.data.length, 1, 'existing medications endpoint still works');
+
+    const timeline = (await call('GET', `/api/encounters/${enc}/orders`, { token: tk })).body.data;
+    assert.equal(timeline.length, 4);
+    assert.deepEqual(timeline.map((o) => o.orderType), ['radiology', 'lab', 'prn_stat', 'medication'], 'newest first');
+    assert.ok(timeline.every((o) => o.encounterId === enc));
+
+    const single = (await call('GET', `/api/orders/${medOrder.id}`, { token: tk })).body.data;
+    assert.equal(single.detail.name, 'Lisinopril');
+
+    // Basic status flip: discontinue/cancel the ledger row, no detail-table changes.
+    const disc = await call('PUT', `/api/orders/${medOrder.id}/status`, { token: nurse.token, body: { status: 'discontinued' } });
+    assert.equal(disc.body.data.status, 'discontinued');
+    assert.equal((await call('PUT', `/api/orders/${medOrder.id}/status`, { token: nurse.token, body: { status: 'cancelled' } })).status, 409, 'already-terminal order cannot flip again');
+    assert.equal((await call('PUT', `/api/orders/${labOrder.id}/status`, { token: doc.token, body: { status: 'cancelled' } })).body.data.status, 'cancelled');
+
+    // Orders dashboard: cross-patient aggregate, independent of the per-encounter timeline above.
+    const dash = (await call('GET', '/api/inpatient/orders', { token: tk })).body.data;
+    assert.equal(dash.total, 4);
+    const byId = Object.fromEntries(dash.items.map((o) => [o.id, o]));
+    assert.equal(byId[prnOrder.id].orderType, 'medication', 'prn_stat folds into the medication bucket');
+    assert.match(byId[prnOrder.id].summary, /Morphine/);
+    assert.equal(byId[prnOrder.id].priority, 'stat', 'STAT prn order maps to stat priority');
+    assert.equal(byId[prnOrder.id].status, 'pending', 'ledger active maps to pending');
+    assert.equal(byId[medOrder.id].status, 'cancelled', 'ledger discontinued maps to cancelled for the dashboard');
+    assert.equal(byId[medOrder.id].canCancel, false, 'terminal orders cannot be cancelled again');
+    assert.equal(byId[labOrder.id].status, 'cancelled');
+    assert.equal(byId[radOrder.id].priority, 'stat');
+    assert.equal(byId[radOrder.id].unitId, ward.id);
+    assert.equal(byId[radOrder.id].unitName, 'W');
+    assert.equal(byId[radOrder.id].patientName, 'Cpoe Patient');
+    assert.ok(byId[radOrder.id].mrn);
+
+    assert.equal((await call('GET', '/api/inpatient/orders?patientSearch=Cpoe', { token: tk })).body.data.total, 4);
+    assert.equal((await call('GET', '/api/inpatient/orders?patientSearch=Nobody', { token: tk })).body.data.total, 0);
+    assert.equal((await call('GET', `/api/inpatient/orders?unitId=${ward.id}`, { token: tk })).body.data.total, 4);
+    assert.equal((await call('GET', '/api/inpatient/orders?unitId=not-a-real-ward', { token: tk })).body.data.total, 0);
+    assert.equal((await call('GET', '/api/inpatient/orders?statuses=cancelled', { token: tk })).body.data.total, 2, 'discontinued + cancelled both bucket into cancelled');
+    assert.equal((await call('GET', '/api/inpatient/orders?orderTypes=medication', { token: tk })).body.data.total, 2, 'medication + prn_stat both bucket into medication');
+    const page1 = (await call('GET', '/api/inpatient/orders?limit=1&page=1', { token: tk })).body.data;
+    assert.equal(page1.items.length, 1);
+    assert.equal(page1.total, 4);
+
+    // Dashboard's own Cancel action, separate endpoint from the per-encounter PUT .../status above.
+    const dashCancel = await call('POST', `/api/inpatient/orders/${radOrder.id}/cancel`, { token: doc.token });
+    assert.equal(dashCancel.body.data.status, 'cancelled');
+    assert.equal((await call('GET', `/api/orders/${radOrder.id}`, { token: tk })).body.data.status, 'cancelled');
+    assert.equal((await call('POST', `/api/inpatient/orders/${radOrder.id}/cancel`, { token: doc.token })).status, 409, 'already cancelled');
+
+    const other = await newTenant('cpoeB');
+    assert.equal((await call('GET', `/api/encounters/${enc}/orders`, { token: other.token })).status, 404, 'tenant isolation');
+    assert.equal((await call('GET', '/api/inpatient/orders', { token: other.token })).body.data.total, 0, 'dashboard is tenant-scoped too');
+});
+
+test('bed management: timed holds, dirty-on-discharge, EVS turnaround, expiry sweep, placement warnings, transfer requests', async () => {
+    const t = await newTenant('beds');
+    const tk = t.token;
+    const nurse = await addUser(t, 'bm-nurse', 'nurse');
+    const hk = await addUser(t, 'bm-hk', 'staff');
+    const ward = (await call('POST', '/Wards/CreateWard', { token: tk, body: { name: 'Tele' } })).body.data;
+    const ward2 = (await call('POST', '/Wards/CreateWard', { token: tk, body: { name: 'ICU' } })).body.data;
+    const room = (await call('POST', '/Rooms/CreateRoom', { token: tk, body: { wardId: ward.id, roomNumber: '201' } })).body.data;
+    assert.equal(room.isolationRequired, false);
+    const isoRoom = (await call('POST', '/Rooms/CreateRoom', { token: tk, body: { wardId: ward2.id, roomNumber: 'ISO-1', isolationRequired: true, isolationType: 'Negative pressure' } })).body.data;
+    assert.equal(isoRoom.isolationRequired, true);
+    assert.equal(isoRoom.isolationType, 'Negative pressure');
+    const mkBed = async (roomId, label) => (await call('POST', '/Beds/CreateBed', { token: tk, body: { roomId, bedLabel: label } })).body.data;
+    const bedA = await mkBed(room.id, 'A');
+    const bedB = await mkBed(room.id, 'B');
+    const bedC = await mkBed(isoRoom.id, 'C');
+    const bedD = await mkBed(room.id, 'D');
+    const mkPatient = async (firstName, lastName, sex) => (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName, lastName, sex } })).body.data;
+    const p1 = await mkPatient('Ann', 'Hold', 'F');
+    const p2 = await mkPatient('Bob', 'Other', 'M');
+    const p3 = await mkPatient('Cat', 'Iso', 'F');
+    const boardRow = async (bedId) => (await call('GET', '/Beds/getLiveBedBoard', { token: tk })).body.data.rows.find((r) => r.bed.id === bedId);
+
+    // --- timed hold: reserve bed A for p1
+    const resv = await call('POST', `/api/beds/${bedA.id}/reserve`, { token: nurse.token, body: { patientId: p1.id, expiresInMinutes: 120, notes: 'ED boarder' } });
+    assert.equal(resv.status, 201, JSON.stringify(resv.body));
+    assert.equal(resv.body.data.status, 'active');
+    assert.equal(resv.body.data.patientName, 'Ann Hold');
+    assert.equal((await call('POST', `/api/beds/${bedA.id}/reserve`, { token: tk, body: { patientId: p2.id } })).status, 409, 'one live hold per bed');
+    assert.equal((await call('POST', `/api/beds/${bedA.id}/reserve`, { token: tk, body: {} })).status, 400, 'hold must name a patient or encounter');
+    let rowA = await boardRow(bedA.id);
+    assert.equal(rowA.bed.bedStatus, 'hold');
+    assert.equal(rowA.reservation.patientId, p1.id);
+    assert.equal((await call('GET', '/api/bed-reservations', { token: tk })).body.data.length, 1);
+
+    // hold is enforced: a different patient cannot be admitted into the held bed
+    const blocked = await call('POST', '/api/admissions', { token: tk, body: { patientId: p2.id, bedId: bedA.id } });
+    assert.equal(blocked.status, 409, JSON.stringify(blocked.body));
+    assert.match(blocked.body.message, /held for another patient/);
+    const pc2 = (await call('GET', `/api/beds/${bedA.id}/placement-check?patientId=${p2.id}`, { token: tk })).body.data;
+    assert.equal(pc2.ok, false);
+    assert.ok(pc2.warnings.some((w) => w.code === 'held_for_other_patient'));
+    const pc1 = (await call('GET', `/api/beds/${bedA.id}/placement-check?patientId=${p1.id}`, { token: tk })).body.data;
+    assert.equal(pc1.ok, true);
+    assert.deepEqual(pc1.warnings, []);
+
+    // ...but the patient it was held for can — and the reservation becomes fulfilled
+    const admit1 = await call('POST', '/api/admissions', { token: tk, body: { patientId: p1.id, bedId: bedA.id } });
+    assert.equal(admit1.status, 201, JSON.stringify(admit1.body));
+    const enc1 = admit1.body.data.encounter.id;
+    assert.equal((await call('GET', `/api/bed-reservations/${resv.body.data.id}`, { token: tk })).body.data.status, 'fulfilled');
+    assert.equal((await boardRow(bedA.id)).bed.bedStatus, 'occupied');
+
+    // --- soft warnings are advisory only: mixed-sex shared room warns but does not block
+    const pcMix = (await call('GET', `/api/beds/${bedB.id}/placement-check?patientId=${p2.id}`, { token: tk })).body.data;
+    assert.equal(pcMix.ok, true);
+    assert.ok(pcMix.warnings.some((w) => w.code === 'mixed_sex_room' && w.severity === 'warning'), JSON.stringify(pcMix.warnings));
+    const admit2 = await call('POST', '/api/admissions', { token: tk, body: { patientId: p2.id, bedId: bedB.id } });
+    assert.equal(admit2.status, 201);
+    const enc2 = admit2.body.data.encounter.id;
+
+    // isolation precaution on p2 (derived from the HAI event log) → roommate warning for anyone placed in that room
+    const hai = await call('POST', '/api/HAIEvent', { token: tk, body: { encounterId: enc2, unitId: ward.id, eventType: 'isolation_started', infectionType: 'MRSA', isolationType: 'Contact' } });
+    assert.equal(hai.status, 201, JSON.stringify(hai.body));
+    const pcIso = (await call('GET', `/api/beds/${bedD.id}/placement-check?patientId=${p3.id}`, { token: tk })).body.data;
+    assert.ok(pcIso.warnings.some((w) => w.code === 'roommate_isolation'), JSON.stringify(pcIso.warnings));
+    assert.ok(pcIso.roommates.some((r) => r.isolationActive === true));
+    const pcIsoRoom = (await call('GET', `/api/beds/${bedC.id}/placement-check?patientId=${p3.id}`, { token: tk })).body.data;
+    assert.ok(pcIsoRoom.warnings.some((w) => w.code === 'isolation_room_for_non_isolation_patient' && w.severity === 'info'));
+    assert.equal(pcIsoRoom.room.isolationRequired, true);
+    // the staffing board derives its isolation flag from the same log (was hardcoded false)
+    const staffBoard = await call('GET', `/api/Staffing/assignment/${ward.id}/${new Date().toISOString().slice(0, 10)}/day`, { token: tk });
+    if (staffBoard.status === 200) {
+        const chips = JSON.stringify(staffBoard.body);
+        assert.ok(chips.includes('"isolation":true'), 'isolation chip derived from HAI events');
+    }
+
+    // --- transfer request queue
+    const tr = await call('POST', '/api/transfer-requests', { token: nurse.token, body: { patientId: p2.id, requestedWardId: ward2.id, priority: 'urgent', reason: 'needs ICU' } });
+    assert.equal(tr.status, 201, JSON.stringify(tr.body));
+    assert.equal(tr.body.data.requestedWardName, 'ICU');
+    assert.equal(tr.body.data.currentLocation, 'Tele · 201 · B');
+    assert.equal((await call('POST', '/api/transfer-requests', { token: tk, body: { patientId: p2.id } })).status, 409, 'one open request per encounter');
+    assert.equal((await call('GET', '/api/transfer-requests', { token: tk })).body.data.length, 1);
+    const dash = (await call('GET', '/dashboard/ipd', { token: tk })).body.data;
+    assert.deepEqual(dash.alerts.transferRequests, ['Bob Other → ICU (urgent)']);
+
+    const ful = await call('POST', `/api/transfer-requests/${tr.body.data.id}/fulfill`, { token: tk, body: { bedId: bedC.id } });
+    assert.equal(ful.status, 200, JSON.stringify(ful.body));
+    assert.equal(ful.body.data.request.status, 'fulfilled');
+    assert.equal(ful.body.data.request.fulfilledBedId, bedC.id);
+    assert.equal(ful.body.data.transfer.toBedId, bedC.id);
+    assert.equal((await call('GET', '/api/transfer-requests', { token: tk })).body.data.length, 0);
+    assert.equal((await boardRow(bedC.id)).bed.bedStatus, 'occupied');
+
+    // the vacated bed is dirty with an Isolation clean queued (p2 had an active isolation precaution)
+    const rowB = await boardRow(bedB.id);
+    assert.equal(rowB.bed.bedStatus, 'dirty');
+    assert.equal(rowB.cleaning.evsStatus, 'dirty');
+    assert.equal(rowB.cleaning.cleaningType, 'Isolation');
+    assert.equal((await call('POST', '/api/admissions', { token: tk, body: { patientId: p3.id, bedId: bedB.id } })).status, 409, 'dirty bed cannot be assigned');
+    assert.equal((await call('GET', '/dashboard/ipd', { token: tk })).body.data.alerts.bedsPendingCleaning.length, 1);
+
+    // --- discharge sets 'dirty' (not 'available') and queues a Discharge clean
+    await call('POST', '/api/discharges', { token: tk, body: { phase: 'initiate', encounterId: enc1 } });
+    const conf = await call('POST', '/api/discharges', { token: tk, body: { phase: 'confirm', encounterId: enc1 } });
+    assert.equal(conf.status, 200);
+    assert.ok(conf.body.data.evsQueueId);
+    assert.equal((await boardRow(bedA.id)).bed.bedStatus, 'dirty');
+
+    // --- EVS turnaround: dirty -> in_cleaning -> pending_inspection -> clean -> bed available
+    const queue = (await call('GET', '/api/evs/queue', { token: hk.token })).body.data;
+    assert.equal(queue.length, 2);
+    const itemA = queue.find((q) => q.bedId === bedA.id);
+    assert.equal(itemA.evsStatus, 'dirty');
+    assert.equal(itemA.cleaningType, 'Discharge');
+    assert.equal(itemA.dischargedPatientName, 'Ann Hold');
+    assert.equal(itemA.roomBedLabel, '201-A');
+    const hks = (await call('GET', '/api/evs/housekeepers', { token: tk })).body.data;
+    assert.ok(hks.some((u) => u.id === hk.id));
+    const assigned = await call('POST', `/api/evs/queue/${itemA.id}/assign`, { token: nurse.token, body: { housekeeperId: hk.id } });
+    assert.equal(assigned.status, 200, JSON.stringify(assigned.body));
+    assert.equal(assigned.body.data.assignedHousekeeperId, hk.id);
+    assert.equal((await call('POST', `/api/evs/queue/${itemA.id}/complete`, { token: hk.token })).status, 409, 'must start before complete');
+    assert.equal((await call('POST', `/api/evs/queue/${itemA.id}/start`, { token: hk.token })).body.data.evsStatus, 'in_cleaning');
+    assert.equal((await call('POST', `/api/evs/queue/${itemA.id}/complete`, { token: hk.token })).body.data.evsStatus, 'pending_inspection');
+    assert.equal((await boardRow(bedA.id)).bed.bedStatus, 'dirty', 'still dirty until approved');
+    const inspected = (await call('POST', `/api/evs/queue/${itemA.id}/inspect`, { token: nurse.token })).body.data;
+    assert.equal(inspected.inspectedBy, 'bm-nurse User');
+    const approved = (await call('POST', `/api/evs/queue/${itemA.id}/approve`, { token: nurse.token })).body.data;
+    assert.equal(approved.evsStatus, 'clean');
+    assert.equal(typeof approved.turnaroundMinutes, 'number');
+    assert.equal((await boardRow(bedA.id)).bed.bedStatus, 'available');
+    const metrics = (await call('GET', '/api/evs/metrics', { token: tk })).body.data;
+    assert.equal(metrics.bedsCleanedToday, 1);
+    assert.equal(metrics.bedsDirty, 1);
+    const bedMap = (await call('GET', `/api/evs/beds?ids=${bedA.id},${bedB.id}`, { token: tk })).body.data;
+    assert.equal(bedMap[bedA.id].evsStatus, 'clean');
+    assert.equal(bedMap[bedB.id].evsStatus, 'dirty');
+
+    // --- expiry: an overdue hold is auto-released (expires_at manipulated directly rather than waiting)
+    const r2 = (await call('POST', `/api/beds/${bedA.id}/reserve`, { token: tk, body: { patientId: p3.id, expiresInMinutes: 30 } })).body.data;
+    assert.equal((await boardRow(bedA.id)).bed.bedStatus, 'hold');
+    await pool.query(`UPDATE bed_reservations SET expires_at = now() - interval '1 minute' WHERE id = $1`, [r2.id]);
+    assert.equal((await call('GET', '/api/bed-reservations', { token: tk })).body.data.length, 0, 'lazy sweep hides expired holds');
+    assert.equal((await call('GET', `/api/bed-reservations/${r2.id}`, { token: tk })).body.data.status, 'expired');
+    assert.equal((await boardRow(bedA.id)).bed.bedStatus, 'available');
+
+    // --- cancel releases the bed; extend pushes expiry out
+    const r3 = (await call('POST', `/api/beds/${bedA.id}/reserve`, { token: tk, body: { patientId: p3.id, expiresInMinutes: 30 } })).body.data;
+    const ext = await call('POST', `/api/bed-reservations/${r3.id}/extend`, { token: tk, body: { expiresInMinutes: 240 } });
+    assert.equal(ext.status, 200);
+    assert.ok(new Date(ext.body.data.expiresAt) > new Date(r3.expiresAt));
+    assert.equal((await call('POST', `/api/bed-reservations/${r3.id}/cancel`, { token: tk })).body.data.status, 'cancelled');
+    assert.equal((await call('POST', `/api/bed-reservations/${r3.id}/cancel`, { token: tk })).status, 409);
+    assert.equal((await boardRow(bedA.id)).bed.bedStatus, 'available');
+
+    // --- admin manual hold (no reservation) also blocks; admin marking dirty opens a cleaning job
+    assert.equal((await call('PUT', '/Beds/updateBedById', { token: tk, body: { id: bedA.id, status: 'hold' } })).status, 200);
+    const manual = await call('POST', '/api/admissions', { token: tk, body: { patientId: p3.id, bedId: bedA.id } });
+    assert.equal(manual.status, 409);
+    assert.match(manual.body.message, /manual hold/);
+    assert.equal((await call('PUT', '/Beds/updateBedById', { token: tk, body: { id: bedA.id, status: 'dirty' } })).status, 200);
+    assert.ok((await call('GET', '/api/evs/queue', { token: tk })).body.data.some((q) => q.bedId === bedA.id && q.evsStatus === 'dirty' && q.cleaningType === 'Routine'));
+    assert.equal((await call('PUT', '/Beds/updateBedById', { token: tk, body: { id: bedA.id, status: 'available' } })).status, 200);
+    assert.equal((await call('GET', '/api/evs/queue?status=dirty', { token: tk })).body.data.filter((q) => q.bedId === bedA.id).length, 0, 'admin sign-off closes the job');
+    assert.equal((await call('POST', '/api/admissions', { token: tk, body: { patientId: p3.id, bedId: bedA.id } })).status, 201);
+
+    // --- tenant isolation
+    const other = await newTenant('beds-other');
+    assert.equal((await call('GET', `/api/bed-reservations/${r3.id}`, { token: other.token })).status, 404);
+    assert.equal((await call('POST', `/api/evs/queue/${itemA.id}/start`, { token: other.token })).status, 404);
+    assert.equal((await call('GET', '/api/evs/queue', { token: other.token })).body.data.length, 0);
+
+    // PUT /api/transfer-requests/:id must validate ward ownership the same way POST does
+    // (regression: a foreign tenant's ward id was previously accepted and leaked back via requestedWardName)
+    const foreignWard = (await call('POST', '/Wards/CreateWard', { token: other.token, body: { name: 'Foreign Ward' } })).body.data;
+    const putForeign = await call('PUT', `/api/transfer-requests/${tr.body.data.id}`, { token: tk, body: { requestedWardId: foreignWard.id } });
+    assert.equal(putForeign.status, 404, JSON.stringify(putForeign.body));
+    const afterPut = await pool.query('SELECT requested_ward_id FROM transfer_requests WHERE id = $1', [tr.body.data.id]);
+    assert.equal(afterPut.rows[0].requested_ward_id, ward2.id, 'foreign ward id must not be written');
+});
+
+test('patient registration: full demographics, both insurances and emergency contacts propagate to every read URL', async () => {
+    const t = await newTenant('reg');
+    const tk = t.token;
+    const body = {
+        prefix: 'Ms.', firstName: 'Full', middleName: 'Reg', lastName: 'Istration', suffix: 'Jr.',
+        dOB: '1990-04-12', sex: 'F', maritalStatus: 'Married', email: 'full@example.test', workEmail: 'full.work@example.test',
+        homePhone: '(555) 111-2222', mobilePhone: '(555) 333-4444', workPhone: '(555) 555-6666', otherPhone: '',
+        pregnant: false, breastfeeding: false,
+        address1: '1 Main St', address2: 'Apt 2', city: 'Springfield', state: 'IL', zipCode: '62701',
+        mailingAddress1: 'PO Box 9', mailingCity: 'Springfield', mailingState: 'IL', mailingZipCode: '62702',
+        preferredLanguage: 'English', ethnicity: 'Not Hispanic or Latino', race: 'White', countryOfBirth: 'United States',
+        advancedHealthCareDirective: 'No Advance Directive', noticeOfPrivacyPracticesDate: '2026-01-15',
+        insurance: {
+            insuranceType: 'Employer-Provided', insuranceCompany: 'Blue Shield', subscriberId: 'BS123', insurancePlan: 'PPO (Preferred Provider Organization)',
+            groupNumber: 'G-77', phoneNumber: '(800) 111-1111', coverageStartDate: '2025-01-01', terminationDate: '', insuranceStatus: 'Active',
+            coPayAmount: '25.50', medicalGroup: 'Prospect Medical Group / IPA', pcp: 'Smith, John A., MD', guarantor: 'Self',
+        },
+        secondaryInsurance: {
+            insuranceType: 'Medicaid', insuranceCompany: 'State Medicaid', subscriberId: 'MD999', insuranceStatus: 'Inactive',
+            guarantor: 'Spouse', guarantorName: 'Pat Istration', guarantorDOB: '1988-02-02', guarantorAddress: '1 Main St', guarantorSubscriberId: 'MD998',
+        },
+        emergencyContacts: [
+            { relationshipToPatient: 'Spouse', contactName: 'Pat Istration', contactPhone: '(555) 777-8888', street: '1 Main St', emergencyCity: 'Springfield', emergencyState: 'IL', emergencyZipCode: '62701' },
+            { relationshipToPatient: 'Sibling', contactName: 'Sam Istration', contactPhone: '(555) 999-0000' },
+        ],
+    };
+    const createRes = await call('POST', '/Patient/createPatient', { token: tk, body });
+    assert.equal(createRes.status, 201, JSON.stringify(createRes.body));
+    // Stedi is disabled under NODE_ENV=test, so both insured slots report 'skipped' and eligible is null.
+    assert.equal(createRes.body.eligibility.eligible, null);
+    assert.equal(createRes.body.eligibility.stediEnabled, false);
+    assert.equal(createRes.body.eligibility.primary.status, 'skipped');
+    assert.equal(createRes.body.eligibility.secondary.status, 'skipped');
+    const p = createRes.body.data;
+
+    const expectEnriched = (x) => {
+        assert.equal(x.prefix, 'Ms.');
+        assert.equal(x.suffix, 'Jr.');
+        assert.equal(x.maritalStatus, 'Married');
+        assert.equal(x.preferredLanguage, 'English');
+        assert.equal(x.race, 'White');
+        assert.equal(x.workPhone, '(555) 555-6666');
+        assert.equal(x.otherPhone, '');
+        assert.equal(x.pregnant, false);
+        assert.equal(x.noticeOfPrivacyPracticesDate, '2026-01-15');
+        assert.deepEqual(x.mailingAddress, { address1: 'PO Box 9', address2: '', city: 'Springfield', state: 'IL', zipCode: '62702' });
+        assert.equal(x.insurance.rank, 'primary');
+        assert.equal(x.insurance.insuranceCompany, 'Blue Shield');
+        assert.equal(x.insurance.insuranceStatus, 'Active');
+        assert.equal(x.insurance.coPayAmount, 25.5);
+        assert.equal(x.insurance.coverageStartDate, '2025-01-01');
+        assert.equal(x.insurance.terminationDate, '');
+        assert.equal(x.secondaryInsurance.rank, 'secondary');
+        assert.equal(x.secondaryInsurance.insuranceStatus, 'Inactive');
+        assert.equal(x.secondaryInsurance.guarantorName, 'Pat Istration');
+        assert.equal(x.secondaryInsurance.guarantorDOB, '1988-02-02');
+        assert.equal(x.emergencyContacts.length, 2);
+        assert.equal(x.emergencyContacts[0].contactName, 'Pat Istration');
+        assert.equal(x.emergencyContacts[1].relationshipToPatient, 'Sibling');
+        assert.equal(x.emergencyContact.contactPhone, '(555) 777-8888');
+    };
+    expectEnriched(p);
+
+    // All three read aliases return the identical enriched shape.
+    const reads = await Promise.all([
+        call('GET', `/Patient/getPatientById/${p.id}`, { token: tk }),
+        call('GET', `/Patient/getPatientDemographics/${p.id}`, { token: tk }),
+        call('GET', `/patient/getPatientByID/${p.id}`, { token: tk }),
+    ]);
+    for (const r of reads) { assert.equal(r.status, 200); expectEnriched(r.body.data); }
+    assert.deepEqual(reads[0].body.data, reads[1].body.data);
+    assert.deepEqual(reads[1].body.data, reads[2].body.data);
+
+    // Paginated list inherits the same fields.
+    const list = await call('GET', '/Patient/getAllPatientListPaginated?page=1&limit=10', { token: tk });
+    assert.equal(list.body.data.total, 1);
+    expectEnriched(list.body.data.items[0]);
+
+    // Update: flat field + upsert of secondary insurance + clearing the second emergency contact (blank block = delete).
+    const upd = await call('PUT', `/Patient/updatePatientDetails/${p.id}`, { token: tk, body: {
+        maritalStatus: 'Divorced',
+        secondaryInsurance: { ...body.secondaryInsurance, insuranceStatus: 'Active', insuranceCompany: 'State Medicaid 2' },
+        emergencyContacts: [body.emergencyContacts[0], {}],
+    } });
+    assert.equal(upd.status, 200, JSON.stringify(upd.body));
+    assert.equal(upd.body.data.maritalStatus, 'Divorced');
+    assert.equal(upd.body.data.insurance.insuranceCompany, 'Blue Shield', 'primary untouched when absent from body');
+    assert.equal(upd.body.data.secondaryInsurance.insuranceCompany, 'State Medicaid 2');
+    assert.equal(upd.body.data.secondaryInsurance.insuranceStatus, 'Active');
+    assert.equal(upd.body.data.emergencyContacts.length, 1);
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM patient_insurance WHERE patient_id = $1', [p.id])).rows[0].n, 2);
+
+    // Nested-only update is accepted (no flat fields).
+    const nestedOnly = await call('PUT', `/Patient/updatePatientById/${p.id}`, { token: tk, body: { emergencyContacts: [] } });
+    assert.equal(nestedOnly.status, 200);
+    assert.equal(nestedOnly.body.data.emergencyContacts.length, 0);
+
+    // Validation: bad nested date / status rejected; blank nested blocks are not persisted; atomicity on failure.
+    assert.equal((await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Bad', lastName: 'Ins', insurance: { coverageStartDate: 'yesterday' } } })).status, 400);
+    assert.equal((await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Bad', lastName: 'Status', insurance: { insuranceStatus: 'maybe' } } })).status, 400);
+    const blank = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Blank', lastName: 'Blocks', insurance: {}, secondaryInsurance: { insuranceCompany: '' }, emergencyContacts: [{}, {}] } })).body.data;
+    assert.equal(blank.insurance, null);
+    assert.equal(blank.secondaryInsurance, null);
+    assert.deepEqual(blank.emergencyContacts, []);
+    assert.equal(blank.emergencyContact, null);
+    const before = (await pool.query('SELECT count(*)::int AS n FROM patients WHERE tenant_id = $1', [t.user.tenant.id])).rows[0].n;
+    // guarantor_dob is a DATE column: an over-long guarantor name passes Zod? no — force a DB-level failure with a too-long value that Zod allows.
+    const atomic = await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Atomic', lastName: 'Fail', insurance: { insuranceCompany: 'X', coPayAmount: 99999999 } } });
+    assert.equal(atomic.status, 400, 'copay above schema max is rejected before any write');
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM patients WHERE tenant_id = $1', [t.user.tenant.id])).rows[0].n, before);
+
+    // Legacy verify alias forwards to the real inline runner (skipped without Stedi; history still filed for a saved patient).
+    const elig = await call('POST', '/Patient/verifyEligibility', { token: tk, body: { patientId: p.id, firstName: 'Full', lastName: 'Istration', dOB: '1990-04-12', insurance: body.insurance } });
+    assert.equal(elig.status, 200, JSON.stringify(elig.body));
+    assert.equal(elig.body.data.primary.status, 'skipped');
+    assert.equal(elig.body.stediEnabled, false);
+
+    // Tenant isolation holds on the new tables and on the update alias.
+    const other = await newTenant('regB');
+    assert.equal((await call('GET', `/Patient/getPatientDemographics/${p.id}`, { token: other.token })).status, 404);
+    assert.equal((await call('PUT', `/Patient/updatePatientDetails/${p.id}`, { token: other.token, body: { insurance: { insuranceCompany: 'Hijack' } } })).status, 404);
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM patient_insurance WHERE tenant_id = $1', [other.user.tenant.id])).rows[0].n, 0);
+    const mine = await call('GET', `/Patient/getPatientById/${p.id}`, { token: tk });
+    assert.equal(mine.body.data.insurance.insuranceCompany, 'Blue Shield', 'other tenant could not overwrite insurance');
+});
+
+test('tenant profile (Practice Information): GET/PUT round-trip, NPI Luhn checksum, role + tenant isolation', async () => {
+    const t = await newTenant('profile');
+    const tk = t.token;
+
+    // No tenant_profile row yet (upsert hasn't run) — GET still succeeds with the tenant's name and null fields.
+    const empty = await call('GET', '/api/tenant/profile', { token: tk });
+    assert.equal(empty.status, 200);
+    assert.equal(empty.body.data.name, 'Org profile');
+    assert.equal(empty.body.data.address, null);
+    assert.equal(empty.body.data.groupNpi, null);
+
+    const nurse = (await call('POST', '/auth/register-user', { token: tk, body: { email: `profile-nurse-${suffix}@test.example`, password: 'Nurse-passw0rd', role: 'nurse', firstName: 'N' } }));
+    const nurseLogin = await call('POST', '/login', { body: { username: `profile-nurse-${suffix}@test.example`, password: 'Nurse-passw0rd' } });
+    assert.equal((await call('PUT', '/api/tenant/profile', { token: nurseLogin.body.token, body: { name: 'Nope' } })).status, 403, 'nurse cannot edit practice information');
+
+    const validBody = {
+        name: 'Acme Health Clinic',
+        address: '123 Main St',
+        address2: 'Suite 2',
+        city: 'Springfield',
+        state: 'IL',
+        zip: '62701',
+        phone: '(217) 555-0100',
+        fax: '(217) 555-0101',
+        ein: '12-3456789',
+        groupNpi: '1234567891', // shape-valid (10 digits, starts 1-9) but WRONG check digit (correct is …95)
+    };
+    const badChecksum = await call('PUT', '/api/tenant/profile', { token: tk, body: validBody });
+    assert.equal(badChecksum.status, 400, 'a correctly-shaped but checksum-invalid NPI must be rejected, proving the Luhn check actually runs');
+    assert.match(badChecksum.body.message, /NPI/);
+
+    const saved = await call('PUT', '/api/tenant/profile', { token: tk, body: { ...validBody, groupNpi: '1234567895' } });
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    assert.equal(saved.body.data.name, 'Acme Health Clinic');
+    assert.equal(saved.body.data.address, '123 Main St');
+    assert.equal(saved.body.data.address2, 'Suite 2');
+    assert.equal(saved.body.data.city, 'Springfield');
+    assert.equal(saved.body.data.state, 'IL');
+    assert.equal(saved.body.data.zip, '62701');
+    assert.equal(saved.body.data.phone, '(217) 555-0100');
+    assert.equal(saved.body.data.ein, '12-3456789');
+    assert.equal(saved.body.data.groupNpi, '1234567895');
+
+    // Round-trips on GET, including the renamed tenant (PUT also updates tenants.name).
+    const reread = await call('GET', '/api/tenant/profile', { token: tk });
+    assert.deepEqual(reread.body.data, saved.body.data);
+
+    // Field-level validation: bad zip, bad phone shape, bad EIN shape are all rejected.
+    assert.equal((await call('PUT', '/api/tenant/profile', { token: tk, body: { ...validBody, groupNpi: '1234567895', zip: '123' } })).status, 400);
+    assert.equal((await call('PUT', '/api/tenant/profile', { token: tk, body: { ...validBody, groupNpi: '1234567895', phone: '217-555-0100' } })).status, 400);
+    assert.equal((await call('PUT', '/api/tenant/profile', { token: tk, body: { ...validBody, groupNpi: '1234567895', ein: '123456789' } })).status, 400);
+
+    // Regression: the edit form round-trips an untouched optional field's GET value (`null`) straight
+    // back into the PUT body rather than omitting it — null must be accepted the same as "not sent".
+    const nulledOptional = await call('PUT', '/api/tenant/profile', { token: tk, body: { ...validBody, groupNpi: '1234567895', address2: null, fax: null, ein: null } });
+    assert.equal(nulledOptional.status, 200, JSON.stringify(nulledOptional.body));
+    assert.equal(nulledOptional.body.data.address2, null);
+    assert.equal(nulledOptional.body.data.ein, null);
+
+    // Tenant isolation: a second tenant has its own empty profile, never sees the first tenant's data.
+    const other = await newTenant('profileB');
+    const otherGet = await call('GET', '/api/tenant/profile', { token: other.token });
+    assert.equal(otherGet.body.data.address, null);
+    assert.notEqual(otherGet.body.data.name, 'Acme Health Clinic');
+});
+
+test('patient registration follow-ups: race-safe MRNs, duplicate check, profile photo', async () => {
+    const t = await newTenant('reg2');
+    const tk = t.token;
+    // 8 concurrent creates must all succeed with distinct MRNs (counter, not count(*)+1).
+    const results = await Promise.all(Array.from({ length: 8 }, (_, i) =>
+        call('POST', '/Patient/createPatient', { token: tk, body: { firstName: `Race${i}`, lastName: 'Condition' } })));
+    for (const r of results) assert.equal(r.status, 201, JSON.stringify(r.body));
+    const mrns = results.map((r) => r.body.data.mrn);
+    assert.equal(new Set(mrns).size, 8, `duplicate MRNs: ${mrns}`);
+    // Caller-supplied MRN that collides with the next counter value: auto-numbering skips past it.
+    const taken = await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Manual', lastName: 'Mrn', mrn: 'MRN000009' } });
+    assert.equal(taken.status, 201);
+    const next = await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Auto', lastName: 'After' } });
+    assert.equal(next.status, 201, JSON.stringify(next.body));
+    assert.notEqual(next.body.data.mrn, 'MRN000009');
+    assert.equal((await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Dup', lastName: 'Mrn', mrn: 'MRN000009' } })).status, 409);
+
+    // Duplicate check: last name + DOB, or first + last; excludeId; tenant-scoped.
+    const jane = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Jane', lastName: 'Dupe', dOB: '1980-01-02' } })).body.data;
+    const byDob = await call('GET', '/Patient/findDuplicates?lastName=dupe&dOB=1980-01-02&firstName=Someone', { token: tk });
+    assert.deepEqual(byDob.body.data.map((p) => p.id), [jane.id]);
+    const byName = await call('GET', '/Patient/findDuplicates?lastName=DUPE&firstName=jane', { token: tk });
+    assert.deepEqual(byName.body.data.map((p) => p.id), [jane.id]);
+    assert.deepEqual((await call('GET', `/Patient/findDuplicates?lastName=dupe&firstName=jane&excludeId=${jane.id}`, { token: tk })).body.data, []);
+    assert.deepEqual((await call('GET', '/Patient/findDuplicates?lastName=dupe&dOB=1999-09-09', { token: tk })).body.data, []);
+    assert.equal((await call('GET', '/Patient/findDuplicates?firstName=jane', { token: tk })).status, 400);
+    const other = await newTenant('reg2B');
+    assert.deepEqual((await call('GET', '/Patient/findDuplicates?lastName=dupe&firstName=jane', { token: other.token })).body.data, []);
+
+    // Profile photo: data URL stored and returned by every read; bad payloads rejected; clearable.
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    const up = await call('PUT', `/Patient/updateProfilePicture/${jane.id}`, { token: tk, body: { profilePicture: png } });
+    assert.equal(up.status, 200, JSON.stringify(up.body));
+    assert.equal(up.body.data.profilePicture, png);
+    assert.equal((await call('GET', `/Patient/getPatientById/${jane.id}`, { token: tk })).body.data.profilePicture, png);
+    assert.equal((await call('PUT', `/Patient/updateProfilePicture/${jane.id}`, { token: tk, body: { profilePicture: 'https://evil.example/x.png' } })).status, 400);
+    assert.equal((await call('PUT', `/Patient/updateProfilePicture/${jane.id}`, { token: tk, body: { profilePicture: 'data:text/html;base64,PHNjcmlwdD4=' } })).status, 400);
+    assert.equal((await call('PUT', `/Patient/updateProfilePicture/${jane.id}`, { token: other.token, body: { profilePicture: png } })).status, 404);
+    const cleared = await call('PUT', `/Patient/updateProfilePicture/${jane.id}`, { token: tk, body: { profilePicture: null } });
+    assert.equal(cleared.body.data.profilePicture, '');
+
+    // Search now matches home / work phone.
+    await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Phone', lastName: 'Search', homePhone: '(217) 555-9876', workPhone: '(217) 555-1234' } });
+    assert.equal((await call('GET', '/Patient/getAllPatientListPaginated?query=555-9876', { token: tk })).body.data.items.length, 1);
+    assert.equal((await call('GET', '/Patient/getAllPatientListPaginated?query=555-1234', { token: tk })).body.data.items.length, 1);
+});
+
+
+test('eligibility: payer search gated on Stedi, inline check validates, persists history only for saved patients', async () => {
+    const t = await newTenant('elig');
+    const tk = t.token;
+    // Stedi is disabled in the test env: the payer directory is unavailable, not a crash.
+    const search = await call('GET', '/Payers/search?query=aetna', { token: tk });
+    assert.equal(search.status, 503);
+    assert.equal(search.body.code, 'STEDI_DISABLED');
+    assert.equal((await call('GET', '/Payers/search', { token: tk })).status, 400, 'query required');
+
+    // Validation.
+    assert.equal((await call('POST', '/Eligibility/checkInline', { token: tk, body: { firstName: 'A' } })).status, 400);
+    assert.equal((await call('POST', '/Eligibility/checkInline', { token: tk, body: { firstName: 'A', lastName: 'B', dOB: '1990-01-01', serviceTypeCodes: ['bad code'] } })).status, 400);
+
+    // No insurance → nothing to check.
+    const none = await call('POST', '/Eligibility/checkInline', { token: tk, body: { firstName: 'A', lastName: 'B', dOB: '1990-01-01' } });
+    assert.equal(none.status, 200);
+    assert.deepEqual(none.body.data, {});
+
+    // Unsaved patient: per-slot result, no history row.
+    const inline = await call('POST', '/Eligibility/checkInline', { token: tk, body: {
+        firstName: 'A', lastName: 'B', dOB: '1990-01-01', sex: 'F', serviceTypeCodes: ['48'],
+        insurance: { insuranceCompany: 'Aetna', tradingPartnerServiceId: '60054', subscriberId: 'W1' },
+        secondaryInsurance: { insuranceCompany: 'Nobody', subscriberId: '' },
+    } });
+    assert.equal(inline.status, 200, JSON.stringify(inline.body));
+    assert.equal(inline.body.data.primary.status, 'skipped');
+    assert.equal(inline.body.data.primary.id, null);
+    assert.equal(inline.body.data.secondary, undefined, 'slot without member id is not checked');
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM eligibility_checks WHERE tenant_id = $1', [t.user.tenant.id])).rows[0].n, 0);
+
+    // Saved patient: history is filed and readable; trading partner id persists on the insurance row.
+    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: {
+        firstName: 'Eli', lastName: 'Gible', dOB: '1985-02-03', sex: 'M',
+        insurance: { insuranceCompany: 'Aetna', tradingPartnerServiceId: '60054', subscriberId: 'W2', insuranceStatus: 'Active' },
+    } })).body.data;
+    assert.equal(p.insurance.tradingPartnerServiceId, '60054');
+    const saved = await call('POST', '/Eligibility/checkInline', { token: tk, body: { patientId: p.id, firstName: 'Eli', lastName: 'Gible', dOB: '1985-02-03', insurance: p.insurance } });
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    assert.ok(saved.body.data.primary.id, 'history row id returned');
+    const history = await call('GET', `/Eligibility/historyByPatient/${p.id}`, { token: tk });
+    // createPatient filed one check per insured slot too, so there are two rows for the primary slot.
+    assert.equal(history.body.data.length, 2);
+    assert.equal(history.body.data[0].slot, 'primary');
+    assert.equal(history.body.data[0].status, 'skipped');
+    assert.equal(history.body.data[0].tradingPartnerServiceId, '60054');
+    const one = await call('GET', `/Eligibility/getById/${saved.body.data.primary.id}`, { token: tk });
+    assert.equal(one.status, 200);
+    assert.equal(one.body.data.patientId, p.id);
+
+    // Tenant isolation: foreign patient id → 404; foreign history → empty; foreign check → 404.
+    const other = await newTenant('eligB');
+    assert.equal((await call('POST', '/Eligibility/checkInline', { token: other.token, body: { patientId: p.id, firstName: 'Eli', lastName: 'Gible', dOB: '1985-02-03', insurance: p.insurance } })).status, 404);
+    assert.deepEqual((await call('GET', `/Eligibility/historyByPatient/${p.id}`, { token: other.token })).body.data, []);
+    assert.equal((await call('GET', `/Eligibility/getById/${saved.body.data.primary.id}`, { token: other.token })).status, 404);
 });

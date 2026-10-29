@@ -1,4 +1,5 @@
 /** Enterprise main navigation — scalable grouped structure for inpatient EMR workflows. */
+import type { ModuleKey } from '../../hooks/useTenantModules';
 
 export interface MainNavLink {
     readonly to: string;
@@ -6,6 +7,8 @@ export interface MainNavLink {
     readonly title?: string;
     /** When true, NavLink uses `end` (exact path match for active state). */
     readonly end?: boolean;
+    /** Tenant module that gates this link (see useTenantModules.ts). Omit for always-on links. */
+    readonly module?: ModuleKey;
 }
 
 export interface MainNavDropdownGroup {
@@ -34,8 +37,9 @@ export function isAppointmentsSectionActive(pathname: string): boolean {
 
 /** Patient registry & bed management — stays under Patients. */
 export const PATIENT_SUB_LINKS: readonly MainNavLink[] = [
-    { to: '/app/patients/list', label: 'Patient List' },
-    { to: '/app/bed-board', label: 'Bed Board' },
+    { to: '/app/patients/list', label: 'Patient List', module: 'patients' },
+    { to: '/app/patients/register', label: 'Register Patient', module: 'patients' },
+    { to: '/app/bed-board', label: 'Bed Board', module: 'adt' },
 ];
 
 export const PATIENT_ACTIVE_PREFIXES = ['/app/patients', '/app/bed-board'] as const;
@@ -50,26 +54,31 @@ export const CLINICAL_SUB_LINKS: readonly MainNavLink[] = [
         to: '/app/inpatient/clinical',
         label: 'Clinical Workspace',
         title: 'Physician & nursing notes, vitals, order entry',
+        module: 'patients',
     },
     {
         to: '/app/inpatient/orders',
         label: 'Orders Dashboard',
         title: 'Unified monitoring across medication, lab, radiology, dietary, therapy, and procedure orders',
+        module: 'medication',
     },
     {
         to: '/app/inpatient/medication-management',
         label: 'Medication Management',
         title: 'MAR, PRN/STAT, pharmacy dispensing, discharge medications',
+        module: 'medication',
     },
     {
         to: '/app/inpatient/discharge-readiness',
         label: 'Discharge Readiness',
         title: 'Discharge summary, checklist, charges, eligibility, claim prep',
+        module: 'adt',
     },
     {
         to: '/app/quality/infection-dashboard',
         label: 'Infection Analytics',
         title: 'HAI event summary and unit infection quality metrics',
+        module: 'patients',
     },
     {
         to: '/app/reports/quality-measures',
@@ -90,6 +99,7 @@ export const OPERATIONS_SUB_LINKS: readonly MainNavLink[] = [
         to: '/app/staff-scheduling',
         label: 'Staffing',
         title: 'Staff scheduling, live assignments, and unit coverage',
+        module: 'staffing',
     },
     {
         to: '/app/operations/evs-queue',
@@ -115,11 +125,13 @@ export const BILLING_SUB_LINKS: readonly MainNavLink[] = [
         to: '/app/billing/denials',
         label: 'Denials',
         title: 'Denial management worklist and appeals',
+        module: 'billing',
     },
     {
         to: '/app/billing/cdi',
         label: 'CDI Worklist',
         title: 'Clinical documentation improvement queries',
+        module: 'billing',
     },
 ];
 

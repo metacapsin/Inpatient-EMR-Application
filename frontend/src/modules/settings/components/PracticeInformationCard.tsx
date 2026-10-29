@@ -1,12 +1,14 @@
 import { forwardRef, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Pencil } from 'lucide-react';
-import { practiceAPI, commonAPI } from '../../../services/api';
+import { practiceAPI } from '../../../services/api';
+import { US_STATES } from '../../../constants/patientReference';
 import {
     autoFormatEIN,
     autoFormatPhone,
     autoFormatZip,
     formatPhoneDisplay,
+    isValidNpi,
 } from '../utils/practiceFormatters';
 import { SettingsCardHeader } from './SettingsCardHeader';
 import {
@@ -83,7 +85,6 @@ export const PracticeInformationCard = forwardRef<HTMLElement>(function Practice
     const [practiceForm, setPracticeForm] = useState<any>({});
     const [practiceSaving, setPracticeSaving] = useState(false);
     const [practiceErrors, setPracticeErrors] = useState<any>({});
-    const [states, setStates] = useState<any[]>([]);
     const [stateOpen, setStateOpen] = useState(false);
     const stateRef = useRef<HTMLDivElement>(null);
 
@@ -97,35 +98,22 @@ export const PracticeInformationCard = forwardRef<HTMLElement>(function Practice
 
     useEffect(() => {
         practiceAPI
-            .getList()
+            .get()
             .then((res) => {
-                const list = res.data?.data ?? res.data ?? [];
-                setPracticeInfo(list[0] ?? null);
+                setPracticeInfo(res.data?.data ?? null);
             })
             .catch(() => {})
             .finally(() => setPracticeLoading(false));
     }, []);
 
     useEffect(() => {
-        if (practiceEdit && practiceInfo?._id) {
+        if (practiceEdit && practiceInfo) {
             setPracticeErrors({});
-            Promise.all([practiceAPI.getById(practiceInfo._id), commonAPI.getStates('US')])
-                .then(([infoRes, statesRes]) => {
-                    const detail = infoRes.data?.data ?? infoRes.data ?? practiceInfo;
-                    setPracticeForm({
-                        ...detail,
-                        phone: detail.phone ? autoFormatPhone(detail.phone) : '',
-                        fax: detail.fax ? autoFormatPhone(detail.fax) : '',
-                    });
-                    setStates(statesRes.data?.data ?? statesRes.data ?? []);
-                })
-                .catch(() => {
-                    setPracticeForm({
-                        ...practiceInfo,
-                        phone: practiceInfo.phone ? autoFormatPhone(practiceInfo.phone) : '',
-                        fax: practiceInfo.fax ? autoFormatPhone(practiceInfo.fax) : '',
-                    });
-                });
+            setPracticeForm({
+                ...practiceInfo,
+                phone: practiceInfo.phone ? autoFormatPhone(practiceInfo.phone) : '',
+                fax: practiceInfo.fax ? autoFormatPhone(practiceInfo.fax) : '',
+            });
         }
     }, [practiceEdit, practiceInfo]);
 
@@ -192,8 +180,10 @@ export const PracticeInformationCard = forwardRef<HTMLElement>(function Practice
 
         if (f.fax?.trim() && f.fax.length > 14) errs.fax = 'Fax must be at most 14 characters.';
         if (f.ein?.trim() && !einPattern.test(f.ein)) errs.ein = 'EIN must be in format 12-3456789.';
-        if (f.groupNpi?.trim() && !npiPattern.test(f.groupNpi))
-            errs.groupNpi = 'NPI must be exactly 10 digits, first digit 1-9.';
+        if (f.groupNpi?.trim()) {
+            if (!npiPattern.test(f.groupNpi)) errs.groupNpi = 'NPI must be exactly 10 digits, first digit 1-9.';
+            else if (!isValidNpi(f.groupNpi)) errs.groupNpi = 'NPI check digit is invalid — not a real NPI.';
+        }
 
         if (Object.keys(errs).length) {
             setPracticeErrors(errs);
@@ -202,9 +192,9 @@ export const PracticeInformationCard = forwardRef<HTMLElement>(function Practice
 
         setPracticeSaving(true);
         try {
-            const res = await practiceAPI.update(practiceInfo._id, practiceForm);
-            const updated = res.data?.data ?? res.data ?? practiceForm;
-            setPracticeInfo({ ...practiceForm, ...updated });
+            const res = await practiceAPI.update(practiceForm);
+            const updated = res.data?.data ?? practiceForm;
+            setPracticeInfo(updated);
             setPracticeEdit(false);
             toast.success('Practice information updated successfully.');
         } catch (err: any) {
@@ -328,10 +318,7 @@ export const PracticeInformationCard = forwardRef<HTMLElement>(function Practice
                             >
                                 <span className={practiceForm.state ? '' : 'text-gray-400'}>
                                     {practiceForm.state
-                                        ? (states.find(
-                                              (s: any) =>
-                                                  (s.abbreviation ?? s.code ?? s.name) === practiceForm.state
-                                          )?.name ?? practiceForm.state)
+                                        ? (US_STATES.find((s) => s.value === practiceForm.state)?.label ?? practiceForm.state)
                                         : 'Select state…'}
                                 </span>
                                 <svg
@@ -357,25 +344,22 @@ export const PracticeInformationCard = forwardRef<HTMLElement>(function Practice
                                     >
                                         Select state…
                                     </li>
-                                    {states.map((s: any) => {
-                                        const val = s.abbreviation ?? s.code ?? s.name;
-                                        return (
-                                            <li
-                                                key={s._id}
-                                                className={`cursor-pointer px-3 py-1.5 text-sm hover:bg-primary/10 ${
-                                                    practiceForm.state === val
-                                                        ? 'bg-primary/10 font-medium text-primary'
-                                                        : 'text-gray-900 dark:text-white'
-                                                }`}
-                                                onMouseDown={() => {
-                                                    setPracticeForm((p: any) => ({ ...p, state: val }));
-                                                    setStateOpen(false);
-                                                }}
-                                            >
-                                                {s.name}
-                                            </li>
-                                        );
-                                    })}
+                                    {US_STATES.map((s) => (
+                                        <li
+                                            key={s.value}
+                                            className={`cursor-pointer px-3 py-1.5 text-sm hover:bg-primary/10 ${
+                                                practiceForm.state === s.value
+                                                    ? 'bg-primary/10 font-medium text-primary'
+                                                    : 'text-gray-900 dark:text-white'
+                                            }`}
+                                            onMouseDown={() => {
+                                                setPracticeForm((p: any) => ({ ...p, state: s.value }));
+                                                setStateOpen(false);
+                                            }}
+                                        >
+                                            {s.label}
+                                        </li>
+                                    ))}
                                 </ul>
                             ) : null}
                         </div>

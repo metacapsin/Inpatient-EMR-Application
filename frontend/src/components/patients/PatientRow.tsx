@@ -233,9 +233,16 @@ export function PatientTableRow({
                     )}
                     <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-gray-900 dark:text-white">{patient.name}</p>
-                        {/* <p className="truncate text-[11px] text-gray-500">{patient.email || '—'}</p> */}
+                        {patient.preferredLanguage ? (
+                            <p className="truncate text-[11px] text-gray-500 dark:text-gray-400" title="Preferred language">
+                                {patient.preferredLanguage}
+                            </p>
+                        ) : null}
                     </div>
                 </div>
+            </td>
+            <td className="max-w-0 truncate px-2.5 py-1.5 font-mono text-xs text-gray-800 tabular-nums dark:text-gray-200" title={patient.mrn}>
+                {patient.mrn}
             </td>
             <td className="max-w-0 px-2.5 py-1.5 text-xs text-gray-600 dark:text-gray-300">
                 <div className="min-w-0">
@@ -344,6 +351,8 @@ export function PatientMobileCard({
                     <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{patient.name}</p>
                     <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{patient.email || '—'}</p>
                     <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
+                        <span className="font-bold text-dark dark:text-gray-200">MRN</span>
+                        <span className="text-right font-mono tabular-nums">{patient.mrn}</span>
                         <span className="font-bold text-dark dark:text-gray-200">DOB</span>
                         <span className="text-right">
                             <span className="block tabular-nums">{patient.dob}</span>
@@ -363,6 +372,12 @@ export function PatientMobileCard({
                         </span>
                         <span className="font-bold text-dark dark:text-gray-200">Phone</span>
                         <span>{patient.phone}</span>
+                        {patient.preferredLanguage ? (
+                            <>
+                                <span className="font-bold text-dark dark:text-gray-200">Language</span>
+                                <span>{patient.preferredLanguage}</span>
+                            </>
+                        ) : null}
                     </div>
                     {onOpenAdt ? (
                         <div className="mt-3 rounded-lg bg-gray-50/80 px-2 py-2 dark:bg-white/[0.04]">

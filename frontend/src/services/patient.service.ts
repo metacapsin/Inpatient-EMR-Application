@@ -43,6 +43,8 @@ export interface PatientListItem {
     room: string;
     bed: string;
     profilePicture?: string;
+    /** Preferred language from registration ('' when not recorded). */
+    preferredLanguage: string;
     raw: PatientApiRecord;
 }
 
@@ -289,6 +291,7 @@ export function mapPatientRecord(raw: PatientApiRecord): PatientListItem {
             pickString(raw.bedName as string | undefined) ||
             '—',
         profilePicture: pickString(raw.profilePicture) || undefined,
+        preferredLanguage: pickString(raw.preferredLanguage as string | undefined),
         raw,
     };
 }
@@ -327,8 +330,13 @@ export interface FacesheetPatient {
     fullName: string;
     mrn: string;
     dOB: string;
+    /** Raw YYYY-MM-DD (or '') for age math; `dOB` is the display form. */
+    dobRaw: string;
     sex: string;
     mobilePhone: string;
+    email: string;
+    /** Preferred language — rendered on the persistent header because it changes how staff talk to the patient. */
+    preferredLanguage: string;
     address: string;
     /** Parsed from getPatientById when the API supplies location fields */
     location: PatientLocationSnapshot | null;
@@ -423,8 +431,11 @@ export async function getPatientById(id: string): Promise<FacesheetPatient> {
         fullName,
         mrn: pickString(p.mrn) || '—',
         dOB: dobRaw ? formatDisplayDate(dobRaw) : '—',
+        dobRaw,
         sex: formatSexDisplay(pickString(p.sex)),
         mobilePhone: pickString(p.mobilePhone) || pickString(p.homePhone) || '—',
+        email: pickString(p.email) || pickString(p.emailAddress),
+        preferredLanguage: pickString(p.preferredLanguage),
         address: buildPatientAddress(p) || '—',
         location: extractPatientLocationFromPayload(p),
         raw: p,
@@ -552,4 +563,184 @@ export async function getPatientsList(params: GetPatientsListParams): Promise<Pa
         page: params.page,
         limit: params.limit,
     };
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// Patient registration (write side). Field names follow the backend contract in
+// backend/src/routes/patients.js (`patientBody`), which itself mirrors the legacy shape the
+// Demographics tab reads — so what the form sends is what every read screen gets back.
+// ---------------------------------------------------------------------------------------------
+
+export interface PatientInsuranceInput {
+    insuranceType?: string;
+    insuranceCompany?: string;
+    /** Stedi trading-partner id of the payer picked from the directory ('' when typed freely). */
+    tradingPartnerServiceId?: string;
+    subscriberId?: string;
+    insurancePlan?: string;
+    groupNumber?: string;
+    phoneNumber?: string;
+    coverageStartDate?: string;
+    terminationDate?: string;
+    insuranceStatus?: 'Active' | 'Inactive' | '';
+    coPayAmount?: string | number | null;
+    medicalGroup?: string;
+    pcp?: string;
+    guarantor?: string;
+    guarantorName?: string;
+    guarantorAddress?: string;
+    guarantorDOB?: string;
+    guarantorSubscriberId?: string;
+}
+
+export interface PatientEmergencyContactInput {
+    relationshipToPatient?: string;
+    contactName?: string;
+    contactPhone?: string;
+    street?: string;
+    emergencyCity?: string;
+    emergencyState?: string;
+    emergencyZipCode?: string;
+}
+
+export interface PatientRegistrationPayload {
+    mrn?: string;
+    prefix?: string;
+    firstName: string;
+    middleName?: string;
+    lastName: string;
+    suffix?: string;
+    dOB?: string;
+    sex?: string;
+    maritalStatus?: string;
+    email?: string;
+    workEmail?: string;
+    mobilePhone?: string;
+    homePhone?: string;
+    workPhone?: string;
+    otherPhone?: string;
+    pregnant?: boolean | null;
+    breastfeeding?: boolean | null;
+    address1?: string;
+    address2?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    mailingAddress1?: string;
+    mailingAddress2?: string;
+    mailingCity?: string;
+    mailingState?: string;
+    mailingZipCode?: string;
+    preferredLanguage?: string;
+    ethnicity?: string;
+    race?: string;
+    countryOfBirth?: string;
+    advancedHealthCareDirective?: string;
+    noticeOfPrivacyPracticesDate?: string;
+    status?: boolean;
+    insurance?: PatientInsuranceInput | null;
+    secondaryInsurance?: PatientInsuranceInput | null;
+    emergencyContacts?: PatientEmergencyContactInput[] | null;
+}
+
+export interface CreatePatientResult {
+    /** The created patient as every read endpoint will return it (enriched shape). */
+    patient: PatientApiRecord & { id: string };
+    eligibility: { eligible: boolean } | null;
+}
+
+/** Drops empty-string / undefined leaves so the API stores NULL rather than ''. Nested blocks are kept as-is (backend handles blanks). */
+function compactPayload<T extends Record<string, unknown>>(payload: T): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(payload)) {
+        if (v === undefined) continue;
+        if (typeof v === 'string' && v.trim() === '') continue;
+        out[k] = typeof v === 'string' ? v.trim() : v;
+    }
+    return out;
+}
+
+/** POST /Patient/createPatient — full registration or quick add; same endpoint, different field coverage. */
+export async function createPatient(payload: PatientRegistrationPayload): Promise<CreatePatientResult> {
+    const { data } = await api.post<{ data?: PatientApiRecord; eligibility?: { eligible: boolean } }>(
+        '/Patient/createPatient',
+        compactPayload(payload as unknown as Record<string, unknown>)
+    );
+    const patient = (data?.data ?? {}) as PatientApiRecord;
+    const id = pickString(patient._id as string | undefined) || pickString(patient.id) || pickString(patient.patientId);
+    return { patient: { ...patient, id }, eligibility: data?.eligibility ?? null };
+}
+
+/** PUT /Patient/updatePatientDetails/:id — flat fields plus upserts of the insurance / emergency-contact blocks. */
+export async function updatePatientDetails(id: string, payload: Partial<PatientRegistrationPayload>): Promise<PatientApiRecord> {
+    const { data } = await api.put<{ data?: PatientApiRecord }>(
+        `/Patient/updatePatientDetails/${encodeURIComponent(id)}`,
+        payload
+    );
+    return (data?.data ?? {}) as PatientApiRecord;
+}
+
+/** Downscale an image file to a JPEG data URL (max 512px edge) so the stored photo stays small. */
+export async function fileToPhotoDataUrl(file: File, maxEdge = 512): Promise<string> {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas not supported');
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close?.();
+    return canvas.toDataURL('image/jpeg', 0.85);
+}
+
+/**
+ * Deferred photo upload: runs after createPatient resolves the new id.
+ * PUT /Patient/updateProfilePicture/:id stores the (downsized) image inline as a data URL — the repo
+ * has no object storage yet; when it does, the backend swaps storage without changing this contract.
+ */
+export async function uploadPatientPhoto(id: string, file: File): Promise<void> {
+    const profilePicture = await fileToPhotoDataUrl(file);
+    await api.put(`/Patient/updateProfilePicture/${encodeURIComponent(id)}`, { profilePicture });
+}
+
+/** Remove the stored photo. */
+export async function clearPatientPhoto(id: string): Promise<void> {
+    await api.put(`/Patient/updateProfilePicture/${encodeURIComponent(id)}`, { profilePicture: null });
+}
+
+export interface DuplicateCandidate {
+    id: string;
+    fullName: string;
+    mrn: string;
+    dOB: string;
+    sex: string;
+    mobilePhone: string;
+}
+
+/** GET /Patient/findDuplicates — advisory same-name/same-DOB check before registering. */
+export async function findDuplicatePatients(input: {
+    firstName?: string;
+    lastName: string;
+    dOB?: string;
+    excludeId?: string;
+}): Promise<DuplicateCandidate[]> {
+    const { data } = await api.get<{ data?: PatientApiRecord[] }>('/Patient/findDuplicates', {
+        params: compactPayload(input as unknown as Record<string, unknown>),
+    });
+    return (data?.data ?? []).map((p) => ({
+        id: pickString(p._id as string | undefined) || pickString(p.id),
+        fullName: pickString(p.fullName),
+        mrn: pickString(p.mrn),
+        dOB: pickString(p.dOB),
+        sex: pickString(p.sex),
+        mobilePhone: pickString(p.mobilePhone) || pickString(p.homePhone),
+    }));
+}
+
+/** Raw enriched patient record for edit-mode prefill (same endpoint the facesheet uses). */
+export async function getPatientRecord(id: string): Promise<PatientApiRecord> {
+    const { data } = await api.get<unknown>(`/Patient/getPatientById/${encodeURIComponent(id)}`);
+    return extractSinglePatientPayload(data) as PatientApiRecord;
 }

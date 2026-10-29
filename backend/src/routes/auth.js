@@ -67,7 +67,7 @@ async function issueTokens(db, u) {
 const loadUser = async (where, params) =>
     (
         await query(
-            `SELECT u.*, t.name AS tenant_name FROM users u JOIN tenants t ON t.id = u.tenant_id WHERE ${where}`,
+            `SELECT u.*, t.name AS tenant_name, t.status AS tenant_status FROM users u JOIN tenants t ON t.id = u.tenant_id WHERE ${where}`,
             params,
         )
     ).rows[0];
@@ -92,6 +92,8 @@ publicAuthRouter.post(
         const u = await loadUser('lower(u.email) = lower($1) OR lower(u.username) = lower($1)', [username]);
         const valid = await bcrypt.compare(pw, u?.password_hash ?? DUMMY_HASH);
         if (!u || !valid || !u.is_active) throw new ApiError(401, 'Invalid username or password');
+        if (u.tenant_status === 'suspended')
+            throw new ApiError(403, "This organization's account is suspended. Contact your administrator.", undefined, 'TENANT_SUSPENDED');
         const tokens = await issueTokens({ query }, u);
         res.json({ status: 'success', ...tokens, role: u.role, user: publicUser(u) });
     }),
@@ -239,9 +241,32 @@ authRouter.put(
 authRouter.get(
     '/tenants/current',
     h(async (req, res) => {
-        const t = (await query('SELECT id, name, created_at FROM tenants WHERE id = $1', [req.user.tenantId])).rows[0];
+        const t = (await query('SELECT * FROM tenants WHERE id = $1', [req.user.tenantId])).rows[0];
         if (!t) throw notFound('Tenant not found');
-        ok(res, { id: t.id, _id: t.id, name: t.name, createdAt: t.created_at });
+        ok(res, {
+            id: t.id,
+            _id: t.id,
+            name: t.name,
+            createdAt: t.created_at,
+            status: t.status,
+            plan: t.plan,
+            enabledModules: t.enabled_modules,
+            onboardingStatus: t.onboarding_status,
+        });
+    }),
+);
+
+// The tenant's own admin marks onboarding complete at the end of the wizard (see Tenant Onboarding
+// Wizard). Platform admins separately manage status/plan/enabledModules via /api/platform/tenants/:id.
+authRouter.put(
+    '/tenants/current/onboarding-status',
+    requireRole(),
+    h(async (req, res) => {
+        const { onboardingStatus } = parse(z.object({ onboardingStatus: z.enum(['provisioned', 'in_progress', 'complete']) }), req.body);
+        const t = (
+            await query('UPDATE tenants SET onboarding_status = $1 WHERE id = $2 RETURNING id, onboarding_status', [onboardingStatus, req.user.tenantId])
+        ).rows[0];
+        ok(res, { id: t.id, _id: t.id, onboardingStatus: t.onboarding_status });
     }),
 );
 

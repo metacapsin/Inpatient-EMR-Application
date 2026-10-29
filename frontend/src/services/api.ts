@@ -1,5 +1,6 @@
 // api.ts
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import { toast } from 'sonner';
 import {
   API_BASE_URL,
   accessTokenNeedsRefresh,
@@ -82,6 +83,16 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
     const reqUrl = originalRequest?.url || '';
+
+    // Checked fresh on every request by the backend (see middleware/auth.js) — a tenant suspended
+    // mid-session is logged out on its very next API call, not just at the token's next refresh.
+    const code = (error.response?.data as { code?: string } | undefined)?.code;
+    if (error.response?.status === 403 && code === 'TENANT_SUSPENDED') {
+      const message = (error.response?.data as { message?: string } | undefined)?.message || "This organization's account is suspended.";
+      clearSessionAfterAuthFailure();
+      toast.error(message, { duration: 8000 });
+      return Promise.reject(error);
+    }
 
     if (error.response?.status === 401 && originalRequest) {
       if (shouldBypassRefreshForUrl(reqUrl)) {
@@ -591,14 +602,12 @@ export const appointmentAPI = {
     api.put(`/appointments/${id}/status`, { status, ...data }),
 };
 
-// Practice Information API
+// Practice Information API (tenant self-service profile; singleton per tenant)
 export const practiceAPI = {
-  getList: () =>
-    api.get('/PracticeInformation/getPracticeInformationList'),
-  getById: (id: string) =>
-    api.get(`/PracticeInformation/getPracticeInformationById/${id}`),
-  update: (id: string, data: Record<string, any>) =>
-    api.post(`/PracticeInformation/updatePracticeInformationById/${id}`, data),
+  get: () =>
+    api.get('/api/tenant/profile'),
+  update: (data: Record<string, any>) =>
+    api.put('/api/tenant/profile', data),
 };
 
 // Common API

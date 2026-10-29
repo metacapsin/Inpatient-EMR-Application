@@ -29,6 +29,13 @@ dashboardRouter.get('/dashboard/ipd', h(async (req, res) => {
         [t],
     );
     const admitted = await query(`SELECT count(*)::int AS n FROM encounters WHERE tenant_id = $1 AND status <> 'discharged'`, [t]);
+    const transfers = await query(
+        `SELECT p.first_name || ' ' || p.last_name AS patient_name, w.name AS ward_name, tr.priority
+         FROM transfer_requests tr JOIN patients p ON p.id = tr.patient_id LEFT JOIN wards w ON w.id = tr.requested_ward_id
+         WHERE tr.tenant_id = $1 AND tr.status = 'open'
+         ORDER BY CASE tr.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, tr.requested_at LIMIT 20`,
+        [t],
+    );
 
     const rows = board.rows.map((x) => ({
         rowId: x.bed_id,
@@ -53,7 +60,7 @@ dashboardRouter.get('/dashboard/ipd', h(async (req, res) => {
         alerts: {
             criticalPatients: [], // no acuity scoring is stored yet
             bedsPendingCleaning: rows.filter((r) => r.status === 'Cleaning').map((r) => `${r.ward} · ${r.room} · ${r.bed}`),
-            transferRequests: [],
+            transferRequests: transfers.rows.map((x) => `${x.patient_name} → ${x.ward_name ?? 'any ward'} (${x.priority})`),
         },
     });
 }));

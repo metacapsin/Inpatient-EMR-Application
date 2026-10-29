@@ -1,5 +1,7 @@
 import type {
     LiveBedBoardBed,
+    LiveBedBoardCleaning,
+    LiveBedBoardReservation,
     LiveBedBoardEncounter,
     LiveBedBoardPatient,
     LiveBedBoardPayload,
@@ -68,7 +70,38 @@ function parseRoom(v: unknown): LiveBedBoardRoom | null {
     if (!id) return null;
     const name = pickString(row, 'roomNumber', 'roomName', 'name', 'number', 'title') || id;
     const wardId = extractIdString(row.wardId ?? row.ward_id ?? row.unitId) || undefined;
-    return { id, name, ...(wardId ? { wardId } : {}) };
+    const roomType = pickString(row, 'roomType', 'room_type') || undefined;
+    const isolationRequired = row.isolationRequired === true || row.isolation_required === true;
+    const isolationType = pickString(row, 'isolationType', 'isolation_type') || null;
+    return { id, name, ...(wardId ? { wardId } : {}), ...(roomType ? { roomType } : {}), isolationRequired, isolationType };
+}
+
+function parseReservation(v: unknown): LiveBedBoardReservation | null {
+    const row = asRecord(v);
+    if (!row) return null;
+    const id = extractIdString(row.id ?? row._id);
+    const expiresAt = pickString(row, 'expiresAt', 'expires_at');
+    if (!id || !expiresAt) return null;
+    return {
+        id,
+        patientId: extractIdString(row.patientId ?? row.patient_id) || null,
+        patientName: pickString(row, 'patientName', 'patient_name') || null,
+        expiresAt,
+    };
+}
+
+function parseCleaning(v: unknown): LiveBedBoardCleaning | null {
+    const row = asRecord(v);
+    if (!row) return null;
+    const id = extractIdString(row.id ?? row._id);
+    const evsStatus = pickString(row, 'evsStatus', 'status');
+    if (!id || !evsStatus) return null;
+    return {
+        id,
+        evsStatus,
+        cleaningType: pickString(row, 'cleaningType', 'cleaning_type') || undefined,
+        dirtyAt: pickString(row, 'dirtyAt', 'createdAt') || undefined,
+    };
 }
 
 function parseEncounter(v: unknown): LiveBedBoardEncounter | null {
@@ -150,6 +183,8 @@ function parseRow(item: unknown): LiveBedBoardRow | null {
         ward: parseWard(row.ward),
         encounter: parseEncounter(row.encounter),
         patient: parsePatient(row.patient),
+        reservation: parseReservation(row.reservation),
+        cleaning: parseCleaning(row.cleaning),
     };
 }
 

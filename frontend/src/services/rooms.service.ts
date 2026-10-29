@@ -1,5 +1,5 @@
 import api from './api';
-import type { FacilityBed, FacilityRoom, FacilityWard } from '../types/facility';
+import type { BedManualStatus, FacilityBed, FacilityRoom, FacilityWard } from '../types/facility';
 import { DEFAULT_ROOM_TYPE } from '../constants/facility';
 import { asRecord, extractIdString, pickString, unwrapList } from '../lib/apiPayload';
 import { getApiErrorMessage } from '../lib/httpError';
@@ -101,7 +101,9 @@ function normalizeRoomRow(row: Record<string, unknown>): FacilityRoom | null {
     const name = pickString(row, 'roomNumber', 'roomName', 'name', 'number', 'title');
     const roomType =
         pickString(row, 'roomType', 'type', 'roomCategory', 'category', 'room_type') || DEFAULT_ROOM_TYPE;
-    return { id, wardId, name: name || id, roomType };
+    const isolationRequired = row.isolationRequired === true || row.isolation_required === true;
+    const isolationType = pickString(row, 'isolationType', 'isolation_type') || null;
+    return { id, wardId, name: name || id, roomType, isolationRequired, isolationType };
 }
 
 function roomIdFromBedRow(row: Record<string, unknown>): string {
@@ -134,6 +136,7 @@ function normalizeBedRow(row: Record<string, unknown>): FacilityBed | null {
         name: name || id,
         occupied: Boolean(occupied),
         occupiedByPatientId: occupied ? occupiedByPatientId : null,
+        status: occupied ? 'occupied' : st || 'available',
     };
 }
 
@@ -610,7 +613,7 @@ export async function deleteWard(id: string): Promise<void> {
     cachedWards = cachedWards.filter((w) => String(w.id) !== String(id));
 }
 
-export async function createRoom(input: { wardId: string; roomNumber: string; roomType: string }): Promise<FacilityRoom> {
+export async function createRoom(input: { wardId: string; roomNumber: string; roomType: string; isolationRequired?: boolean; isolationType?: string | null }): Promise<FacilityRoom> {
     const wardId = String(input.wardId).trim();
     const roomNumber = input.roomNumber.trim();
     const roomType = (input.roomType || DEFAULT_ROOM_TYPE).trim() || DEFAULT_ROOM_TYPE;
@@ -619,12 +622,12 @@ export async function createRoom(input: { wardId: string; roomNumber: string; ro
     if (!roomType) throw new Error('Room type is required.');
     if (USE_MOCK_FACILITY) {
         if (!wardById(wardId)) throw new Error('Ward not found.');
-        const r: FacilityRoom = { id: String(nextRoomSeq++), wardId, name: roomNumber, roomType };
+        const r: FacilityRoom = { id: String(nextRoomSeq++), wardId, name: roomNumber, roomType, isolationRequired: Boolean(input.isolationRequired), isolationType: input.isolationRequired ? input.isolationType ?? null : null };
         MOCK_ROOMS = [...MOCK_ROOMS, r];
         return mockDelay(r);
     }
     try {
-        await api.post('/Rooms/CreateRoom', { wardId, roomNumber, roomType });
+        await api.post('/Rooms/CreateRoom', { wardId, roomNumber, roomType, isolationRequired: Boolean(input.isolationRequired), isolationType: input.isolationRequired ? input.isolationType?.trim() || null : null });
     } catch (e) {
         throw new Error(getApiErrorMessage(e, 'Failed to create room'));
     }
@@ -638,7 +641,7 @@ export async function createRoom(input: { wardId: string; roomNumber: string; ro
 
 export async function updateRoom(
     id: string,
-    input: Partial<{ wardId: string; roomNumber: string; roomType: string }>
+    input: Partial<{ wardId: string; roomNumber: string; roomType: string; isolationRequired: boolean; isolationType: string | null }>
 ): Promise<FacilityRoom> {
     if (USE_MOCK_FACILITY) {
         const idx = MOCK_ROOMS.findIndex((r) => String(r.id) === String(id));
@@ -650,6 +653,7 @@ export async function updateRoom(
             ...(input.roomNumber !== undefined ? { name: input.roomNumber.trim() } : {}),
             ...(input.roomType !== undefined ? { roomType: input.roomType.trim() || DEFAULT_ROOM_TYPE } : {}),
             ...(input.wardId !== undefined ? { wardId: String(input.wardId) } : {}),
+            ...(input.isolationRequired !== undefined ? { isolationRequired: input.isolationRequired, isolationType: input.isolationRequired ? input.isolationType ?? null : null } : {}),
         };
         if (!next.name.trim()) throw new Error('Room number is required.');
         MOCK_ROOMS = MOCK_ROOMS.map((r, i) => (i === idx ? next : r));
@@ -668,6 +672,9 @@ export async function updateRoom(
             wardId,
             roomNumber,
             roomType,
+            ...(input.isolationRequired !== undefined
+                ? { isolationRequired: input.isolationRequired, isolationType: input.isolationRequired ? input.isolationType?.trim() || null : null }
+                : {}),
         });
     } catch (e) {
         throw new Error(getApiErrorMessage(e, 'Failed to update room'));
@@ -735,7 +742,7 @@ export async function createBed(input: { roomId: string; bedName: string }): Pro
     throw new Error('Bed created but could not resolve the new row. Refresh the list.');
 }
 
-export async function updateBed(id: string, input: Partial<{ bedName: string; roomId: string }>): Promise<FacilityBed> {
+export async function updateBed(id: string, input: Partial<{ bedName: string; roomId: string; status: BedManualStatus }>): Promise<FacilityBed> {
     if (USE_MOCK_FACILITY) {
         const idx = MOCK_BEDS.findIndex((b) => String(b.id) === String(id));
         if (idx < 0) throw new Error('Bed not found.');
@@ -746,6 +753,7 @@ export async function updateBed(id: string, input: Partial<{ bedName: string; ro
             ...cur,
             ...(input.bedName !== undefined ? { name: input.bedName.trim() } : {}),
             ...(input.roomId !== undefined ? { roomId: String(input.roomId) } : {}),
+            ...(input.status !== undefined ? { status: input.status } : {}),
         };
         if (!next.name.trim()) throw new Error('Bed name is required.');
         MOCK_BEDS = MOCK_BEDS.map((b, i) => (i === idx ? next : b));
@@ -764,6 +772,7 @@ export async function updateBed(id: string, input: Partial<{ bedName: string; ro
             roomId,
             bedLabel: bedName,
             bedName,
+            ...(input.status ? { status: input.status } : {}),
         });
         const resp = asRecord(data);
         if (resp && resp.status === 'error') {

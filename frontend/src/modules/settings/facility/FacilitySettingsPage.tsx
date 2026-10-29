@@ -3,6 +3,7 @@ import { Navigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Building2, Pencil, Plus, Trash2, AlertTriangle, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { BED_MANUAL_STATUSES, type BedManualStatus } from '../../../types/facility';
 import type { FacilityBed, FacilityRoom, FacilityWard } from '../../../types/facility';
 import {
     getAllBeds,
@@ -275,12 +276,16 @@ export function FacilityManagementPanel({ embedded = false }: { embedded?: boole
             roomNumber: string;
             wardId: string;
             roomType: string;
+            isolationRequired: boolean;
+            isolationType: string;
         }) => {
             if (payload.mode === 'add') {
                 return mockCreateRoom({
                     wardId: payload.wardId,
                     roomNumber: payload.roomNumber,
                     roomType: payload.roomType,
+                    isolationRequired: payload.isolationRequired,
+                    isolationType: payload.isolationType || null,
                 });
             }
             if (!payload.room) throw new Error('Missing room');
@@ -288,6 +293,8 @@ export function FacilityManagementPanel({ embedded = false }: { embedded?: boole
                 roomNumber: payload.roomNumber,
                 wardId: payload.wardId,
                 roomType: payload.roomType,
+                isolationRequired: payload.isolationRequired,
+                isolationType: payload.isolationType || null,
             });
         },
         onSuccess: () => {
@@ -312,10 +319,10 @@ export function FacilityManagementPanel({ embedded = false }: { embedded?: boole
     });
 
     const bedMut = useMutation({
-        mutationFn: async (payload: { mode: 'add' | 'edit'; bed?: FacilityBed; bedName: string; roomId: string }) => {
+        mutationFn: async (payload: { mode: 'add' | 'edit'; bed?: FacilityBed; bedName: string; roomId: string; status?: BedManualStatus }) => {
             if (payload.mode === 'add') return mockCreateBed({ roomId: payload.roomId, bedName: payload.bedName });
             if (!payload.bed) throw new Error('Missing bed');
-            return mockUpdateBed(String(payload.bed.id), { bedName: payload.bedName, roomId: payload.roomId });
+            return mockUpdateBed(String(payload.bed.id), { bedName: payload.bedName, roomId: payload.roomId, ...(payload.status ? { status: payload.status } : {}) });
         },
         onSuccess: () => {
             toast.success('Bed saved');
@@ -497,7 +504,7 @@ export function FacilityManagementPanel({ embedded = false }: { embedded?: boole
                     roomMut.reset();
                     setRoomModal(null);
                 }}
-                onSave={(wardId, roomNumber, roomType) => {
+                onSave={(wardId, roomNumber, roomType, isolationRequired, isolationType) => {
                     if (!roomModal) return;
                     roomMut.mutate({
                         mode: roomModal.mode,
@@ -505,6 +512,8 @@ export function FacilityManagementPanel({ embedded = false }: { embedded?: boole
                         wardId,
                         roomNumber,
                         roomType,
+                        isolationRequired,
+                        isolationType,
                     });
                 }}
             />
@@ -521,9 +530,9 @@ export function FacilityManagementPanel({ embedded = false }: { embedded?: boole
                     bedMut.reset();
                     setBedModal(null);
                 }}
-                onSave={(roomId, bedName) => {
+                onSave={(roomId, bedName, status) => {
                     if (!bedModal) return;
-                    bedMut.mutate({ mode: bedModal.mode, bed: bedModal.bed, roomId, bedName });
+                    bedMut.mutate({ mode: bedModal.mode, bed: bedModal.bed, roomId, bedName, status });
                 }}
             />
 
@@ -825,7 +834,20 @@ const currentItems = filteredRooms.slice(startIndex, endIndex);
                         columns={[
                             { key: 'ward', header: 'Ward', render: (r) => wardNameById.get(String(r.wardId)) ?? '—' },
                             { key: 'name', header: 'Room number', render: (r) => r.name },
-                            { key: 'roomType', header: 'Type', render: (r) => r.roomType ?? DEFAULT_ROOM_TYPE },
+                            {
+                                key: 'roomType',
+                                header: 'Type',
+                                render: (r) => (
+                                    <span>
+                                        {r.roomType ?? DEFAULT_ROOM_TYPE}
+                                        {r.isolationRequired ? (
+                                            <span className="ml-1.5 inline-flex rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800 dark:bg-violet-950/50 dark:text-violet-200">
+                                                Isolation{r.isolationType ? ` · ${r.isolationType}` : ''}
+                                            </span>
+                                        ) : null}
+                                    </span>
+                                ),
+                            },
                             {
                                 key: 'actions',
                                 header: '',
@@ -902,7 +924,7 @@ const itemsPerPage = 5;
 const filteredBeds = beds.filter((b) =>
     b.name.toLowerCase().includes(search.toLowerCase()) ||
     (roomLabelById.get(String(b.roomId)) ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (b.occupied ? "occupied" : "available").toLowerCase().includes(search.toLowerCase())
+    (b.status ?? (b.occupied ? "occupied" : "available")).toLowerCase().includes(search.toLowerCase())
 );
 // 2) PAGINATION should apply on filteredBeds (not beds)
 const totalItems = filteredBeds.length;
@@ -951,16 +973,7 @@ const currentItems = filteredBeds.slice(startIndex, endIndex);
                             {
                                 key: 'occ',
                                 header: 'Status',
-                                render: (b) =>
-                                    b.occupied ? (
-                                        <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800 dark:bg-red-950/60 dark:text-red-200">
-                                            Occupied
-                                        </span>
-                                    ) : (
-                                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200">
-                                            Available
-                                        </span>
-                                    ),
+                                render: (b) => <BedStatusPill status={b.status ?? (b.occupied ? 'occupied' : 'available')} />,
                             },
                             {
                                 key: 'actions',
@@ -1128,17 +1141,21 @@ function RoomFormModal({
     saving: boolean;
     errorMessage?: string | null;
     onClose: () => void;
-    onSave: (wardId: string, roomNumber: string, roomType: string) => void;
+    onSave: (wardId: string, roomNumber: string, roomType: string, isolationRequired: boolean, isolationType: string) => void;
 }) {
     const [wardId, setWardId] = useState('');
     const [roomNumber, setRoomNumber] = useState('');
     const [roomType, setRoomType] = useState<string>(DEFAULT_ROOM_TYPE);
+    const [isolationRequired, setIsolationRequired] = useState(false);
+    const [isolationType, setIsolationType] = useState('');
     const [errors, setErrors] = useState<{ roomNumber?: string }>({});
 
     useEffect(() => {
         if (!open) return;
         setRoomNumber(room?.name ?? '');
         setRoomType(room?.roomType ?? DEFAULT_ROOM_TYPE);
+        setIsolationRequired(Boolean(room?.isolationRequired));
+        setIsolationType(room?.isolationType ?? '');
         setWardId(room ? String(room.wardId) : wards[0] ? String(wards[0].id) : '');
         setErrors({});
     }, [open, room, wards]);
@@ -1174,7 +1191,7 @@ function RoomFormModal({
             toast.error('Please select a ward');
             return;
         }
-        onSave(wardId.trim(), roomNumber.trim(), roomType);
+        onSave(wardId.trim(), roomNumber.trim(), roomType, isolationRequired, isolationRequired ? isolationType.trim() : '');
     };
 
     const isValid = Boolean(wardId.trim() && roomNumber.trim() && roomType.trim() && wards.length > 0 && !errors.roomNumber);
@@ -1241,10 +1258,71 @@ function RoomFormModal({
                         ))}
                     </select>
                 </div>
+                <div className="rounded-lg border border-violet-200/80 bg-violet-50/60 p-3 dark:border-violet-900/40 dark:bg-violet-950/20">
+                    <label className="flex items-start gap-2 text-sm text-gray-800 dark:text-gray-200">
+                        <input
+                            type="checkbox"
+                            className="mt-0.5 h-4 w-4"
+                            checked={isolationRequired}
+                            onChange={(e) => setIsolationRequired(e.target.checked)}
+                        />
+                        <span>
+                            <span className="font-medium">Isolation room</span>
+                            <span className="block text-xs text-gray-500 dark:text-gray-400">
+                                Flags every bed in this room on the bed board and gives placement guidance (soft warning) when an
+                                isolation patient is placed elsewhere or a non-isolation patient is placed here.
+                            </span>
+                        </span>
+                    </label>
+                    {isolationRequired ? (
+                        <div className="mt-3">
+                            <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">Isolation type (optional)</label>
+                            <input
+                                className="form-input w-full"
+                                value={isolationType}
+                                onChange={(e) => setIsolationType(e.target.value)}
+                                placeholder="e.g. Negative pressure, Contact, Droplet"
+                                list="isolation-type-options"
+                            />
+                            <datalist id="isolation-type-options">
+                                {['Negative pressure', 'Airborne', 'Droplet', 'Contact', 'Protective (reverse)'].map((t) => (
+                                    <option key={t} value={t} />
+                                ))}
+                            </datalist>
+                        </div>
+                    ) : null}
+                </div>
             </div>
         </AppModal>
     );
 }
+
+const BED_STATUS_PILL: Record<string, string> = {
+    available: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200',
+    occupied: 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-200',
+    hold: 'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200',
+    dirty: 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-200',
+    maintenance: 'bg-gray-200 text-gray-800 dark:bg-white/10 dark:text-gray-200',
+    blocked: 'bg-gray-200 text-gray-800 dark:bg-white/10 dark:text-gray-200',
+};
+
+function BedStatusPill({ status }: { status: string }) {
+    const s = status.toLowerCase();
+    const label = s === 'dirty' ? 'Dirty · awaiting EVS' : s.charAt(0).toUpperCase() + s.slice(1);
+    return (
+        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${BED_STATUS_PILL[s] ?? BED_STATUS_PILL.maintenance}`}>
+            {label}
+        </span>
+    );
+}
+
+const BED_STATUS_HELP: Record<BedManualStatus, string> = {
+    available: 'In service. Closes any open cleaning job for this bed.',
+    hold: 'Manual hold: nobody can be admitted until an admin releases it. Timed holds for a specific patient are made from the ADT workspace.',
+    maintenance: 'Out of service for repairs; cannot be assigned.',
+    blocked: 'Administratively closed; cannot be assigned.',
+    dirty: 'Needs cleaning. Opens a job in the EVS queue; approving the clean returns it to available.',
+};
 
 function BedFormModal({
     open,
@@ -1265,18 +1343,23 @@ function BedFormModal({
     saving: boolean;
     errorMessage?: string | null;
     onClose: () => void;
-    onSave: (roomId: string, bedName: string) => void;
+    onSave: (roomId: string, bedName: string, status?: BedManualStatus) => void;
 }) {
     const [roomId, setRoomId] = useState('');
     const [bedName, setBedName] = useState('');
+    const [status, setStatus] = useState<BedManualStatus | ''>('');
     const [errors, setErrors] = useState<{ bedName?: string }>({});
+    const currentStatus = bed?.status ?? (bed?.occupied ? 'occupied' : 'available');
+    const canChangeStatus = mode === 'edit' && currentStatus !== 'occupied';
 
     useEffect(() => {
         if (!open) return;
         setBedName(bed?.name ?? '');
         setRoomId(bed ? String(bed.roomId) : '');
+        const st = bed?.status ?? (bed?.occupied ? 'occupied' : 'available');
+        setStatus((BED_MANUAL_STATUSES as readonly string[]).includes(st) ? (st as BedManualStatus) : '');
         setErrors({});
-    }, [open, bed, rooms]);
+    }, [open, bed, rooms, mode]);
 
     const validateField = (field: 'bedName', value: string): string => {
         if (field === 'bedName') {
@@ -1309,7 +1392,8 @@ function BedFormModal({
             toast.error('Please select a room');
             return;
         }
-        onSave(roomId.trim(), bedName.trim());
+        const statusChanged = canChangeStatus && status && status !== currentStatus;
+        onSave(roomId.trim(), bedName.trim(), statusChanged ? status : undefined);
     };
 
     const isValid = Boolean(roomId.trim() && bedName.trim() && rooms.length > 0 && !errors.bedName);
@@ -1369,6 +1453,26 @@ function BedFormModal({
                     />
                     {errors.bedName && <p className="mt-1 text-xs text-red-500">{errors.bedName}</p>}
                 </div>
+                {mode === 'edit' ? (
+                    <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
+                        {canChangeStatus ? (
+                            <>
+                                <select className="form-input w-full" value={status} onChange={(e) => setStatus(e.target.value as BedManualStatus)}>
+                                    {BED_MANUAL_STATUSES.map((st) => (
+                                        <option key={st} value={st}>{st.charAt(0).toUpperCase() + st.slice(1)}</option>
+                                    ))}
+                                </select>
+                                {status ? <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{BED_STATUS_HELP[status]}</p> : null}
+                            </>
+                        ) : (
+                            <p className="text-sm text-gray-600 dark:text-gray-300">
+                                <BedStatusPill status={currentStatus} />
+                                <span className="ml-2 text-xs text-gray-500">Occupied is set by ADT (admit / transfer / discharge) and cannot be changed here.</span>
+                            </p>
+                        )}
+                    </div>
+                ) : null}
             </div>
         </AppModal>
     );

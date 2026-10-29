@@ -3,6 +3,29 @@ import { z } from 'zod';
 import { query, withTx } from '../db/pool.js';
 import { ApiError, conflict, h, notFound, parse } from '../lib/http.js';
 import { requireRole } from '../middleware/auth.js';
+import { boss, QUEUES } from '../db/queue.js';
+import { assertBedFree, fulfillReservations, lockBed, performTransfer, vacateBed } from '../lib/bedManagement.js';
+
+/** Best-effort: queues the CMS CoP admission notification. Never fails the admission if the queue is down. */
+async function enqueueAdtNotification(req, enc, patient) {
+    try {
+        await boss.send(QUEUES.ADT_NOTIFICATION, {
+            encounterId: enc.id,
+            tenantId: req.user.tenantId,
+            patientId: enc.patient_id,
+            mrn: patient.mrn,
+            patientName: `${patient.first_name} ${patient.last_name}`,
+            dob: patient.dob,
+            bedId: enc.bed_id,
+            admissionType: enc.admission_type,
+            attendingPhysicianId: enc.attending_physician_id,
+            diagnosis: enc.diagnosis,
+            admittedAt: enc.admitted_at?.toISOString?.() ?? enc.admitted_at,
+        });
+    } catch (e) {
+        console.error('[adt-notification] failed to enqueue:', e.message);
+    }
+}
 
 /** Tell every other active staff member in the tenant about a bed-flow event (best effort; never fails the ADT call). */
 async function notifyStaff(req, action, message, metadata) {
@@ -40,21 +63,6 @@ const encounterOut = (e) => ({
 
 const success = (res, message, data, code = 200) => res.status(code).json({ status: 'success', message, data });
 
-async function lockBed(db, bedId, tenantId) {
-    const bed = (await db.query('SELECT * FROM beds WHERE id = $1 AND tenant_id = $2 FOR UPDATE', [bedId, tenantId])).rows[0];
-    if (!bed) throw notFound('Bed not found');
-    return bed;
-}
-
-async function assertBedFree(db, bed, exceptEncounterId) {
-    if (['maintenance', 'blocked', 'dirty'].includes(bed.status)) throw conflict(`Bed is ${bed.status} and cannot be assigned`);
-    const occ = await db.query(
-        `SELECT id FROM encounters WHERE bed_id = $1 AND status <> 'discharged' AND id <> COALESCE($2,'')`,
-        [bed.id, exceptEncounterId ?? null],
-    );
-    if (occ.rowCount) throw conflict('That bed is already assigned to another patient');
-}
-
 // POST /api/admissions
 adtRouter.post('/api/admissions', clinical, h(async (req, res) => {
     const b = parse(
@@ -75,7 +83,8 @@ adtRouter.post('/api/admissions', clinical, h(async (req, res) => {
         const already = await db.query(`SELECT id FROM encounters WHERE patient_id = $1 AND status <> 'discharged'`, [b.patientId]);
         if (already.rowCount) throw conflict('Patient already has an active admission');
         const bed = await lockBed(db, b.bedId, req.user.tenantId);
-        await assertBedFree(db, bed);
+        // A bed on 'hold' is only assignable to the patient it was reserved for.
+        await assertBedFree(db, bed, { patientId: b.patientId });
         const e = (
             await db.query(
                 `INSERT INTO encounters (tenant_id, patient_id, bed_id, admission_type, source_of_admission, attending_physician_id, diagnosis)
@@ -84,10 +93,13 @@ adtRouter.post('/api/admissions', clinical, h(async (req, res) => {
             )
         ).rows[0];
         await db.query(`UPDATE beds SET status = 'occupied' WHERE id = $1`, [b.bedId]);
+        await fulfillReservations(db, b.bedId);
         return e;
     });
-    const who = (await query(`SELECT first_name || ' ' || last_name AS n FROM patients WHERE id = $1`, [enc.patient_id])).rows[0]?.n ?? 'Patient';
+    const patient = (await query(`SELECT mrn, first_name, last_name, dob FROM patients WHERE id = $1 AND tenant_id = $2`, [enc.patient_id, req.user.tenantId])).rows[0];
+    const who = patient ? `${patient.first_name} ${patient.last_name}` : 'Patient';
     await notifyStaff(req, 'admitted', `${who} was admitted`, { encounterId: enc.id, patientId: enc.patient_id, bedId: enc.bed_id });
+    await enqueueAdtNotification(req, enc, patient);
     success(res, 'Patient admitted', { encounter: encounterOut(enc) }, 201);
 }));
 
@@ -103,7 +115,7 @@ adtRouter.get('/api/admissions/active', h(async (req, res) => {
     success(res, 'Active encounters', r.rows.map(encounterOut));
 }));
 
-// POST /api/transfers
+// POST /api/transfers — the vacated bed goes to 'dirty' and into the EVS queue (see lib/bedManagement.js).
 adtRouter.post('/api/transfers', clinical, h(async (req, res) => {
     const b = parse(
         z.object({
@@ -114,26 +126,12 @@ adtRouter.post('/api/transfers', clinical, h(async (req, res) => {
         }),
         req.body,
     );
-    const out = await withTx(async (db) => {
-        const e = (await db.query('SELECT * FROM encounters WHERE id = $1 AND tenant_id = $2 FOR UPDATE', [b.encounterId, req.user.tenantId])).rows[0];
-        if (!e) throw notFound('Encounter not found');
-        if (e.status === 'discharged') throw conflict('Encounter is already discharged');
-        if (e.bed_id === b.newBedId) throw conflict('Patient is already in that bed');
-        const bed = await lockBed(db, b.newBedId, req.user.tenantId);
-        await assertBedFree(db, bed, e.id);
-        await db.query('UPDATE encounters SET bed_id = $1 WHERE id = $2', [b.newBedId, e.id]);
-        if (e.bed_id) await db.query(`UPDATE beds SET status = 'available' WHERE id = $1`, [e.bed_id]);
-        await db.query(`UPDATE beds SET status = 'occupied' WHERE id = $1`, [b.newBedId]);
-        const t = (
-            await db.query(
-                `INSERT INTO bed_transfers (encounter_id, from_bed_id, to_bed_id, transfer_type, reason, transferred_by)
-                 VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-                [e.id, e.bed_id, b.newBedId, b.transferType ?? null, b.reason ?? null, req.user.id],
-            )
-        ).rows[0];
-        return { encounterId: e.id, currentBedId: b.newBedId, transfer: { id: t.id, fromBedId: t.from_bed_id, toBedId: t.to_bed_id, transferType: t.transfer_type, reason: t.reason, transferredAt: t.transferred_at.toISOString() } };
-    });
-    success(res, 'Patient transferred', out);
+    const out = await withTx((db) =>
+        performTransfer(db, { tenantId: req.user.tenantId, userId: req.user.id, encounterId: b.encounterId, newBedId: b.newBedId, transferType: b.transferType, reason: b.reason }),
+    );
+    const { patientId, ...rest } = out;
+    await notifyStaff(req, 'transferred', 'A patient was transferred', { encounterId: out.encounterId, patientId, bedId: out.currentBedId });
+    success(res, 'Patient transferred', rest);
 }));
 
 async function initiate(req, res, b) {
@@ -159,9 +157,10 @@ async function confirm(req, res, b) {
                 [e.id],
             )
         ).rows[0];
-        // Free the bed (the discharged encounter keeps its bed_id for history).
-        if (e.bed_id) await db.query(`UPDATE beds SET status = 'available' WHERE id = $1`, [e.bed_id]);
-        return { encounterId: d.id, dischargeTimestamp: d.discharged_at.toISOString(), patientId: d.patient_id };
+        // The discharged encounter keeps its bed_id for history. The bed is NOT free yet: it is 'dirty'
+        // until housekeeping cleans it and an inspector approves it (EVS queue), which is what returns it to 'available'.
+        const evs = e.bed_id ? await vacateBed(db, { tenantId: req.user.tenantId, bedId: e.bed_id, encounterId: e.id, defaultCleaningType: 'Discharge' }) : null;
+        return { encounterId: d.id, dischargeTimestamp: d.discharged_at.toISOString(), patientId: d.patient_id, bedId: e.bed_id, evsQueueId: evs?.id ?? null };
     });
     await notifyStaff(req, 'discharged', 'A patient was discharged', { encounterId: out.encounterId, patientId: out.patientId });
     success(res, 'Patient discharged', out);

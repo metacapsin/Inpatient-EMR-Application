@@ -121,6 +121,20 @@ export function EncounterHeader({ patient }: EncounterHeaderProps) {
                                 <span className={HEADER_VALUE_BADGE_CLASS}>{patient.sex}</span>
                             </span>
                             <span className="hidden h-3 w-px bg-emr-border dark:bg-white/10 sm:inline" aria-hidden />
+                            <span className="flex shrink-0 items-center gap-1.5">
+                                <span className="font-medium text-emr-muted dark:text-gray-500">DOB</span>
+                                <span className={`${HEADER_VALUE_BADGE_CLASS} tabular-nums`}>{patient.dOB}</span>
+                            </span>
+                            {patient.preferredLanguage ? (
+                                <>
+                                    <span className="hidden h-3 w-px bg-emr-border dark:bg-white/10 sm:inline" aria-hidden />
+                                    <span className="flex shrink-0 items-center gap-1.5" title="Preferred language">
+                                        <span className="font-medium text-emr-muted dark:text-gray-500">Language</span>
+                                        <span className={HEADER_VALUE_BADGE_CLASS}>{patient.preferredLanguage}</span>
+                                    </span>
+                                </>
+                            ) : null}
+                            <span className="hidden h-3 w-px bg-emr-border dark:bg-white/10 sm:inline" aria-hidden />
                             <span className="flex min-w-0 max-w-full items-center gap-1.5 truncate" title={bedDisplay}>
                                 <span className="shrink-0 font-medium text-emr-muted dark:text-gray-500">Bed</span>
                                 <span className={`${HEADER_VALUE_BADGE_CLASS} min-w-0 max-w-[min(100%,14rem)]`}>

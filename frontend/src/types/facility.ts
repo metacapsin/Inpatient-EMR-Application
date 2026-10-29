@@ -18,6 +18,9 @@ export interface FacilityRoom {
     name: string;
     /** Matches API `roomType` (e.g. General, ICU). */
     roomType: string;
+    /** Room-level isolation flag (negative pressure / private isolation room). */
+    isolationRequired?: boolean;
+    isolationType?: string | null;
 }
 
 export interface FacilityBed {
@@ -27,4 +30,10 @@ export interface FacilityBed {
     occupied: boolean;
     /** When occupied, which patient holds the bed (client-side until ADT APIs wire in). */
     occupiedByPatientId?: string | null;
+    /** Raw bed status: available | occupied | hold | maintenance | blocked | dirty */
+    status?: string;
 }
+
+/** Statuses an admin may set by hand (occupied is ADT-derived and never set manually). */
+export const BED_MANUAL_STATUSES = ['available', 'hold', 'maintenance', 'blocked', 'dirty'] as const;
+export type BedManualStatus = (typeof BED_MANUAL_STATUSES)[number];

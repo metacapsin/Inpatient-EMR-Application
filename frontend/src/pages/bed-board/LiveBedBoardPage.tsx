@@ -4,12 +4,13 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { BedDouble, RefreshCw } from 'lucide-react';
 import { fetchLiveBedBoard } from '../../services/liveBedBoard.service';
-import { getEvsFieldsByBedIds } from '../../services/evsMockService';
+import { getEvsFieldsByBedIds } from '../../services/evs.service';
 import { getRooms, getWards } from '../../services/rooms.service';
 import { LiveBedBoardSummaryBar } from '../../modules/bed-board/LiveBedBoardSummaryBar';
 import { LiveBedBoardFilters } from '../../modules/bed-board/LiveBedBoardFilters';
 import { LiveBedBoardGrid } from '../../modules/bed-board/LiveBedBoardGrid';
 import { ActiveEncountersPanel } from '../../modules/bed-board/ActiveEncountersPanel';
+import { TransferRequestsPanel } from '../../modules/bed-board/TransferRequestsPanel';
 
 function useDocumentVisible(): boolean {
     const [visible, setVisible] = useState(
@@ -23,7 +24,7 @@ function useDocumentVisible(): boolean {
     return visible;
 }
 
-const POLL_MS = 45_000;
+const POLL_MS = 15_000;
 
 const tabBtnBase =
     'inline-flex shrink-0 items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold transition';
@@ -35,7 +36,8 @@ const LiveBedBoardPage = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const docVisible = useDocumentVisible();
 
-    const tab = searchParams.get('tab') === 'encounters' ? 'encounters' : 'board';
+    const tabParam = searchParams.get('tab');
+    const tab = tabParam === 'encounters' ? 'encounters' : tabParam === 'requests' ? 'requests' : 'board';
     const wardId = searchParams.get('wardId')?.trim() ?? '';
     const roomId = searchParams.get('roomId')?.trim() ?? '';
     const bedStatus = searchParams.get('bedStatus')?.trim() ?? '';
@@ -81,9 +83,11 @@ const LiveBedBoardPage = () => {
     const boardQuery = useQuery({
         queryKey: ['liveBedBoard', boardFilters],
         queryFn: () => fetchLiveBedBoard(boardFilters),
-        staleTime: 15_000,
+        staleTime: 5_000,
         /** Single source for board + active encounters tab; keep both views in sync. */
         refetchInterval: docVisible ? POLL_MS : false,
+        // ADT actions often happen in another tab (patient list, facesheet) — refresh when this one regains focus.
+        refetchOnWindowFocus: true,
     });
 
     useEffect(() => {
@@ -104,15 +108,19 @@ const LiveBedBoardPage = () => {
         queryKey: ['evs', 'bedMap', bedIds.join(',')],
         queryFn: () => getEvsFieldsByBedIds(bedIds),
         enabled: bedIds.length > 0,
-        staleTime: 10_000,
+        staleTime: 5_000,
+        refetchInterval: docVisible ? POLL_MS : false,
+        refetchOnWindowFocus: true,
     });
 
     const boardRowsWithEvs = useMemo(() => {
         const evsMap = evsMapQuery.data ?? {};
-        return (boardQuery.data?.rows ?? []).map((row) => ({
-            ...row,
-            evs: evsMap[row.bed.id],
-        }));
+        return (boardQuery.data?.rows ?? []).map((row) => {
+            const evs = evsMap[row.bed.id];
+            // A job approved clean today is history once the bed is occupied again — don't show an "Available" strip under a patient.
+            const show = evs && !(evs.evsStatus === 'clean' && row.encounter);
+            return { ...row, evs: show ? evs : undefined };
+        });
     }, [boardQuery.data?.rows, evsMapQuery.data]);
 
     const activeBedBoardRows = useMemo(
@@ -139,17 +147,20 @@ const LiveBedBoardPage = () => {
                             </p>
                         </div>
                     </div>
-                    {/* <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
                         <button
                             type="button"
                             disabled={boardQuery.isFetching}
-                            onClick={() => void boardQuery.refetch()}
+                            onClick={() => {
+                                void boardQuery.refetch();
+                                void evsMapQuery.refetch();
+                            }}
                             className="inline-flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-200/80 bg-white px-3 text-xs font-semibold text-gray-700 transition hover:bg-gray-50/80 disabled:opacity-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-200 dark:hover:bg-white/[0.04] sm:w-auto"
                         >
                             <RefreshCw className={`h-3.5 w-3.5 ${boardQuery.isFetching ? 'animate-spin' : ''}`} aria-hidden />
-                            {tab === 'encounters' ? 'Refresh encounters' : 'Refresh board'}
+                            {tab === 'encounters' ? 'Refresh encounters' : tab === 'requests' ? 'Refresh requests' : 'Refresh board'}
                         </button>
-                    </div> */}
+                    </div>
                 </div>
 
                 <div className="flex flex-wrap gap-1.5 border-b border-gray-200/50 pb-0.5 dark:border-white/[0.06]">
@@ -166,6 +177,13 @@ const LiveBedBoardPage = () => {
                         className={`${tabBtnBase} ${tab === 'encounters' ? tabBtnActive : tabBtnInactive}`}
                     >
                         Active encounters
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setParam({ tab: 'requests' })}
+                        className={`${tabBtnBase} ${tab === 'requests' ? tabBtnActive : tabBtnInactive}`}
+                    >
+                        Transfer requests
                     </button>
                 </div>
 
@@ -202,7 +220,9 @@ const LiveBedBoardPage = () => {
                 ) : (
                     <div className="border-t border-gray-200/50 pt-3 dark:border-white/[0.06]">
                         <p className="text-xs leading-snug text-gray-500 dark:text-gray-500">
-                            Same dataset as Board — adjust ward, room, and bed status on the Board tab.
+                            {tab === 'encounters'
+                                ? 'Same dataset as Board — adjust ward, room, and bed status on the Board tab.'
+                                : 'Open bed requests ranked by priority. Fulfilling one transfers the patient; the vacated bed goes to the EVS queue.'}
                             {lastBoardRefreshed ? (
                                 <span className="text-gray-400 dark:text-gray-600"> · Last updated: {lastBoardRefreshed}</span>
                             ) : null}
@@ -218,6 +238,10 @@ const LiveBedBoardPage = () => {
                             <LiveBedBoardGrid rows={boardRowsWithEvs} loading={boardQuery.isLoading} />
                         </div>
                     ) : null
+                ) : tab === 'requests' ? (
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                        <TransferRequestsPanel rows={boardRowsWithEvs} loading={boardQuery.isLoading} />
+                    </div>
                 ) : (
                     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                         <ActiveEncountersPanel
