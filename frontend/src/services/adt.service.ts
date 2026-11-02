@@ -83,9 +83,22 @@ function messageLooksLikeBedNotFound(message: string): boolean {
     return false;
 }
 
+/** Gate list from a `DISCHARGE_BLOCKED` 409 (`details.blocking[]`), or [] when the error is something else. */
+export function dischargeBlockingGates(result: AdtPostErr): Array<{ id: string; message: string }> {
+    const d = result.details;
+    const list = d && Array.isArray((d as { blocking?: unknown }).blocking) ? ((d as { blocking: unknown[] }).blocking as Array<Record<string, unknown>>) : [];
+    return list
+        .filter((g) => typeof g?.message === 'string')
+        .map((g) => ({ id: String(g.id ?? ''), message: String(g.message) }));
+}
+
 export function formatAdtUserMessage(result: AdtPostErr): string {
     if (messageLooksLikeBedNotFound(result.message)) {
         return BED_NOT_FOUND_USER_MESSAGE;
+    }
+    const gates = dischargeBlockingGates(result);
+    if (gates.length) {
+        return `Discharge blocked — ${gates.map((g) => g.message).join(' · ')}`;
     }
     if (result.status === 401) {
         return 'Your session has expired. Please sign in again.';

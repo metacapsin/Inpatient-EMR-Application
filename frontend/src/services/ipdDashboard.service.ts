@@ -1,5 +1,5 @@
 import type { AxiosError } from 'axios';
-import type { IpdAlerts, IpdBedRow, IpdDashboardPayload, IpdKpis } from '../types/ipdDashboard';
+import type { IpdAlerts, IpdBedRow, IpdCriticalResult, IpdDashboardPayload, IpdKpis } from '../types/ipdDashboard';
 import { extractIdString } from '../lib/apiPayload';
 import api from './api';
 
@@ -91,7 +91,25 @@ function normalizeKpis(raw: unknown): IpdKpis {
         occupiedBeds: num(rec.occupiedBeds ?? rec.occupied_beds ?? rec.occupied),
         availableBeds: num(rec.availableBeds ?? rec.available_beds ?? rec.available),
         dischargedToday: num(rec.dischargedToday ?? rec.discharged_today ?? rec.dischargesToday ?? rec.discharges_today),
+        unacknowledgedCriticalResults: num(rec.unacknowledgedCriticalResults ?? rec.unacknowledged_critical_results),
     };
+}
+
+function normalizeCriticalResults(raw: unknown): IpdCriticalResult[] {
+    if (!Array.isArray(raw)) return [];
+    return raw.map((x) => {
+        const r = x && typeof x === 'object' ? (x as Record<string, unknown>) : {};
+        return {
+            id: str(r.id),
+            labOrderId: str(r.labOrderId),
+            patientId: str(r.patientId),
+            patientName: str(r.patientName) || '—',
+            mrn: str(r.mrn),
+            testName: str(r.testName),
+            value: str(r.value),
+            resultedAt: str(r.resultedAt) || null,
+        };
+    }).filter((r) => r.id);
 }
 
 function normalizeAlerts(raw: unknown): IpdAlerts {
@@ -126,7 +144,8 @@ export function parseIpdDashboardPayload(raw: unknown): IpdDashboardPayload {
     const bedList = Array.isArray(bedRaw) ? bedRaw : [];
     const bedBoard = bedList.map((row, i) => normalizeBedRow(row, i));
     const alerts = normalizeAlerts(rec.alerts ?? {});
-    return { kpis, bedBoard, alerts };
+    const criticalResults = normalizeCriticalResults(rec.criticalResults ?? rec.critical_results);
+    return { kpis, bedBoard, alerts, criticalResults };
 }
 
 export type FetchIpdDashboardResult =

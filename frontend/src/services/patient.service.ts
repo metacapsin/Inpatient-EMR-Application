@@ -638,6 +638,9 @@ export interface PatientRegistrationPayload {
     countryOfBirth?: string;
     advancedHealthCareDirective?: string;
     noticeOfPrivacyPracticesDate?: string;
+    pcpName?: string;
+    pcpNpi?: string;
+    pcpRecipientId?: string;
     status?: boolean;
     insurance?: PatientInsuranceInput | null;
     secondaryInsurance?: PatientInsuranceInput | null;

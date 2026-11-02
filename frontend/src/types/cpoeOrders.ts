@@ -47,6 +47,8 @@ export type LabOrderInput = {
     priority: 'Routine' | 'Urgent' | 'STAT';
     orderingProviderName?: string;
     officeNotes?: string;
+    /** Reason for order (CPOE gap #1 for labs). */
+    clinicalIndication?: string;
 };
 
 export type RadiologyOrderInput = {

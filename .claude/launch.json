@@ -1,0 +1,45 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "backend",
+        "run",
+        "dev"
+      ],
+      "port": 4000
+    },
+    {
+      "name": "backend-bedmgmt",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd backend && PORT=4100 CORS_ORIGINS=http://localhost:5273,http://127.0.0.1:5273 node src/server.js"
+      ],
+      "port": 4100
+    },
+    {
+      "name": "frontend-bedmgmt",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "cd frontend && VITE_EMR_API_BASE_URL=http://localhost:4100 npx vite --port 5273 --strictPort"
+      ],
+      "port": 5273
+    }
+  ]
+}

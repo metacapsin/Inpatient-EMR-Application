@@ -8,12 +8,14 @@ import { MarTab } from './MarTab';
 import { PrnStatTab } from './PrnStatTab';
 import { PharmacyTab } from './PharmacyTab';
 import { DischargeMedsTab } from './DischargeMedsTab';
+import { ReconciliationTab } from './ReconciliationTab';
+import { canNursingActions, canSignPhysicianNote, normalizeRoles } from '../../../features/clinical-workflows/clinicalRole';
 import SearchableSelect from '@/components/ui/SearchableSelect';
 import { CodeHeaderButton } from '../../../features/code-event/components/CodeHeaderButton';
 import type { IRootState } from '../../../store';
 import { selectAdtEncounter } from '../../../store/adtEncounterSlice';
 
-type TabId = 'mar' | 'prn' | 'pharmacy' | 'discharge';
+type TabId = 'mar' | 'prn' | 'reconciliation' | 'pharmacy' | 'discharge';
 
 function displayStaffName(): string {
     try {
@@ -48,6 +50,11 @@ export default function MedicationManagementPage() {
     const [encountersLoading, setEncountersLoading] = useState(false);
 
     const adtSession = useSelector((s: IRootState) => selectAdtEncounter(s, patientId));
+    const authRole = useSelector((s: IRootState) => s.auth.role);
+    const authUser = useSelector((s: IRootState) => s.auth.user);
+    const rolesNorm = useMemo(() => normalizeRoles(authRole, authUser), [authRole, authUser]);
+    const canReconcile = canNursingActions(rolesNorm) || rolesNorm.includes('pharmacist');
+    const canPrescribe = canSignPhysicianNote(rolesNorm);
 
     const staffName = useMemo(() => displayStaffName(), []);
 
@@ -149,7 +156,7 @@ export default function MedicationManagementPage() {
                     ) : null}
                 </div>
                 <p className="mt-2 max-w-3xl text-sm text-gray-600 dark:text-gray-400">
-                    MAR, PRN/STAT, pharmacy dispensing, and discharge medications. Discharge medication documents are saved per{' '}
+                    MAR, PRN/STAT, medication reconciliation, e-prescribing / pharmacy dispensing, and discharge medications. Discharge medication documents are saved per{' '}
                     <strong>encounter</strong> (inpatient admission). Select a patient, then an active encounter, before using the
                     discharge meds tab.
                 </p>
@@ -230,7 +237,8 @@ export default function MedicationManagementPage() {
                             [
                                 ['mar', 'MAR'],
                                 ['prn', 'PRN / STAT'],
-                                ['pharmacy', 'Pharmacy'],
+                                ['reconciliation', 'Reconciliation'],
+                                ['pharmacy', 'Pharmacy / e-Rx'],
                                 ['discharge', 'Discharge meds'],
                             ] as const
                         ).map(([id, label]) => (
@@ -249,7 +257,8 @@ export default function MedicationManagementPage() {
 
                     {tab === 'mar' ? <MarTab patientId={patientId} defaultGivenBy={staffName} /> : null}
                     {tab === 'prn' ? <PrnStatTab patientId={patientId} defaultGivenBy={staffName} /> : null}
-                    {tab === 'pharmacy' ? <PharmacyTab patientId={patientId} defaultDispensedBy={staffName} /> : null}
+                    {tab === 'reconciliation' ? <ReconciliationTab patientId={patientId} encounterId={encounterId.trim() || undefined} canEdit={canReconcile} /> : null}
+                    {tab === 'pharmacy' ? <PharmacyTab patientId={patientId} encounterId={encounterId.trim() || undefined} defaultDispensedBy={staffName} canPrescribe={canPrescribe} /> : null}
                     {tab === 'discharge' ? (
                         <DischargeMedsTab patientId={patientId} encounterId={encounterId.trim() || undefined} />
                     ) : null}

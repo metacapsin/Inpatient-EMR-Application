@@ -37,6 +37,12 @@ dashboardRouter.get('/dashboard/ipd', h(async (req, res) => {
         [t],
     );
 
+    const criticals = await query(
+        `SELECT lr.id, lr.test_name, lr.value_num, lr.value_text, lr.unit, lr.resulted_at, p.first_name || ' ' || p.last_name AS patient_name, p.mrn, lr.patient_id, lr.lab_order_id
+         FROM lab_results lr JOIN patients p ON p.id = lr.patient_id
+         WHERE lr.tenant_id = $1 AND lr.is_critical AND lr.acknowledged_at IS NULL ORDER BY lr.resulted_at DESC LIMIT 20`,
+        [t],
+    );
     const rows = board.rows.map((x) => ({
         rowId: x.bed_id,
         ward: x.ward_name,
@@ -55,10 +61,15 @@ dashboardRouter.get('/dashboard/ipd', h(async (req, res) => {
             occupiedBeds: rows.filter((r) => r.status === 'Occupied').length,
             availableBeds: rows.filter((r) => r.status === 'Available').length,
             dischargedToday: discharged.rows[0].n,
+            unacknowledgedCriticalResults: criticals.rowCount,
         },
+        criticalResults: criticals.rows.map((c) => ({
+            id: c.id, labOrderId: c.lab_order_id, patientId: c.patient_id, patientName: c.patient_name, mrn: c.mrn, testName: c.test_name,
+            value: c.value_num !== null ? `${Number(c.value_num)} ${c.unit ?? ''}`.trim() : c.value_text ?? '', resultedAt: iso(c.resulted_at),
+        })),
         bedBoard: rows,
         alerts: {
-            criticalPatients: [], // no acuity scoring is stored yet
+            criticalPatients: criticals.rows.map((c) => `${c.patient_name} · ${c.test_name} ${c.value_num !== null ? `${Number(c.value_num)} ${c.unit ?? ''}`.trim() : c.value_text ?? ''} (unacknowledged)`),
             bedsPendingCleaning: rows.filter((r) => r.status === 'Cleaning').map((r) => `${r.ward} · ${r.room} · ${r.bed}`),
             transferRequests: transfers.rows.map((x) => `${x.patient_name} → ${x.ward_name ?? 'any ward'} (${x.priority})`),
         },

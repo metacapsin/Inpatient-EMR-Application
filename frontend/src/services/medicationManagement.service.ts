@@ -1,5 +1,11 @@
 import api from './api';
+import { getApiErrorMessage } from '../lib/httpError';
+import type { ServiceResult } from '../types/dischargeReadiness';
 import type {
+    CreatePrescriptionRequest,
+    Pharmacy,
+    PharmacyInput,
+    PrescriptionStatus,
     DischargeMedLine,
     DischargeMedPayload,
     MarRow,
@@ -13,8 +19,9 @@ import type {
     PrnStatRecord,
 } from '../types/medicationManagement';
 
+/** Every medication route is backend-wired; the in-memory mock is opt-in only (VITE_MEDICATION_API_MOCK=true). */
 function useMock(): boolean {
-    return import.meta.env.VITE_MEDICATION_API_MOCK !== 'false';
+    return import.meta.env.VITE_MEDICATION_API_MOCK === 'true';
 }
 
 function unwrapBody<T>(body: unknown): T {
@@ -245,17 +252,65 @@ export async function postPrnStat(body: PostPrnStatRequest): Promise<PrnStatReco
     return unwrapBody<PrnStatRecord>(res.data);
 }
 
-export async function getPrescriptions(patientId: string): Promise<PrescriptionRow[]> {
+export async function getPrescriptions(patientId: string, status: PrescriptionStatus | 'open' | 'all' = 'open'): Promise<PrescriptionRow[]> {
     if (!patientId.trim()) return [];
     if (useMock()) {
         await mockDelay();
         seedMockPatient(patientId);
         return JSON.parse(JSON.stringify(mockPrescriptions.get(patientId) || [])) as PrescriptionRow[];
     }
-    const res = await api.get<unknown>(`/api/prescriptions/${encodeURIComponent(patientId)}`);
+    const res = await api.get<unknown>(`/api/prescriptions/${encodeURIComponent(patientId)}`, { params: { status } });
     const raw = unwrapBody<unknown>(res.data);
     if (Array.isArray(raw)) return raw as PrescriptionRow[];
     return [];
+}
+
+// --- e-prescribing lifecycle (backend/src/routes/medication.js) ---
+
+export async function createPrescription(body: CreatePrescriptionRequest): Promise<ServiceResult<PrescriptionRow>> {
+    try {
+        const res = await api.post<unknown>('/api/prescriptions', body);
+        return { ok: true, data: unwrapBody<PrescriptionRow>(res.data) };
+    } catch (e) {
+        return { ok: false, message: getApiErrorMessage(e, 'Could not create prescription') };
+    }
+}
+
+async function rxAction(id: string, action: 'sign' | 'transmit' | 'print' | 'cancel', body: Record<string, unknown> = {}): Promise<ServiceResult<PrescriptionRow>> {
+    try {
+        const res = await api.post<unknown>(`/api/prescriptions/${encodeURIComponent(id)}/${action}`, body);
+        return { ok: true, data: unwrapBody<PrescriptionRow>(res.data) };
+    } catch (e) {
+        return { ok: false, message: getApiErrorMessage(e, `Could not ${action} prescription`) };
+    }
+}
+export const signPrescription = (id: string) => rxAction(id, 'sign');
+export const transmitPrescription = (id: string, pharmacyId?: string) => rxAction(id, 'transmit', pharmacyId ? { pharmacyId } : {});
+export const printPrescription = (id: string) => rxAction(id, 'print');
+export const cancelPrescription = (id: string, reason?: string) => rxAction(id, 'cancel', reason ? { reason } : {});
+
+export async function listPharmacies(includeInactive = false): Promise<Pharmacy[]> {
+    const res = await api.get<unknown>('/api/pharmacies', { params: includeInactive ? { includeInactive: 'true' } : {} });
+    const raw = unwrapBody<unknown>(res.data);
+    return Array.isArray(raw) ? (raw as Pharmacy[]) : [];
+}
+
+export async function savePharmacy(body: PharmacyInput, id?: string): Promise<ServiceResult<Pharmacy>> {
+    try {
+        const res = id ? await api.put<unknown>(`/api/pharmacies/${encodeURIComponent(id)}`, body) : await api.post<unknown>('/api/pharmacies', body);
+        return { ok: true, data: unwrapBody<Pharmacy>(res.data) };
+    } catch (e) {
+        return { ok: false, message: getApiErrorMessage(e, 'Could not save pharmacy') };
+    }
+}
+
+export async function deactivatePharmacy(id: string): Promise<ServiceResult<null>> {
+    try {
+        await api.delete(`/api/pharmacies/${encodeURIComponent(id)}`);
+        return { ok: true, data: null };
+    } catch (e) {
+        return { ok: false, message: getApiErrorMessage(e, 'Could not deactivate pharmacy') };
+    }
 }
 
 export async function postDispense(body: PostDispenseRequest): Promise<{ ok: boolean }> {

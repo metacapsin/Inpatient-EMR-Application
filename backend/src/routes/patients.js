@@ -132,6 +132,9 @@ function patientOut(p) {
         middleName: p.middle_name ?? '',
         lastName: p.last_name,
         suffix: p.suffix ?? '',
+        pcpName: p.pcp_name ?? '',
+        pcpNpi: p.pcp_npi ?? '',
+        pcpRecipientId: p.pcp_recipient_id ?? '',
         fullName,
         dOB: p.dob ?? '',
         sex: p.sex ?? '',
@@ -199,7 +202,7 @@ patientsRouter.get('/Patient/getAllPatientListPaginated', h(async (req, res) => 
     const q = parse(
         z.object({
             page: z.coerce.number().int().min(1).default(1),
-            limit: z.coerce.number().int().min(1).max(200).default(10),
+            limit: z.coerce.number().int().min(1).max(500).default(10),
             sortField: z.string().default('createdOn'),
             sortOrder: z.enum(['asc', 'desc']).default('asc'),
             status: z.enum(['true', 'false']).optional(),
@@ -361,6 +364,9 @@ const patientBody = z.object({
     countryOfBirth: optStr(100),
     advancedHealthCareDirective: optStr(60),
     noticeOfPrivacyPracticesDate: optDate(),
+    pcpName: optStr(200),
+    pcpNpi: z.preprocess((v) => (v === '' || v === null || v === undefined ? v : String(v).replace(/\D/g, '')), z.string().regex(/^[1-9]\d{9}$/, 'PCP NPI must be 10 digits').optional().nullable().or(z.literal(''))),
+    pcpRecipientId: optStr(100),
     status: z.boolean().optional(),
     insurance: insuranceBody.optional().nullable(),
     secondaryInsurance: insuranceBody.optional().nullable(),
@@ -378,8 +384,15 @@ const PATIENT_COLS = {
     mailingState: 'mailing_state', mailingZipCode: 'mailing_zip_code',
     preferredLanguage: 'preferred_language', ethnicity: 'ethnicity', race: 'race', countryOfBirth: 'country_of_birth',
     advancedHealthCareDirective: 'advance_directive_status', noticeOfPrivacyPracticesDate: 'notice_of_privacy_practices_date',
+    pcpName: 'pcp_name', pcpNpi: 'pcp_npi', pcpRecipientId: 'pcp_recipient_id',
     status: 'is_active',
 };
+
+/** Full patient in the API shape (used by other routers, e.g. discharge readiness eligibility re-check). */
+export async function loadPatientOut(tenantId, id) {
+    const r = await query(`${PATIENT_SELECT} WHERE p.id = $1 AND p.tenant_id = $2`, [id, tenantId]);
+    return r.rowCount ? patientOut(r.rows[0]) : null;
+}
 
 const nz = (v) => (v === '' || v === undefined ? null : v);
 

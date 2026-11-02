@@ -3,6 +3,18 @@ export type IpdKpis = {
     occupiedBeds: number;
     availableBeds: number;
     dischargedToday: number;
+    unacknowledgedCriticalResults: number;
+};
+
+export type IpdCriticalResult = {
+    id: string;
+    labOrderId: string;
+    patientId: string;
+    patientName: string;
+    mrn: string;
+    testName: string;
+    value: string;
+    resultedAt: string | null;
 };
 
 export type IpdBedRow = {
@@ -28,4 +40,5 @@ export type IpdDashboardPayload = {
     kpis: IpdKpis;
     bedBoard: IpdBedRow[];
     alerts: IpdAlerts;
+    criticalResults: IpdCriticalResult[];
 };

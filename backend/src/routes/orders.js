@@ -64,6 +64,7 @@ const labVariant = z.object({
     orderingProviderName: optText(200),
     officeNotes: optText(2000),
     patientContactNotes: optText(2000),
+    clinicalIndication: optText(1000),
 });
 
 const radiologyVariant = z.object({
@@ -119,9 +120,9 @@ ordersRouter.post('/api/orders', requireRole('physician', 'nurse'), h(async (req
         } else if (b.orderType === 'lab') {
             refTable = 'lab_orders';
             detail = (await db.query(
-                `INSERT INTO lab_orders (tenant_id, patient_id, encounter_id, lab_tests, order_date, priority, ordering_provider_name, office_notes, patient_contact_notes, created_by)
-                 VALUES ($1,$2,$3,$4,COALESCE($5::date, CURRENT_DATE),$6,$7,$8,$9,$10) RETURNING *`,
-                [req.user.tenantId, b.patientId, b.encounterId, JSON.stringify(b.labTests), b.orderDate ?? null, b.priority, b.orderingProviderName || req.user.name || null, b.officeNotes || null, b.patientContactNotes || null, req.user.id],
+                `INSERT INTO lab_orders (tenant_id, patient_id, encounter_id, lab_tests, order_date, priority, ordering_provider_name, office_notes, patient_contact_notes, created_by, clinical_indication)
+                 VALUES ($1,$2,$3,$4,COALESCE($5::date, CURRENT_DATE),$6,$7,$8,$9,$10,$11) RETURNING *`,
+                [req.user.tenantId, b.patientId, b.encounterId, JSON.stringify(b.labTests), b.orderDate ?? null, b.priority, b.orderingProviderName || req.user.name || null, b.officeNotes || null, b.patientContactNotes || null, req.user.id, b.clinicalIndication || null],
             )).rows[0];
         } else {
             refTable = 'radiology_orders';

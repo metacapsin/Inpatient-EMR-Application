@@ -42,6 +42,7 @@ import { InpatientCodeEventWorkflow } from '../../features/code-event/components
 import { AlliedHealthNotesTab } from '../../features/allied-health-notes/components/AlliedHealthNotesTab';
 import { PhysicianQueryInbox } from '../../features/cdi/components/PhysicianQueryInbox';
 import { tenantIdFromUser } from '../../features/consent/utils/consentLinks';
+import { getApiErrorMessage } from '../../lib/httpError';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
@@ -116,6 +117,17 @@ function ClinicalWorkflowsPage() {
     const [plan, setPlan] = useState('');
     const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
     const [addendumText, setAddendumText] = useState('');
+    const selectedNote = useMemo(() => notes.find((n) => n.id === selectedNoteId) ?? null, [notes, selectedNoteId]);
+    const noteLocked = selectedNote?.status === 'signed';
+
+    function resetNoteForm() {
+        setSelectedNoteId(null);
+        setHpi('');
+        setRos('');
+        setAssessment('');
+        setPlan('');
+        setAddendumText('');
+    }
 
     const [nursingShift, setNursingShift] = useState<'morning' | 'evening' | 'night'>('morning');
     const [nursingText, setNursingText] = useState('');
@@ -289,6 +301,10 @@ function ClinicalWorkflowsPage() {
             toast.error('Select patient and active encounter');
             return;
         }
+        if (noteLocked) {
+            toast.error('Signed notes are immutable — add an addendum instead');
+            return;
+        }
         try {
             if (selectedNoteId) {
                 await clinicalApi.updatePhysicianNote(selectedNoteId, {
@@ -309,7 +325,7 @@ function ClinicalWorkflowsPage() {
             }
             await refreshPhysician();
         } catch (e: unknown) {
-            toast.error('Save failed');
+            toast.error(getApiErrorMessage(e, 'Save failed'));
         }
     }
 
@@ -319,11 +335,15 @@ function ClinicalWorkflowsPage() {
             return;
         }
         try {
-            await clinicalApi.signPhysicianNote(selectedNoteId);
-            toast.success('Note signed');
+            // Persist any unsaved edits, then sign (the server rejects edits once signed).
+            if (!noteLocked) await clinicalApi.updatePhysicianNote(selectedNoteId, { content: { hpi, ros, assessment, plan } });
+            const res = await clinicalApi.signPhysicianNote(selectedNoteId);
+            const cms = (res.data as PhysicianNote | undefined)?.cmsCompliance;
+            if (cms?.isLate) toast.warning(`Note signed — H&P signed after the CMS 24-hour window (due ${new Date(cms.deadline).toLocaleString()})`);
+            else toast.success(res.message || 'Note signed');
             await refreshPhysician();
-        } catch {
-            toast.error('Sign failed');
+        } catch (e: unknown) {
+            toast.error(getApiErrorMessage(e, 'Sign failed'));
         }
     }
 
@@ -334,8 +354,8 @@ function ClinicalWorkflowsPage() {
             setAddendumText('');
             toast.success('Addendum saved');
             await refreshPhysician();
-        } catch {
-            toast.error('Addendum failed');
+        } catch (e: unknown) {
+            toast.error(getApiErrorMessage(e, 'Addendum failed'));
         }
     }
 
@@ -669,51 +689,79 @@ function ClinicalWorkflowsPage() {
 />
                         </div>
                         </div>
+                        {selectedNote ? (
+                            <div className="flex flex-wrap items-center gap-2 text-xs">
+                                <span className={`rounded-full px-2 py-0.5 font-semibold ${noteLocked ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100' : 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200'}`}>
+                                    {noteLocked ? `Signed ${selectedNote.signedAt ? new Date(selectedNote.signedAt).toLocaleString() : ''}${selectedNote.signedByName ? ` by ${selectedNote.signedByName}` : ''}` : 'Draft'}
+                                </span>
+                                {selectedNote.type === 'hp' && selectedNote.cmsCompliance ? (
+                                    <span
+                                        className={`rounded-full px-2 py-0.5 font-semibold ${selectedNote.cmsCompliance.isLate ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100' : 'bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100'}`}
+                                        title={`H&P must be in the record within 24h of admission (${selectedNote.cmsCompliance.rule})`}
+                                    >
+                                        {selectedNote.cmsCompliance.isLate ? 'CMS 24h H&P window missed' : `CMS H&P due ${new Date(selectedNote.cmsCompliance.deadline).toLocaleString()}`}
+                                    </span>
+                                ) : null}
+                                {(selectedNote.addenda?.length ?? 0) > 0 ? <span className="text-gray-500">{selectedNote.addenda?.length} addendum(s)</span> : null}
+                                <button type="button" className="text-primary hover:underline" onClick={resetNoteForm}>New note</button>
+                            </div>
+                        ) : null}
                         <div className="grid gap-3 md:grid-cols-2">
                             <div>
                                 <label className="text-xs font-medium text-gray-600 dark:text-gray-400">HPI</label>
-                                <Textarea value={hpi} onChange={(e) => setHpi(e.target.value)} rows={4} className="mt-1" />
+                                <Textarea value={hpi} onChange={(e) => setHpi(e.target.value)} rows={4} className="mt-1" readOnly={noteLocked} placeholder="Document onset, duration, severity, and pertinent positives…" />
                             </div>
                             <div>
                                 <label className="text-xs font-medium text-gray-600 dark:text-gray-400">ROS</label>
-                                <Textarea value={ros} onChange={(e) => setRos(e.target.value)} rows={4} className="mt-1" />
+                                <Textarea value={ros} onChange={(e) => setRos(e.target.value)} rows={4} className="mt-1" readOnly={noteLocked} placeholder="Document pertinent positive and negative findings by system…" />
                             </div>
                             <div>
                                 <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Assessment</label>
-                                <Textarea value={assessment} onChange={(e) => setAssessment(e.target.value)} rows={4} className="mt-1" />
+                                <Textarea value={assessment} onChange={(e) => setAssessment(e.target.value)} rows={4} className="mt-1" readOnly={noteLocked} placeholder="Clinical impression, differential, and problem list…" />
                             </div>
                             <div>
                                 <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Plan</label>
-                                <Textarea value={plan} onChange={(e) => setPlan(e.target.value)} rows={4} className="mt-1" />
+                                <Textarea value={plan} onChange={(e) => setPlan(e.target.value)} rows={4} className="mt-1" readOnly={noteLocked} placeholder="Diagnostics, therapeutics, follow-up, and patient instructions…" />
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                            <AppButton type="button" onClick={() => void saveDraft()}>
+                            <AppButton type="button" disabled={noteLocked} onClick={() => void saveDraft()}>
                                 Save draft
                             </AppButton>
                             {showSign && (
-                                <AppButton type="button"  onClick={() => void signNote()}>
+                                <AppButton type="button" disabled={!selectedNoteId || noteLocked} onClick={() => void signNote()}>
                                     Sign note
                                 </AppButton>
                             )}
                         </div>
-                        {showSign && (
+                        {showSign && noteLocked && (
                             <div className="rounded border border-gray-200 p-3 dark:border-gray-700">
                                 <p className="text-sm font-medium">Addendum (signed notes only)</p>
-                                <Textarea value={addendumText} onChange={(e) => setAddendumText(e.target.value)} rows={2} className="mt-2" />
-                                <AppButton type="button" className="mt-2" onClick={() => void submitAddendum()}>
+                                {selectedNote?.addenda?.length ? (
+                                    <ul className="mt-2 space-y-1 text-sm">
+                                        {selectedNote.addenda.map((a, i) => (
+                                            <li key={i} className="rounded bg-gray-50 px-2 py-1 dark:bg-gray-900/40">
+                                                <span className="text-xs text-gray-500">{new Date(a.createdAt).toLocaleString()}{a.createdByName ? ` · ${a.createdByName}` : ''}</span>
+                                                <div>{a.text}</div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : null}
+                                <Textarea value={addendumText} onChange={(e) => setAddendumText(e.target.value)} rows={2} className="mt-2" placeholder="Enter addendum text…" />
+                                <AppButton type="button" className="mt-2" disabled={!addendumText.trim()} onClick={() => void submitAddendum()}>
                                     Append addendum
                                 </AppButton>
                             </div>
                         )}
                         <div>
                             <p className="text-sm font-medium">Recent notes</p>
-                            <ul className="mt-2 max-h-48 space-y-1 overflow-auto text-sm">
+                            <ul className="mt-2 max-h-56 space-y-1 overflow-auto text-sm">
+                                {notes.length === 0 ? <li className="text-gray-500">No notes for this encounter yet.</li> : null}
                                 {notes.map((n) => (
-                                    <li key={n.id}>
+                                    <li key={n.id} className="flex flex-wrap items-center gap-2">
                                         <button
                                             type="button"
-                                            className="text-left text-primary hover:underline"
+                                            className={`text-left hover:underline ${n.id === selectedNoteId ? 'font-semibold text-primary' : 'text-primary'}`}
                                             onClick={() => {
                                                 setSelectedNoteId(n.id || null);
                                                 const c = n.content || {};
@@ -722,10 +770,14 @@ function ClinicalWorkflowsPage() {
                                                 setAssessment(String(c.assessment || ''));
                                                 setPlan(String(c.plan || ''));
                                                 setNoteType(n.type || 'progress');
+                                                setAddendumText('');
                                             }}
                                         >
-                                            {n.type} — {n.status} — {n.id?.slice(-6)}
+                                            {NOTE_TEMPLATES.find((t) => t.value === n.type)?.label ?? n.type} — {n.status}
+                                            {n.createdAt ? ` — ${new Date(n.createdAt).toLocaleString()}` : ''}
+                                            {n.createdByName ? ` — ${n.createdByName}` : ''}
                                         </button>
+                                        {n.type === 'hp' && n.cmsCompliance?.isLate ? <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">late H&P</span> : null}
                                     </li>
                                 ))}
                             </ul>

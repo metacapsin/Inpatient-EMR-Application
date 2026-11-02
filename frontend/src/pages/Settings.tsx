@@ -4,6 +4,8 @@ import { SettingsSidebar } from '../modules/settings/components/SettingsSidebar'
 import { SettingsBreadcrumb } from '../modules/settings/components/SettingsBreadcrumb';
 import { FacilityManagementCard } from '../modules/settings/components/FacilityManagementCard';
 import { PracticeInformationCard } from '../modules/settings/components/PracticeInformationCard';
+import { PharmaciesCard } from '../modules/settings/components/PharmaciesCard';
+import { CareNotificationsCard } from '../modules/settings/components/CareNotificationsCard';
 import {
     settingsContentClass,
     settingsContentInnerClass,
@@ -24,6 +26,8 @@ const Settings: React.FC = () => {
 
                     {activeId === 'facility' ? <FacilityManagementCard /> : null}
                     {activeId === 'practice' ? <PracticeInformationCard /> : null}
+                    {activeId === 'pharmacies' ? <PharmaciesCard /> : null}
+                    {activeId === 'careNotifications' ? <CareNotificationsCard /> : null}
                 </div>
             </div>
         </div>

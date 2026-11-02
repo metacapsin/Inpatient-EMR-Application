@@ -54,6 +54,7 @@ import {
     type InsuranceState,
     type PersonalState,
 } from './patientRegistrationValidation';
+import { listRecipients, type NotificationRecipient } from '../../services/adtNotifications.service';
 
 /* ------------------------------------------------------------------------------------------------
  * Full-page patient registration (create) and demographics edit (same form, `/app/patients/:id/edit`).
@@ -119,6 +120,7 @@ function personalFromRecord(p: PatientApiRecord): PersonalState {
         advancedHealthCareDirective: str(r.advancedHealthCareDirective), preferredLanguage: str(r.preferredLanguage),
         ethnicity: str(r.ethnicity), race: str(r.race), noticeOfPrivacyPracticesDate: str(r.noticeOfPrivacyPracticesDate).slice(0, 10),
         countryOfBirth: str(r.countryOfBirth),
+        pcpName: str(r.pcpName), pcpNpi: str(r.pcpNpi), pcpRecipientId: str(r.pcpRecipientId),
     };
 }
 
@@ -354,6 +356,7 @@ const SECTIONS = [
     { id: 'mailing-address', label: 'Mailing address' },
     { id: 'contact', label: 'Contact' },
     { id: 'demographics', label: 'Demographics' },
+    { id: 'pcp', label: 'Primary care' },
     { id: 'emergency', label: 'Emergency contacts' },
 ] as const;
 
@@ -405,6 +408,18 @@ export default function PatientRegistrationPage() {
     const [hasInsurance, setHasInsurance] = useState<'yes' | 'no'>('no');
     const [hasSecondary, setHasSecondary] = useState<'yes' | 'no'>('no');
     const [insurance, setInsurance] = useState<InsuranceState>(EMPTY_INSURANCE);
+    const [pcpRecipients, setPcpRecipients] = useState<NotificationRecipient[]>([]);
+    useEffect(() => {
+        let cancelled = false;
+        void listRecipients()
+            .then((all) => {
+                if (!cancelled) setPcpRecipients(all.filter((r) => r.kind === 'pcp' && r.enabled));
+            })
+            .catch(() => undefined);
+        return () => {
+            cancelled = true;
+        };
+    }, []);
     const [secondary, setSecondary] = useState<InsuranceState>(EMPTY_INSURANCE);
     const [contacts, setContacts] = useState<[ContactState, ContactState]>([EMPTY_CONTACT, EMPTY_CONTACT]);
     const [errors, setErrors] = useState<Errors>({});
@@ -865,7 +880,18 @@ export default function PatientRegistrationPage() {
                         </div>
                     </Section>
 
-                    {/* 8. Emergency contacts */}
+                    {/* 8. Primary care physician (CMS CoP ADT notifications) */}
+                    <Section id="pcp" title="Primary Care Physician" subtitle="The PCP is notified on admission, transfer and discharge (CMS CoP 42 CFR 482.24(d)). Pick a configured recipient to deliver electronically.">
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            <Field id="pcpName" label="PCP name" error={errors.pcpName}><TextInput id="pcpName" value={form.pcpName} onChange={set('pcpName')} maxLength={200} placeholder="Dr. Jane Patel" error={errors.pcpName} /></Field>
+                            <Field id="pcpNpi" label="PCP NPI" error={errors.pcpNpi}><TextInput id="pcpNpi" inputMode="numeric" value={form.pcpNpi} onChange={(v) => set('pcpNpi')(v.replace(/\D/g, '').slice(0, 10))} error={errors.pcpNpi} /></Field>
+                            <Field id="pcpRecipientId" label="Notification recipient">
+                                <SelectInput id="pcpRecipientId" value={form.pcpRecipientId} onChange={set('pcpRecipientId')} options={pcpRecipients.map((r) => ({ value: r.id, label: `${r.name} (${r.transport})` }))} placeholder={pcpRecipients.length ? 'Select recipient' : 'No PCP recipients configured (Settings → Care Notifications)'} />
+                            </Field>
+                        </div>
+                    </Section>
+
+                    {/* 9. Emergency contacts */}
                     <Section id="emergency" title="Emergency Contacts" subtitle="Optional. If you start a contact, name and phone are needed.">
                         <div className="space-y-4">
                             <ContactBlock index={0} value={contacts[0]} onChange={(c) => setContacts([c, contacts[1]])} errors={errors} />

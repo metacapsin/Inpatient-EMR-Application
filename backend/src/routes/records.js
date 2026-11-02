@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query } from '../db/pool.js';
 import { badRequest, h, notFound, ok, created, parse } from '../lib/http.js';
 import { requireRole } from '../middleware/auth.js';
+import { assertLabTransition } from './labs.js';
 
 // Patient record lists: documents, allergies, immunizations, history, lab orders, lab results.
 export const recordsRouter = Router();
@@ -319,8 +320,19 @@ const labOrderOut = (o) => ({
     orderingProviderName: o.ordering_provider_name ?? '',
     officeNotes: o.office_notes ?? '',
     patientContactNotes: o.patient_contact_notes ?? '',
+    clinicalIndication: o.clinical_indication ?? '',
+    accessionNumber: o.accession_number ?? '',
+    specimenType: o.specimen_type ?? '',
+    collectedAt: o.collected_at ? o.collected_at.toISOString() : null,
+    collectedBy: o.collected_by ?? null,
+    resultedAt: o.resulted_at ? o.resulted_at.toISOString() : null,
+    resultCount: o.result_count ?? undefined,
+    criticalUnacknowledged: o.critical_unacked ?? undefined,
     createdAt: o.created_at.toISOString(),
 });
+const LAB_ORDER_SELECT = `SELECT lo.*, (SELECT count(*)::int FROM lab_results lr WHERE lr.lab_order_id = lo.id) AS result_count,
+                                 (SELECT count(*)::int FROM lab_results lr WHERE lr.lab_order_id = lo.id AND lr.is_critical AND lr.acknowledged_at IS NULL) AS critical_unacked
+                          FROM lab_orders lo`;
 
 const labBody = z.object({
     patientId: z.string().min(1),
@@ -331,6 +343,7 @@ const labBody = z.object({
     orderingProviderName: optText(200),
     officeNotes: optText(2000),
     patientContactNotes: optText(2000),
+    clinicalIndication: optText(1000),
 });
 const LAB_STATUSES = ['Ordered', 'Collected', 'In Progress', 'Resulted', 'Cancelled'];
 
@@ -338,12 +351,12 @@ recordsRouter.get('/lab-orders/by-patient/:patientId', h(async (req, res) => {
     const q = parse(z.object({ page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(1000).default(20) }), req.query);
     const where = 'tenant_id = $1 AND patient_id = $2';
     const total = (await query(`SELECT count(*)::int AS n FROM lab_orders WHERE ${where}`, [req.user.tenantId, req.params.patientId])).rows[0].n;
-    const r = await query(`SELECT * FROM lab_orders WHERE ${where} ORDER BY order_date DESC, created_at DESC LIMIT $3 OFFSET $4`, [req.user.tenantId, req.params.patientId, q.limit, (q.page - 1) * q.limit]);
+    const r = await query(`${LAB_ORDER_SELECT} WHERE ${where} ORDER BY order_date DESC, created_at DESC LIMIT $3 OFFSET $4`, [req.user.tenantId, req.params.patientId, q.limit, (q.page - 1) * q.limit]);
     ok(res, { orders: r.rows.map(labOrderOut), total, page: q.page, limit: q.limit, totalPages: Math.max(1, Math.ceil(total / q.limit)) });
 }));
 
 recordsRouter.get('/lab-orders/:id', h(async (req, res) => {
-    const r = await query('SELECT * FROM lab_orders WHERE id = $1 AND tenant_id = $2', [req.params.id, req.user.tenantId]);
+    const r = await query(`${LAB_ORDER_SELECT} WHERE lo.id = $1 AND lo.tenant_id = $2`, [req.params.id, req.user.tenantId]);
     if (!r.rowCount) throw notFound('Lab order not found');
     ok(res, labOrderOut(r.rows[0]));
 }));
@@ -353,25 +366,34 @@ recordsRouter.post('/lab-orders', prescriber, h(async (req, res) => {
     await assertPatient(req, b.patientId);
     if (b.encounterId && !(await query('SELECT 1 FROM encounters WHERE id = $1 AND tenant_id = $2 AND patient_id = $3', [b.encounterId, req.user.tenantId, b.patientId])).rowCount) throw notFound('Encounter not found for this patient');
     const r = await query(
-        `INSERT INTO lab_orders (tenant_id, patient_id, encounter_id, lab_tests, order_date, priority, ordering_provider_name, office_notes, patient_contact_notes, created_by)
-         VALUES ($1,$2,$3,$4,COALESCE($5::date, CURRENT_DATE),$6,$7,$8,$9,$10) RETURNING *`,
-        [req.user.tenantId, b.patientId, b.encounterId || null, JSON.stringify(b.labTests), b.orderDate ?? null, b.priority, b.orderingProviderName || req.user.name || null, b.officeNotes || null, b.patientContactNotes || null, req.user.id],
+        `INSERT INTO lab_orders (tenant_id, patient_id, encounter_id, lab_tests, order_date, priority, ordering_provider_name, office_notes, patient_contact_notes, created_by, clinical_indication)
+         VALUES ($1,$2,$3,$4,COALESCE($5::date, CURRENT_DATE),$6,$7,$8,$9,$10,$11) RETURNING *`,
+        [req.user.tenantId, b.patientId, b.encounterId || null, JSON.stringify(b.labTests), b.orderDate ?? null, b.priority, b.orderingProviderName || req.user.name || null, b.officeNotes || null, b.patientContactNotes || null, req.user.id, b.clinicalIndication || null],
     );
+    // Same record as a CPOE lab order: file it in the unified orders ledger when it belongs to an encounter.
+    if (b.encounterId) {
+        await query(`INSERT INTO orders (tenant_id, patient_id, encounter_id, order_type, ref_table, ref_id, ordered_by) VALUES ($1,$2,$3,'lab','lab_orders',$4,$5)`, [req.user.tenantId, b.patientId, b.encounterId, r.rows[0].id, req.user.id]);
+    }
     created(res, labOrderOut(r.rows[0]));
 }));
 
 recordsRouter.put('/lab-orders/:id', prescriber, h(async (req, res) => {
     const b = parse(
-        z.object({ orderStatus: z.enum(LAB_STATUSES).optional(), officeNotes: optText(2000), patientContactNotes: optText(2000), priority: z.enum(['Routine', 'Urgent', 'STAT']).optional() }),
+        z.object({ orderStatus: z.enum(LAB_STATUSES).optional(), officeNotes: optText(2000), patientContactNotes: optText(2000), priority: z.enum(['Routine', 'Urgent', 'STAT']).optional(), clinicalIndication: optText(1000) }),
         req.body,
     );
+    const cur = (await query('SELECT order_status FROM lab_orders WHERE id = $1 AND tenant_id = $2', [req.params.id, req.user.tenantId])).rows[0];
+    if (!cur) throw notFound('Lab order not found');
+    // Status skipping is rejected server-side (Ordered → Collected → In Progress → Resulted; Cancelled only before Resulted).
+    if (b.orderStatus) assertLabTransition(cur.order_status, b.orderStatus);
     const r = await query(
         `UPDATE lab_orders SET order_status = COALESCE($1, order_status), office_notes = COALESCE($2, office_notes),
-                patient_contact_notes = COALESCE($3, patient_contact_notes), priority = COALESCE($4, priority), updated_at = now()
+                patient_contact_notes = COALESCE($3, patient_contact_notes), priority = COALESCE($4, priority), clinical_indication = COALESCE($7, clinical_indication),
+                cancelled_at = CASE WHEN $1 = 'Cancelled' THEN now() ELSE cancelled_at END, updated_at = now()
          WHERE id = $5 AND tenant_id = $6 RETURNING *`,
-        [b.orderStatus ?? null, b.officeNotes ?? null, b.patientContactNotes ?? null, b.priority ?? null, req.params.id, req.user.tenantId],
+        [b.orderStatus ?? null, b.officeNotes ?? null, b.patientContactNotes ?? null, b.priority ?? null, req.params.id, req.user.tenantId, b.clinicalIndication ?? null],
     );
-    if (!r.rowCount) throw notFound('Lab order not found');
+    if (b.orderStatus === 'Cancelled') await query(`UPDATE orders SET status = 'cancelled' WHERE ref_table = 'lab_orders' AND ref_id = $1`, [req.params.id]);
     ok(res, labOrderOut(r.rows[0]));
 }));
 

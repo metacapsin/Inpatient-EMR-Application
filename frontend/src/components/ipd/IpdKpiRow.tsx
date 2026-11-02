@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { BedDouble, DoorOpen, LogOut, Users, type LucideIcon } from 'lucide-react';
+import { AlertOctagon, BedDouble, DoorOpen, LogOut, Users, type LucideIcon } from 'lucide-react';
 import type { IpdKpis } from '../../types/ipdDashboard';
 import { ipdKpiCardClass } from '../../styles/ipdDashboardClasses';
 import { cn } from '@/lib/utils';
@@ -54,6 +54,14 @@ const KPI_DEFS: KpiDef[] = [
         accent: 'text-emr-muted dark:text-gray-300',
         iconBg: 'bg-emr-hover text-emr-text dark:bg-white/5 dark:text-gray-300',
     },
+    {
+        key: 'unacknowledgedCriticalResults',
+        title: 'Critical Lab Results',
+        shortLabel: 'Awaiting acknowledgement',
+        icon: AlertOctagon,
+        accent: 'text-red-700 dark:text-red-300',
+        iconBg: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300',
+    },
 ];
 
 function utilizationPct(kpis: IpdKpis): number {
@@ -66,7 +74,7 @@ function IpdKpiRowInner({ kpis, loading }: Props) {
     const utilization = useMemo(() => utilizationPct(kpis), [kpis]);
 
     return (
-        <div className="grid shrink-0 grid-cols-2 gap-2 sm:gap-2.5 min-[1100px]:grid-cols-4">
+        <div className="grid shrink-0 grid-cols-2 gap-2 sm:gap-2.5 min-[1100px]:grid-cols-5">
             {KPI_DEFS.map(({ key, title, shortLabel, icon: Icon, accent, iconBg, barClass }) => {
                 const value = kpis[key];
                 const showUtilBar = key === 'occupiedBeds' || key === 'availableBeds';

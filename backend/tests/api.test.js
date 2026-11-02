@@ -163,8 +163,15 @@ test('facility CRUD, patients, ADT flow and bed board', async () => {
     // discharge: confirm before initiate is rejected
     assert.equal((await call('POST', '/api/discharges/confirm', { token: tk, body: { encounterId: encId } })).status, 409);
     assert.equal((await call('POST', '/api/discharges', { token: tk, body: { phase: 'initiate', encounterId: encId, disposition: 'Home' } })).status, 200);
+    // Hard gates: nothing is documented yet, so confirm is refused with the structured gate list.
+    const blocked = await call('POST', '/api/discharges', { token: tk, body: { phase: 'confirm', encounterId: encId } });
+    assert.equal(blocked.status, 409);
+    assert.equal(blocked.body.code, 'DISCHARGE_BLOCKED');
+    assert.ok(blocked.body.details.blocking.some((g) => g.id === 'gate-summary-signed'));
+    assert.ok(blocked.body.details.blocking.some((g) => g.id === 'gate-med-reconciliation'));
+    await satisfyDischargeGates(tk, encId);
     const conf = await call('POST', '/api/discharges', { token: tk, body: { phase: 'confirm', encounterId: encId } });
-    assert.equal(conf.status, 200);
+    assert.equal(conf.status, 200, JSON.stringify(conf.body));
     assert.equal(conf.body.data.patientId, p1.id);
     assert.equal((await call('GET', '/api/admissions/active', { token: tk })).body.data.length, 0);
     // Discharge routes through 'dirty' (bed2) — bed1 is still dirty from the transfer above.
@@ -392,7 +399,7 @@ test('IPD dashboard and notifications', async () => {
     const enc = (await call('POST', '/api/admissions', { token: tk, body: { patientId: p.id, bedId: b1.id } })).body.data.encounter.id;
 
     const d = (await call('GET', '/dashboard/ipd', { token: tk })).body.data;
-    assert.deepEqual(d.kpis, { totalAdmittedPatients: 1, occupiedBeds: 1, availableBeds: 1, dischargedToday: 0 });
+    assert.deepEqual(d.kpis, { totalAdmittedPatients: 1, occupiedBeds: 1, availableBeds: 1, dischargedToday: 0, unacknowledgedCriticalResults: 0 });
     assert.equal(d.bedBoard.find((r) => r.encounterId === enc).patientName, 'Dash Board');
 
     // The nurse (not the actor) was notified of the admission; the admin (actor) was not.
@@ -406,9 +413,29 @@ test('IPD dashboard and notifications', async () => {
     assert.equal((await call('GET', '/notifications', { token: nurse.body.token })).body.data.length, 0);
 
     await call('POST', '/api/discharges', { token: tk, body: { phase: 'initiate', encounterId: enc } });
+    await satisfyDischargeGates(tk, enc);
     await call('POST', '/api/discharges', { token: tk, body: { phase: 'confirm', encounterId: enc } });
     assert.equal((await call('GET', '/dashboard/ipd', { token: tk })).body.data.kpis.dischargedToday, 1);
 });
+
+/**
+ * Discharge confirm is hard-gated (signed summary, completed discharge med rec, blocking checklist tasks).
+ * Satisfies all three for an encounter so ADT/bed tests can still exercise the physical discharge.
+ */
+async function satisfyDischargeGates(tk, encounterId) {
+    const view = await call('GET', `/api/encounters/${encounterId}/discharge-readiness`, { token: tk });
+    assert.equal(view.status, 200, JSON.stringify(view.body));
+    for (const t of view.body.data.checklist.filter((x) => x.blocksDischarge && !x.completed)) {
+        assert.equal((await call('PATCH', `/api/encounters/${encounterId}/discharge-checklist/tasks/${t.id}`, { token: tk, body: { completed: true } })).status, 200);
+    }
+    const rec = (await call('GET', `/api/encounters/${encounterId}/med-reconciliation/discharge`, { token: tk })).body.data;
+    const lines = rec.lines.map((l) => ({ ...l, action: 'continue' }));
+    assert.equal((await call('POST', `/api/encounters/${encounterId}/med-reconciliation/discharge/complete`, { token: tk, body: { lines } })).status, 200);
+    const summary = { admissionDiagnosis: 'Pneumonia', hospitalCourse: 'Treated with IV antibiotics; improved.', finalDiagnoses: 'J18.9 Pneumonia, unspecified organism', dischargeMedications: 'Per reconciliation', followUpInstructions: 'PCP in 7 days', disposition: 'Home' };
+    assert.equal((await call('PUT', `/api/encounters/${encounterId}/discharge-summary`, { token: tk, body: summary })).status, 200);
+    const sign = await call('POST', `/api/encounters/${encounterId}/discharge-summary/sign`, { token: tk, body: {} });
+    assert.equal(sign.status, 200, JSON.stringify(sign.body));
+}
 
 async function addUser(admin, label, role) {
     const email = `${label}-${suffix}@test.example`;
@@ -563,7 +590,12 @@ test('patient records: documents, allergies, immunizations, history, lab orders 
     assert.equal(lo.total, 3);
     const one = (await call('GET', `/lab-orders/${lo.orders[0].id}`, { token: tk })).body.data;
     assert.equal(one.orderStatus, 'Ordered');
+    // Status skipping is rejected: Ordered → Collected → In Progress → Resulted.
+    assert.equal((await call('PUT', `/lab-orders/${one.id}`, { token: tk, body: { orderStatus: 'Resulted' } })).status, 409);
+    assert.equal((await call('PUT', `/lab-orders/${one.id}`, { token: tk, body: { orderStatus: 'Collected' } })).body.data.orderStatus, 'Collected');
+    assert.equal((await call('PUT', `/lab-orders/${one.id}`, { token: tk, body: { orderStatus: 'In Progress' } })).body.data.orderStatus, 'In Progress');
     assert.equal((await call('PUT', `/lab-orders/${one.id}`, { token: tk, body: { orderStatus: 'Resulted' } })).body.data.orderStatus, 'Resulted');
+    assert.equal((await call('PUT', `/lab-orders/${one.id}`, { token: tk, body: { orderStatus: 'Cancelled' } })).status, 409, 'cancel only before Resulted');
     assert.equal((await call('PUT', `/lab-orders/${one.id}`, { token: tk, body: { orderStatus: 'Done' } })).status, 400);
     const lr = (await call('POST', '/LabDetails/createLabDocument', { token: tk, body: { patientId: p.id, name: 'Glucose', labName: 'Quest', value: '98', unit: 'mg/dL', date: '2026-01-02' } })).body.data;
     assert.equal((await call('GET', `/LabDetails/getAllLabDocuments/${p.id}`, { token: tk })).body.data[0].value, '98');
@@ -1125,8 +1157,9 @@ test('bed management: timed holds, dirty-on-discharge, EVS turnaround, expiry sw
 
     // --- discharge sets 'dirty' (not 'available') and queues a Discharge clean
     await call('POST', '/api/discharges', { token: tk, body: { phase: 'initiate', encounterId: enc1 } });
+    await satisfyDischargeGates(tk, enc1);
     const conf = await call('POST', '/api/discharges', { token: tk, body: { phase: 'confirm', encounterId: enc1 } });
-    assert.equal(conf.status, 200);
+    assert.equal(conf.status, 200, JSON.stringify(conf.body));
     assert.ok(conf.body.data.evsQueueId);
     assert.equal((await boardRow(bedA.id)).bed.bedStatus, 'dirty');
 
@@ -1590,4 +1623,421 @@ test('problem list / ICD-10: search, CRUD, status lifecycle, roles, tenant isola
 
     // NANDA search still works (regression).
     assert.equal((await call('GET', '/api/CarePlan/nanda/search?q=falls', { token: tk })).status, 200);
+});
+
+// ============================================================================ Phase 1 partial-module completion
+async function admitPatient(tk, label, patientBody = {}) {
+    const ward = (await call('POST', '/Wards/CreateWard', { token: tk, body: { name: `W-${label}` } })).body.data;
+    const room = (await call('POST', '/Rooms/CreateRoom', { token: tk, body: { wardId: ward.id, roomNumber: `R-${label}` } })).body.data;
+    const bed = (await call('POST', '/Beds/CreateBed', { token: tk, body: { roomId: room.id, bedLabel: `B-${label}` } })).body.data;
+    const bed2 = (await call('POST', '/Beds/CreateBed', { token: tk, body: { roomId: room.id, bedLabel: `B2-${label}` } })).body.data;
+    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: label, lastName: 'Patient', dOB: '1960-04-05', sex: 'F', ...patientBody } })).body.data;
+    const adm = await call('POST', '/api/admissions', { token: tk, body: { patientId: p.id, bedId: bed.id, admissionType: 'emergency', diagnosis: 'Chest pain' } });
+    assert.equal(adm.status, 201, JSON.stringify(adm.body));
+    return { patient: p, encounterId: adm.body.data.encounter.id, bed, bed2, ward, room };
+}
+
+test('physician notes / H&P: create → update → sign → immutable → addendum → list; nurse cannot author H&P; CMS 24h flag', async () => {
+    const t = await newTenant('notes');
+    const tk = t.token;
+    const md = await addUser(t, 'mdnotes', 'physician');
+    const rn = await addUser(t, 'rnnotes', 'nurse');
+    const { patient, encounterId } = await admitPatient(tk, 'Notes');
+    const BASE = '/api/inpatient/clinical';
+
+    // Template matches the reference implementation: content keyed by hpi / ros / assessment / plan.
+    const content = { hpi: '55yo admitted for chest pain.', ros: 'See intake.', assessment: 'Rule out ACS.', plan: 'Serial troponins, cardiology consult.' };
+    assert.equal((await call('POST', `${BASE}/notes/create`, { token: rn.token, body: { patientId: patient.id, encounterId, type: 'hp', content } })).status, 403, 'nurse cannot author H&P');
+    assert.equal((await call('POST', `${BASE}/notes/create`, { token: md.token, body: { patientId: patient.id, encounterId, type: 'bogus', content } })).status, 400);
+    const created = await call('POST', `${BASE}/notes/create`, { token: md.token, body: { patientId: patient.id, encounterId, type: 'hp', content } });
+    assert.equal(created.status, 200, JSON.stringify(created.body));
+    assert.equal(created.body.status, 'success');
+    const note = created.body.data;
+    assert.equal(note.status, 'draft');
+    assert.deepEqual(note.content, content);
+    assert.equal(note.versionHistory.length, 1);
+    assert.equal(note.cmsCompliance.isLate, false);
+    assert.ok(note.cmsCompliance.deadline);
+
+    const upd = await call('PUT', `${BASE}/notes/update/${note.id}`, { token: md.token, body: { content: { plan: 'Add telemetry overnight.' } } });
+    assert.equal(upd.status, 200);
+    assert.equal(upd.body.data.content.plan, 'Add telemetry overnight.');
+    assert.equal(upd.body.data.content.hpi, content.hpi, 'partial update merges sections');
+    assert.equal(upd.body.data.versionHistory.length, 2);
+
+    assert.equal((await call('POST', `${BASE}/notes/addendum/${note.id}`, { token: md.token, body: { text: 'too early' } })).status, 400, 'addendum only on signed notes');
+    assert.equal((await call('POST', `${BASE}/notes/sign/${note.id}`, { token: rn.token })).status, 403);
+    const signed = await call('POST', `${BASE}/notes/sign/${note.id}`, { token: md.token });
+    assert.equal(signed.status, 200, JSON.stringify(signed.body));
+    assert.equal(signed.body.data.status, 'signed');
+    assert.ok(signed.body.data.signedAt);
+    assert.equal(signed.body.data.cmsCompliance.isLate, false, 'signed within 24h of admission');
+    assert.equal((await call('POST', `${BASE}/notes/sign/${note.id}`, { token: md.token })).status, 409);
+    assert.equal((await call('PUT', `${BASE}/notes/update/${note.id}`, { token: md.token, body: { content: { plan: 'x' } } })).status, 409, 'signed note is immutable');
+
+    const add = await call('POST', `${BASE}/notes/addendum/${note.id}`, { token: md.token, body: { text: 'Patient discussed risks/benefits with cardiology.' } });
+    assert.equal(add.status, 200);
+    assert.equal(add.body.data.addenda.length, 1);
+    assert.equal(add.body.data.addenda[0].createdBy, md.id);
+
+    // Late H&P: an admission 2 days ago signed now is flagged (not blocked).
+    await pool.query(`UPDATE encounters SET admitted_at = now() - interval '2 days' WHERE id = $1`, [encounterId]);
+    const late = (await call('POST', `${BASE}/notes/create`, { token: md.token, body: { patientId: patient.id, encounterId, type: 'hp', content } })).body.data;
+    const lateSign = await call('POST', `${BASE}/notes/sign/${late.id}`, { token: md.token });
+    assert.equal(lateSign.status, 200);
+    assert.equal(lateSign.body.data.cmsCompliance.isLate, true);
+    assert.match(lateSign.body.message, /24-hour/);
+
+    // Progress note by a nurse is allowed; list by encounter shows all three, newest first.
+    assert.equal((await call('POST', `${BASE}/notes/create`, { token: rn.token, body: { patientId: patient.id, encounterId, type: 'progress', content: { assessment: 'stable', plan: 'continue' } } })).status, 200);
+    const list = await call('GET', `${BASE}/notes/patient/${patient.id}?encounterId=${encounterId}`, { token: tk });
+    assert.equal(list.status, 200);
+    assert.equal(list.body.data.length, 3);
+    assert.equal(list.body.data[0].type, 'progress');
+    assert.equal((await call('GET', `${BASE}/notes/patient/${patient.id}`, { token: (await newTenant('notesB')).token })).body.data.length, 0, 'tenant isolation');
+});
+
+test('medication reconciliation: home meds → admission rec creates inpatient meds → discharge rec writes discharge_medications', async () => {
+    const t = await newTenant('medrec');
+    const tk = t.token;
+    const rn = await addUser(t, 'rnrec', 'nurse');
+    const { patient, encounterId } = await admitPatient(tk, 'Rec');
+    const home = async (body) => (await call('POST', `/api/patients/${patient.id}/home-medications`, { token: rn.token, body })).body.data;
+    const lisin = await home({ name: 'Lisinopril', dose: '10 mg', route: 'PO', frequency: 'Daily', reportedBy: 'patient' });
+    const metf = await home({ name: 'Metformin', dose: '500 mg', route: 'PO', frequency: 'BID', reportedBy: 'pharmacy' });
+    await home({ name: 'Ibuprofen', dose: '200 mg', route: 'PO', frequency: 'PRN', reportedBy: 'patient' });
+    assert.equal((await call('GET', `/api/patients/${patient.id}/home-medications`, { token: tk })).body.data.length, 3);
+    assert.equal((await call('GET', `/api/patients/${patient.id}/medications`, { token: tk })).body.data.length, 0, 'home meds do not appear on the MAR list');
+    assert.equal((await call('GET', `/api/patients/${patient.id}/medications?source=all`, { token: tk })).body.data.length, 3);
+
+    // Admission reconciliation auto-populates from home meds.
+    const adm = (await call('GET', `/api/encounters/${encounterId}/med-reconciliation/admission`, { token: tk })).body.data;
+    assert.equal(adm.status, 'draft');
+    assert.equal(adm.lines.length, 3);
+    assert.equal(adm.lines[0].source, 'home');
+    const missing = await call('POST', `/api/encounters/${encounterId}/med-reconciliation/admission/complete`, { token: rn.token, body: {} });
+    assert.equal(missing.status, 400, 'every line needs an action');
+    const lines = adm.lines.map((l) => l.originalMedicationId === lisin.id ? { ...l, action: 'continue' } : l.originalMedicationId === metf.id ? { ...l, action: 'modify', dose: '1000 mg', reason: 'uncontrolled glucose' } : { ...l, action: 'stop', reason: 'NSAID held' });
+    lines.push({ name: 'Heparin', dose: '5000 units', route: 'SC', frequency: 'q8h', action: 'new', reason: 'VTE prophylaxis' });
+    const saved = await call('PUT', `/api/encounters/${encounterId}/med-reconciliation/admission`, { token: rn.token, body: { lines } });
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    const done = await call('POST', `/api/encounters/${encounterId}/med-reconciliation/admission/complete`, { token: rn.token, body: {} });
+    assert.equal(done.status, 200, JSON.stringify(done.body));
+    assert.equal(done.body.data.status, 'completed');
+    assert.equal(done.body.data.completedBy, rn.id);
+    const inpatient = (await call('GET', `/api/patients/${patient.id}/medications`, { token: tk })).body.data;
+    assert.deepEqual(inpatient.map((m) => `${m.name} ${m.dose}`).sort(), ['Heparin 5000 units', 'Lisinopril 10 mg', 'Metformin 1000 mg']);
+    assert.equal((await call('PUT', `/api/encounters/${encounterId}/med-reconciliation/admission`, { token: rn.token, body: { lines } })).status, 409, 'completed rec is locked');
+
+    // Discharge reconciliation lists inpatient actives plus untouched home meds (Ibuprofen was stopped but is still a home med).
+    const dis = (await call('GET', `/api/encounters/${encounterId}/med-reconciliation/discharge`, { token: tk })).body.data;
+    assert.equal(dis.lines.filter((l) => l.source === 'inpatient').length, 3);
+    assert.ok(dis.lines.some((l) => l.name === 'Ibuprofen' && l.source === 'home'));
+    const disLines = dis.lines.map((l) => (l.name === 'Heparin' ? { ...l, action: 'stop', reason: 'inpatient only' } : l.name === 'Ibuprofen' ? { ...l, action: 'stop' } : { ...l, action: 'continue', duration: '30 days' }));
+    const disDone = await call('POST', `/api/encounters/${encounterId}/med-reconciliation/discharge/complete`, { token: rn.token, body: { lines: disLines } });
+    assert.equal(disDone.status, 200, JSON.stringify(disDone.body));
+    const dm = (await call('GET', `/api/discharges/${encounterId}/medications`, { token: tk })).body.data;
+    assert.deepEqual(dm.medications.map((m) => m.name).sort(), ['Lisinopril', 'Metformin']);
+    assert.equal(dm.medications[0].duration, '30 days');
+    assert.equal((await call('GET', `/api/patients/${patient.id}/medications`, { token: tk })).body.data.some((m) => m.name === 'Heparin'), false, 'stopped inpatient med discontinued');
+    const overview = (await call('GET', `/api/encounters/${encounterId}/med-reconciliation`, { token: tk })).body.data;
+    assert.deepEqual(overview.map((r) => `${r.type}:${r.status}`).sort(), ['admission:completed', 'discharge:completed']);
+    // The nursing checklist "medication reconciliation" task auto-completed.
+    const view = (await call('GET', `/api/encounters/${encounterId}/discharge-readiness`, { token: tk })).body.data;
+    assert.equal(view.checklist.find((x) => /medication reconciliation/i.test(x.label)).completed, true);
+    assert.equal(view.medRecComplete, true);
+});
+
+test('discharge summary + readiness: gates unresolved → summary → sign blocked without med rec → sign → confirm discharge', async () => {
+    const t = await newTenant('dsum');
+    const tk = t.token;
+    const md = await addUser(t, 'mdsum', 'physician');
+    const rn = await addUser(t, 'rnsum', 'nurse');
+    const { patient, encounterId } = await admitPatient(tk, 'Sum');
+
+    const v0 = await call('GET', `/api/encounters/${encounterId}/discharge-readiness`, { token: rn.token });
+    assert.equal(v0.status, 200, JSON.stringify(v0.body));
+    const view0 = v0.body.data;
+    assert.equal(view0.context.patientId, patient.id);
+    assert.equal(view0.context.patientName, 'Sum Patient');
+    assert.equal(view0.summary.status, 'draft');
+    assert.equal(view0.checklist.length, 5, 'default checklist seeded on first fetch');
+    assert.equal(view0.charges, null);
+    assert.equal(view0.sections.charges.available, false);
+    assert.ok(Array.isArray(view0.eligibilityHistory));
+    assert.ok(view0.gates.find((g) => g.id === 'gate-summary-signed' && !g.resolved));
+    assert.ok(view0.gates.find((g) => g.id === 'gate-med-reconciliation' && !g.resolved));
+    assert.equal(view0.clinicalReady, false);
+    assert.equal((await call('POST', `/api/encounters/${encounterId}/discharge-checklist/seed`, { token: rn.token })).body.data.seeded, false, 'idempotent');
+
+    assert.equal((await call('PUT', `/api/encounters/${encounterId}/discharge-summary`, { token: rn.token, body: { hospitalCourse: 'x' } })).status, 403, 'nurse cannot write the summary');
+    assert.equal((await call('POST', `/api/encounters/${encounterId}/discharge-summary/sign`, { token: md.token, body: {} })).status, 400, 'nothing saved yet');
+    const draft = await call('PUT', `/api/encounters/${encounterId}/discharge-summary`, { token: md.token, body: { admissionDiagnosis: 'Chest pain', hospitalCourse: 'Ruled out ACS. Observed on telemetry.', finalDiagnoses: 'R07.9 Chest pain, unspecified', followUpInstructions: 'Cardiology clinic in 2 weeks', disposition: 'Home', conditionAtDischarge: 'Improved' } });
+    assert.equal(draft.status, 200, JSON.stringify(draft.body));
+    assert.equal(draft.body.data.summary.hospitalCourse, 'Ruled out ACS. Observed on telemetry.');
+    const partial = await call('PUT', `/api/encounters/${encounterId}/discharge-summary`, { token: md.token, body: { procedures: 'None' } });
+    assert.equal(partial.body.data.summary.admissionDiagnosis, 'Chest pain', 'partial save keeps other sections');
+
+    const noRec = await call('POST', `/api/encounters/${encounterId}/discharge-summary/sign`, { token: md.token, body: {} });
+    assert.equal(noRec.status, 409);
+    assert.equal(noRec.body.code, 'MED_REC_INCOMPLETE');
+
+    // Complete the discharge reconciliation (one inpatient med kept) then sign.
+    await call('POST', `/api/patients/${patient.id}/medications`, { token: md.token, body: { name: 'Aspirin', dose: '81 mg', route: 'PO', frequency: 'Daily' } });
+    const rec = (await call('GET', `/api/encounters/${encounterId}/med-reconciliation/discharge`, { token: rn.token })).body.data;
+    assert.equal(rec.lines.length, 1);
+    assert.equal((await call('POST', `/api/encounters/${encounterId}/med-reconciliation/discharge/complete`, { token: rn.token, body: { lines: rec.lines.map((l) => ({ ...l, action: 'continue', duration: '90 days' })) } })).status, 200);
+    const sign = await call('POST', `/api/encounters/${encounterId}/discharge-summary/sign`, { token: md.token, body: { signedByName: 'Dr. mdsum User' } });
+    assert.equal(sign.status, 200, JSON.stringify(sign.body));
+    assert.equal(sign.body.data.summary.status, 'signed');
+    assert.equal(sign.body.data.summary.signedBy, md.id);
+    assert.match(sign.body.data.summary.dischargeMedications, /Aspirin 81 mg PO Daily × 90 days/, 'med list snapshot generated from the reconciliation');
+    assert.equal(sign.body.data.summary.dischargeMedicationLines.length, 1);
+    assert.equal(sign.body.data.context.dischargeSigned, true);
+    assert.equal((await call('PUT', `/api/encounters/${encounterId}/discharge-summary`, { token: md.token, body: { hospitalCourse: 'edit' } })).status, 409, 'signed summary is immutable');
+    const rollup = await pool.query('SELECT discharge_summary FROM encounters WHERE id = $1', [encounterId]);
+    assert.match(rollup.rows[0].discharge_summary, /R07\.9/);
+
+    // Checklist: blocking tasks still open → confirm refused; complete them → confirm succeeds; everything survives reload.
+    assert.equal((await call('POST', '/api/discharges', { token: tk, body: { phase: 'initiate', encounterId } })).status, 200);
+    const blocked = await call('POST', '/api/discharges/confirm', { token: tk, body: { encounterId } });
+    assert.equal(blocked.status, 409);
+    assert.equal(blocked.body.code, 'DISCHARGE_BLOCKED');
+    assert.deepEqual(blocked.body.details.blocking.map((g) => g.id), ['gate-nursing-checklist']);
+    const fin = (await call('GET', `/api/discharges/readiness/${encounterId}`, { token: tk })).body.data;
+    assert.equal(fin.dischargeSummaryCompleted, true);
+    assert.equal(fin.medicationCompleted, true);
+    assert.equal(fin.checklistCompleted, false);
+    const view1 = (await call('GET', `/api/encounters/${encounterId}/discharge-readiness`, { token: rn.token })).body.data;
+    for (const task of view1.checklist.filter((x) => x.blocksDischarge && !x.completed)) {
+        const r = await call('PATCH', `/api/encounters/${encounterId}/discharge-checklist/tasks/${task.id}`, { token: rn.token, body: { completed: true, notes: 'done' } });
+        assert.equal(r.status, 200);
+    }
+    const view2 = (await call('GET', `/api/encounters/${encounterId}/discharge-readiness`, { token: tk })).body.data;
+    assert.equal(view2.clinicalReady, true);
+    assert.equal(view2.checklist.find((x) => x.notes === 'done').completedBy, rn.id);
+    const conf = await call('POST', '/api/discharges/confirm', { token: tk, body: { encounterId } });
+    assert.equal(conf.status, 200, JSON.stringify(conf.body));
+    assert.equal((await call('GET', `/api/encounters/${encounterId}/discharge-readiness`, { token: tk })).body.data.context.encounterStatus, 'discharged');
+    assert.equal((await call('GET', `/api/encounters/${encounterId}/discharge-readiness`, { token: (await newTenant('dsumB')).token })).status, 404, 'tenant isolation');
+});
+
+test('e-prescribing Phase A: pharmacy directory, draft → sign (NPI copied) → transmit (stub) / print / cancel; controlled Rx blocked; facesheet list', async () => {
+    const t = await newTenant('erx');
+    const tk = t.token;
+    const md = await addUser(t, 'mderx', 'physician');
+    const rn = await addUser(t, 'rnerx', 'nurse');
+    const { patient, encounterId } = await admitPatient(tk, 'Erx');
+
+    assert.equal((await call('POST', '/api/pharmacies', { token: md.token, body: { name: 'x' } })).status, 403, 'admin only');
+    assert.equal((await call('POST', '/api/pharmacies', { token: tk, body: { name: 'Bad NPI', npi: '123' } })).status, 400);
+    const ph = (await call('POST', '/api/pharmacies', { token: tk, body: { name: 'Main Street Pharmacy', ncpdpId: '1234567', npi: '1234567893', phone: '555-0100', isDefault: true, address: { line1: '1 Main St', city: 'Springfield', state: 'IL', zip: '62701' } } })).body.data;
+    const ph2 = (await call('POST', '/api/pharmacies', { token: tk, body: { name: 'Mail Order Rx', isDefault: true } })).body.data;
+    const list = (await call('GET', '/api/pharmacies', { token: rn.token })).body.data;
+    assert.equal(list.length, 2);
+    assert.equal(list[0].id, ph2.id, 'latest default first');
+    assert.equal(list.find((p) => p.id === ph.id).isDefault, false, 'only one default');
+    assert.equal((await call('DELETE', `/api/pharmacies/${ph2.id}`, { token: tk })).status, 200);
+    assert.equal((await call('GET', '/api/pharmacies', { token: tk })).body.data.length, 1);
+
+    const medicines = [{ name: 'Amoxicillin', strength: '500 mg capsule', dose: '500 mg', route: 'PO', frequency: 'TID', duration: '7 days', instructions: 'with food', quantity: 21, refills: 0, unitPrice: 0.45 }];
+    const draft = await call('POST', '/api/prescriptions', { token: md.token, body: { patientId: patient.id, encounterId, pharmacyId: ph.id, medicines } });
+    assert.equal(draft.status, 201, JSON.stringify(draft.body));
+    const rx = draft.body.data;
+    assert.equal(rx.status, 'draft');
+    assert.equal(rx.pharmacyName, 'Main Street Pharmacy');
+    assert.equal(rx.medicines[0].quantityOrdered, 21, 'quantity feeds the legacy dispense shape');
+    assert.ok(rx.medicines[0].medicineId);
+    assert.equal((await call('POST', `/api/prescriptions/${rx.id}/transmit`, { token: md.token })).status, 409, 'must be signed first');
+    assert.equal((await call('POST', `/api/prescriptions/${rx.id}/sign`, { token: rn.token })).status, 403);
+
+    // Prescriber identity: NPI required on the profile (Luhn-checked), copied onto the Rx at sign time.
+    const noNpi = await call('POST', `/api/prescriptions/${rx.id}/sign`, { token: md.token });
+    assert.equal(noNpi.status, 409);
+    assert.equal(noNpi.body.code, 'PRESCRIBER_NPI_MISSING');
+    assert.equal((await call('PUT', '/auth/profile', { token: md.token, body: { npi: '1234567890' } })).status, 400, 'bad check digit');
+    assert.equal((await call('PUT', '/auth/profile', { token: md.token, body: { npi: '1234567895', deaNumber: 'ab1234567' } })).body.data.deaNumber, 'AB1234567');
+    const signed = await call('POST', `/api/prescriptions/${rx.id}/sign`, { token: md.token });
+    assert.equal(signed.status, 200, JSON.stringify(signed.body));
+    assert.equal(signed.body.data.status, 'signed');
+    assert.equal(signed.body.data.prescriberNpi, '1234567895');
+    assert.equal(signed.body.data.prescriberDea, 'AB1234567');
+    assert.equal(signed.body.data.statusHistory.map((h) => h.status).join('>'), 'draft>signed');
+    assert.equal((await call('POST', `/api/prescriptions/${rx.id}/sign`, { token: md.token })).status, 409);
+
+    const tx = await call('POST', `/api/prescriptions/${rx.id}/transmit`, { token: md.token });
+    assert.equal(tx.status, 200, JSON.stringify(tx.body));
+    assert.equal(tx.body.data.status, 'transmitted');
+    assert.match(tx.body.data.transmissionRef, /^STUB-/);
+    assert.equal((await call('POST', `/api/prescriptions/${rx.id}/print`, { token: md.token })).status, 409, 'already transmitted');
+
+    // Paper fallback + cancel paths.
+    const rx2 = (await call('POST', '/api/prescriptions', { token: md.token, body: { patientId: patient.id, medicines: [{ name: 'Ibuprofen', dose: '400 mg', frequency: 'q6h PRN', quantity: 20 }] } })).body.data;
+    await call('POST', `/api/prescriptions/${rx2.id}/sign`, { token: md.token });
+    assert.equal((await call('POST', `/api/prescriptions/${rx2.id}/transmit`, { token: md.token })).status, 400, 'no pharmacy chosen');
+    assert.equal((await call('POST', `/api/prescriptions/${rx2.id}/print`, { token: rn.token })).body.data.status, 'printed');
+    const cancelled = await call('POST', `/api/prescriptions/${rx2.id}/cancel`, { token: md.token, body: { reason: 'duplicate' } });
+    assert.equal(cancelled.body.data.status, 'cancelled');
+    assert.equal((await call('POST', '/api/dispense', { token: tk, body: { prescriptionId: rx2.id, medicines: [{ medicineId: rx2.medicines[0].medicineId, quantityDispensed: 1, batchNumber: 'B', expiryDate: '2099-01-01', unitPrice: 0 }], dispensedBy: 'x', totalCost: 0 } })).status, 409, 'cancelled cannot be dispensed');
+
+    // Controlled substance: hard stop until EPCS (Phase B).
+    const ctrl = (await call('POST', '/api/prescriptions', { token: md.token, body: { patientId: patient.id, medicines: [{ name: 'Oxycodone', dose: '5 mg', frequency: 'q6h PRN', quantity: 10, controlledSchedule: 'II' }] } })).body.data;
+    assert.equal(ctrl.controlledSchedule, 'II');
+    const epcs = await call('POST', `/api/prescriptions/${ctrl.id}/sign`, { token: md.token });
+    assert.equal(epcs.status, 409);
+    assert.equal(epcs.body.code, 'EPCS_NOT_ENABLED');
+
+    // Dispense flow still works on a transmitted Rx and the list filters by status.
+    const line = { medicineId: rx.medicines[0].medicineId, quantityDispensed: 21, batchNumber: 'LOT1', expiryDate: '2099-01-01', unitPrice: 0.45 };
+    assert.equal((await call('POST', '/api/dispense', { token: tk, body: { prescriptionId: rx.id, medicines: [line], dispensedBy: 'Pharm', totalCost: 9.45 } })).body.data.ok, true);
+    assert.deepEqual((await call('GET', `/api/prescriptions/${patient.id}`, { token: tk })).body.data.map((r) => r.status), ['draft'], 'open list excludes dispensed/cancelled');
+    assert.equal((await call('GET', `/api/prescriptions/${patient.id}?status=all`, { token: tk })).body.data.length, 3);
+    assert.equal((await call('GET', `/api/prescriptions/${patient.id}?status=dispensed`, { token: tk })).body.data[0].id, rx.id);
+    assert.equal((await call('GET', `/api/prescriptions/by-id/${rx.id}`, { token: (await newTenant('erxB')).token })).status, 404);
+});
+
+test('lab orders: collect → results (abnormal + critical flags, notification) → acknowledge → Resulted; corrections; critical worklist; CPOE indication', async () => {
+    const t = await newTenant('labs');
+    const tk = t.token;
+    const md = await addUser(t, 'mdlab', 'physician');
+    const rn = await addUser(t, 'rnlab', 'nurse');
+    const { patient, encounterId } = await admitPatient(tk, 'Lab');
+
+    // CPOE lab order carries the clinical indication and lands in the same lab_orders table.
+    const cpoe = await call('POST', '/api/orders', { token: md.token, body: { orderType: 'lab', patientId: patient.id, encounterId, labTests: [{ name: 'BMP', specimen: 'Blood' }, { name: 'Magnesium' }], priority: 'STAT', clinicalIndication: 'Suspected hypokalaemia' } });
+    assert.equal(cpoe.status, 201, JSON.stringify(cpoe.body));
+    const orderId = cpoe.body.data.refId;
+    const order = (await call('GET', `/lab-orders/${orderId}`, { token: tk })).body.data;
+    assert.equal(order.clinicalIndication, 'Suspected hypokalaemia');
+    assert.equal(order.orderStatus, 'Ordered');
+
+    assert.equal((await call('POST', `/lab-orders/${order.id}/results`, { token: rn.token, body: { results: [{ testName: 'BMP', valueNum: 1 }] } })).status, 409, 'collect before resulting');
+    const col = await call('POST', `/lab-orders/${order.id}/collect`, { token: rn.token, body: {} });
+    assert.equal(col.status, 200, JSON.stringify(col.body));
+    assert.equal(col.body.data.orderStatus, 'Collected');
+    assert.match(col.body.data.accessionNumber, /^ACC\d{8}-\d{5}$/);
+    assert.equal(col.body.data.specimenType, 'Blood');
+    assert.equal((await call('POST', `/lab-orders/${order.id}/collect`, { token: rn.token })).status, 409, 'cannot collect twice');
+
+    // Partial results → In Progress; the critical potassium notifies physicians + nurses.
+    const r1 = await call('POST', `/lab-orders/${order.id}/results`, { token: rn.token, body: { results: [
+        { testName: 'BMP', testCode: 'K', loincCode: '2823-3', valueNum: 2.4, unit: 'mmol/L', refLow: 3.5, refHigh: 5.1 },
+        { testName: 'Sodium', valueNum: 138, unit: 'mmol/L', refLow: 135, refHigh: 145 },
+    ] } });
+    assert.equal(r1.status, 201, JSON.stringify(r1.body));
+    assert.equal(r1.body.data.orderStatus, 'In Progress');
+    const k = r1.body.data.results.find((x) => x.testCode === 'K');
+    assert.equal(k.abnormalFlag, 'LL');
+    assert.equal(k.isCritical, true);
+    assert.equal(r1.body.data.results.find((x) => x.testName === 'Sodium').abnormalFlag, 'N');
+    const mdNotes = (await call('GET', '/notifications', { token: md.token })).body.data;
+    assert.ok(mdNotes.some((n) => n.action === 'critical_result' && /CRITICAL BMP/.test(n.message)), JSON.stringify(mdNotes));
+    const worklist = (await call('GET', '/lab-results/critical', { token: md.token })).body.data;
+    assert.equal(worklist.length, 1);
+    assert.equal(worklist[0].patientName, 'Lab Patient');
+    assert.equal((await call('GET', '/dashboard/ipd', { token: tk })).body.data.kpis.unacknowledgedCriticalResults, 1);
+
+    const ack = await call('POST', `/lab-results/${k.id}/acknowledge`, { token: md.token });
+    assert.equal(ack.status, 200);
+    assert.equal(ack.body.data.acknowledgedBy, md.id);
+    assert.equal((await call('POST', `/lab-results/${k.id}/acknowledge`, { token: md.token })).status, 409);
+    assert.equal((await call('GET', '/lab-results/critical', { token: md.token })).body.data.length, 0);
+
+    // Remaining ordered test resulted → order Resulted; ledger row completed.
+    const r2 = await call('POST', `/lab-orders/${order.id}/results`, { token: rn.token, body: { results: [{ testName: 'Magnesium', valueNum: 2.6, unit: 'mg/dL', refLow: 1.7, refHigh: 2.2 }] } });
+    assert.equal(r2.body.data.orderStatus, 'Resulted');
+    assert.equal(r2.body.data.results[0].abnormalFlag, 'H');
+    assert.equal(r2.body.data.results[0].isCritical, false);
+    const ledger = await pool.query(`SELECT status FROM orders WHERE ref_table = 'lab_orders' AND ref_id = $1`, [order.id]);
+    assert.equal(ledger.rows[0].status, 'completed');
+    assert.equal((await call('POST', `/lab-orders/${order.id}/results`, { token: rn.token, body: { results: [{ testName: 'X', valueNum: 1 }] } })).status, 409, 'no results on a Resulted order');
+    assert.equal((await call('PUT', `/lab-orders/${order.id}`, { token: tk, body: { orderStatus: 'Ordered' } })).status, 409, 'no going back');
+
+    // Correction keeps the prior value in the audit comment.
+    const corr = await call('PUT', `/lab-orders/${order.id}/results/${k.id}`, { token: md.token, body: { valueNum: 3.4, comment: 'haemolysed sample re-run' } });
+    assert.equal(corr.status, 200, JSON.stringify(corr.body));
+    assert.equal(corr.body.data.status, 'corrected');
+    assert.equal(corr.body.data.abnormalFlag, 'L');
+    assert.match(corr.body.data.comment, /previous value 2.4 mmol\/L/);
+    const all = (await call('GET', `/lab-results/by-patient/${patient.id}`, { token: tk })).body.data;
+    assert.equal(all.length, 3);
+    assert.equal((await call('GET', `/lab-orders/${order.id}/results`, { token: tk })).body.data.length, 3);
+    const listed = (await call('GET', `/lab-orders/by-patient/${patient.id}`, { token: tk })).body.data.orders[0];
+    assert.equal(listed.resultCount, 3);
+    assert.equal(listed.criticalUnacknowledged, 0);
+    assert.equal((await call('GET', `/lab-orders/${order.id}/results`, { token: (await newTenant('labsB')).token })).status, 404);
+
+    // A plain /lab-orders POST with an encounter also files a ledger row (one write path).
+    const direct = (await call('POST', '/lab-orders', { token: md.token, body: { patientId: patient.id, encounterId, labTests: [{ name: 'CBC' }], clinicalIndication: 'Anaemia work-up' } })).body.data;
+    assert.equal((await pool.query(`SELECT 1 FROM orders WHERE ref_table = 'lab_orders' AND ref_id = $1`, [direct.id])).rowCount, 1);
+    assert.equal((await call('PUT', `/lab-orders/${direct.id}`, { token: md.token, body: { orderStatus: 'Cancelled' } })).body.data.orderStatus, 'Cancelled');
+});
+
+test('ADT notifications: recipient directory, A01/A02/A03 log rows with HL7 payloads, stub + failing webhook delivery, retry', async () => {
+    const t = await newTenant('adtn');
+    const tk = t.token;
+    const rn = await addUser(t, 'rnadtn', 'nurse');
+    assert.equal((await call('POST', '/api/notification-recipients', { token: rn.token, body: { name: 'x', kind: 'hie', transport: 'stub' } })).status, 403, 'admin only');
+    assert.equal((await call('POST', '/api/notification-recipients', { token: tk, body: { name: 'Bad', kind: 'hie', transport: 'https_webhook', endpoint: 'not-a-url' } })).status, 400);
+    const hie = (await call('POST', '/api/notification-recipients', { token: tk, body: { name: 'State HIE', kind: 'hie', transport: 'stub' } })).body.data;
+    const snf = (await call('POST', '/api/notification-recipients', { token: tk, body: { name: 'Sunrise SNF', kind: 'post_acute', transport: 'https_webhook', endpoint: 'http://127.0.0.1:1/adt', authHeaderSecret: 'Bearer secret' } })).body.data;
+    assert.equal(snf.hasSecret, true);
+    const pcp = (await call('POST', '/api/notification-recipients', { token: tk, body: { name: 'Dr. Patel (PCP)', kind: 'pcp', transport: 'email', endpoint: 'patel@clinic.example' } })).body.data;
+    const pcpOther = (await call('POST', '/api/notification-recipients', { token: tk, body: { name: 'Other PCP', kind: 'pcp', transport: 'stub' } })).body.data;
+    assert.equal((await call('GET', '/api/notification-recipients', { token: rn.token })).body.data.length, 4);
+    const testSend = await call('POST', `/api/notification-recipients/${hie.id}/test`, { token: tk });
+    assert.equal(testSend.body.data.ok, true);
+    assert.match(testSend.body.data.message, /^MSH\|\^~\\&\|EMR\|/);
+    assert.equal((await call('POST', `/api/notification-recipients/${snf.id}/test`, { token: tk })).body.data.ok, false, 'unreachable webhook reports failure');
+
+    // Patient registered with a PCP; admission fans out to PCP + post-acute + HIE (not the other PCP).
+    const { patient, encounterId, bed2 } = await admitPatient(tk, 'Adtn', { pcpName: 'Dr. Patel', pcpNpi: '1234567893', pcpRecipientId: pcp.id });
+    assert.equal(patient.pcpName, 'Dr. Patel');
+    assert.equal(patient.pcpRecipientId, pcp.id);
+    const a01 = (await call('GET', `/api/adt-notifications?encounterId=${encounterId}`, { token: rn.token })).body.data;
+    assert.equal(a01.length, 3);
+    assert.deepEqual(a01.map((l) => l.recipientName).sort(), ['Dr. Patel (PCP)', 'State HIE', 'Sunrise SNF']);
+    assert.ok(a01.every((l) => l.eventType === 'A01' && l.status === 'queued'));
+    const msg = a01.find((l) => l.recipientName === 'State HIE').message;
+    assert.match(msg, /ADT\^A01\^ADT_A01/);
+    assert.match(msg, /PID\|1\|\|MRN\d+\^\^\^EMR\^MR\|\|Patient\^Adtn\|\|19600405\|F/);
+    assert.match(msg, /PD1\|\|\|\|1234567893\^Dr\. Patel/);
+    assert.ok(!a01.some((l) => l.recipientName === 'Other PCP'));
+    const job = await pool.query(`SELECT data FROM pgboss.job WHERE name = $1 AND data->>'encounterId' = $2`, [QUEUES.ADT_NOTIFICATION, encounterId]);
+    assert.equal(job.rowCount, 1);
+    assert.equal(job.rows[0].data.logIds.length, 3);
+
+    // Deliver synchronously (what the worker does): stub + email succeed, the unreachable webhook fails.
+    for (const l of a01) await call('POST', `/api/adt-notifications/${l.id}/deliver-now`, { token: rn.token });
+    const after = (await call('GET', `/api/adt-notifications?encounterId=${encounterId}`, { token: tk })).body.data;
+    assert.equal(after.find((l) => l.recipientName === 'State HIE').status, 'sent');
+    assert.equal(after.find((l) => l.recipientName === 'Dr. Patel (PCP)').status, 'sent');
+    const failed = after.find((l) => l.recipientName === 'Sunrise SNF');
+    assert.equal(failed.status, 'failed');
+    assert.equal(failed.attempts, 1);
+    assert.match(failed.lastError, /Webhook/);
+    assert.equal((await call('GET', `/api/adt-notifications?status=failed`, { token: tk })).body.data.length, 1);
+    assert.equal((await call('POST', `/api/adt-notifications/${after[0].id}/retry`, { token: rn.token })).status, after[0].status === 'sent' ? 409 : 200);
+    const retry = await call('POST', `/api/adt-notifications/${failed.id}/retry`, { token: rn.token });
+    assert.equal(retry.status, 200);
+    assert.equal(retry.body.data.status, 'queued');
+    assert.equal(retry.body.data.lastError, null);
+
+    // Transfer → A02 with prior location; discharge → A03 with disposition (PV1-36) and discharge time (PV1-45).
+    assert.equal((await call('POST', '/api/transfers', { token: tk, body: { encounterId, newBedId: bed2.id, reason: 'step-down' } })).status, 200);
+    const a02 = (await call('GET', `/api/adt-notifications?encounterId=${encounterId}`, { token: tk })).body.data.filter((l) => l.eventType === 'A02');
+    assert.equal(a02.length, 3);
+    assert.match(a02[0].message, /ADT\^A02\^ADT_A02/);
+    assert.match(a02[0].message, /PV1\|1\|I\|W-Adtn\^R-Adtn\^B2-Adtn\|emergency\|\|W-Adtn\^R-Adtn\^B-Adtn\|/);
+    await call('POST', '/api/discharges', { token: tk, body: { phase: 'initiate', encounterId, disposition: 'Skilled Nursing Facility' } });
+    await satisfyDischargeGates(tk, encounterId);
+    assert.equal((await call('POST', '/api/discharges/confirm', { token: tk, body: { encounterId } })).status, 200);
+    const a03 = (await call('GET', `/api/adt-notifications?encounterId=${encounterId}`, { token: tk })).body.data.filter((l) => l.eventType === 'A03');
+    assert.equal(a03.length, 3);
+    assert.match(a03[0].message, /EVN\|A03\|/);
+    const pv1 = a03[0].message.split('\r').find((s) => s.startsWith('PV1|')).split('|');
+    assert.equal(pv1[36], 'Skilled Nursing Facility', 'PV1-36 discharge disposition');
+    assert.match(pv1[45], /^\d{14}$/, 'PV1-45 discharge time');
+    assert.equal((await call('GET', `/api/adt-notifications?encounterId=${encounterId}`, { token: (await newTenant('adtnB')).token })).body.data.length, 0);
+    assert.equal((await call('DELETE', `/api/notification-recipients/${pcpOther.id}`, { token: tk })).status, 200);
 });

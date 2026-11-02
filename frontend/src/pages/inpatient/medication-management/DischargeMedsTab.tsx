@@ -7,6 +7,7 @@ import { cn } from '../../../lib/utils';
 import { getApiErrorMessage } from '../../../lib/httpError';
 import * as medApi from '../../../services/medicationManagement.service';
 import type { DischargeMedLine } from '../../../types/medicationManagement';
+import { listReconciliations, type MedicationReconciliation } from '../../../services/medReconciliation.service';
 import {
     DISCHARGE_FREQUENCY_OPTIONS,
     DISCHARGE_MED_FORM_DEFAULTS,
@@ -73,8 +74,25 @@ export function DischargeMedsTab({ patientId, encounterId }: DischargeMedsTabPro
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [shakeForm, setShakeForm] = useState(false);
+    const [dischargeRec, setDischargeRec] = useState<MedicationReconciliation | null>(null);
 
     const eid = encounterId?.trim() ?? '';
+
+    useEffect(() => {
+        if (!eid) {
+            setDischargeRec(null);
+            return;
+        }
+        let cancelled = false;
+        void listReconciliations(eid)
+            .then((all) => {
+                if (!cancelled) setDischargeRec(all.find((r) => r.type === 'discharge') ?? null);
+            })
+            .catch(() => undefined);
+        return () => {
+            cancelled = true;
+        };
+    }, [eid]);
 
     const {
         register,
@@ -224,6 +242,22 @@ export function DischargeMedsTab({ patientId, encounterId }: DischargeMedsTabPro
                     {error}
                 </div>
             )}
+
+            {eid ? (
+                dischargeRec?.status === 'completed' ? (
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50/80 p-3 text-sm text-emerald-950 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
+                        This list was produced by the <strong>discharge medication reconciliation</strong> completed
+                        {dischargeRec.completedAt ? ` on ${new Date(dischargeRec.completedAt).toLocaleString()}` : ''}
+                        {dischargeRec.completedByName ? ` by ${dischargeRec.completedByName}` : ''}. Use the <strong>Reconciliation</strong> tab to change
+                        which medications continue; this tab records counselling and sign-off details.
+                    </div>
+                ) : (
+                    <div className="rounded-md border border-amber-200 bg-amber-50/80 p-3 text-sm text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/35 dark:text-amber-100">
+                        Discharge medication reconciliation has not been completed for this encounter. Complete it in the{' '}
+                        <strong>Reconciliation</strong> tab — the discharge summary cannot be signed until it is done.
+                    </div>
+                )
+            ) : null}
 
             {loading ? (
                 <div className="flex items-center gap-2 text-gray-600">

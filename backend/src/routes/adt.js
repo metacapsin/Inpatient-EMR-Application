@@ -3,29 +3,15 @@ import { z } from 'zod';
 import { query, withTx } from '../db/pool.js';
 import { ApiError, conflict, h, notFound, parse } from '../lib/http.js';
 import { requireRole } from '../middleware/auth.js';
-import { boss, QUEUES } from '../db/queue.js';
 import { assertBedFree, fulfillReservations, lockBed, performTransfer, vacateBed } from '../lib/bedManagement.js';
+import { recordAdtEvent } from '../lib/adtNotify.js';
+import { computeDischargeGates } from '../lib/dischargeGates.js';
 
-/** Best-effort: queues the CMS CoP admission notification. Never fails the admission if the queue is down. */
-async function enqueueAdtNotification(req, enc, patient) {
-    try {
-        await boss.send(QUEUES.ADT_NOTIFICATION, {
-            encounterId: enc.id,
-            tenantId: req.user.tenantId,
-            patientId: enc.patient_id,
-            mrn: patient.mrn,
-            patientName: `${patient.first_name} ${patient.last_name}`,
-            dob: patient.dob,
-            bedId: enc.bed_id,
-            admissionType: enc.admission_type,
-            attendingPhysicianId: enc.attending_physician_id,
-            diagnosis: enc.diagnosis,
-            admittedAt: enc.admitted_at?.toISOString?.() ?? enc.admitted_at,
-        });
-    } catch (e) {
-        console.error('[adt-notification] failed to enqueue:', e.message);
-    }
-}
+/**
+ * CMS CoP 42 CFR 482.24(d) notifications: one log row per recipient + a delivery job (see lib/adtNotify.js).
+ * Best effort — never fails the ADT call.
+ */
+const enqueueAdtNotification = (req, encounterId, eventType, extra = {}) => recordAdtEvent({ tenantId: req.user.tenantId, encounterId, eventType, ...extra });
 
 /** Tell every other active staff member in the tenant about a bed-flow event (best effort; never fails the ADT call). */
 async function notifyStaff(req, action, message, metadata) {
@@ -99,7 +85,7 @@ adtRouter.post('/api/admissions', clinical, h(async (req, res) => {
     const patient = (await query(`SELECT mrn, first_name, last_name, dob FROM patients WHERE id = $1 AND tenant_id = $2`, [enc.patient_id, req.user.tenantId])).rows[0];
     const who = patient ? `${patient.first_name} ${patient.last_name}` : 'Patient';
     await notifyStaff(req, 'admitted', `${who} was admitted`, { encounterId: enc.id, patientId: enc.patient_id, bedId: enc.bed_id });
-    await enqueueAdtNotification(req, enc, patient);
+    await enqueueAdtNotification(req, enc.id, 'A01');
     success(res, 'Patient admitted', { encounter: encounterOut(enc) }, 201);
 }));
 
@@ -131,6 +117,7 @@ adtRouter.post('/api/transfers', clinical, h(async (req, res) => {
     );
     const { patientId, ...rest } = out;
     await notifyStaff(req, 'transferred', 'A patient was transferred', { encounterId: out.encounterId, patientId, bedId: out.currentBedId });
+    await enqueueAdtNotification(req, out.encounterId, 'A02', { priorBedId: out.transfer?.fromBedId ?? null });
     success(res, 'Patient transferred', rest);
 }));
 
@@ -151,6 +138,11 @@ async function confirm(req, res, b) {
         if (!e) throw notFound('Encounter not found');
         if (e.status === 'discharged') throw conflict('Encounter is already discharged');
         if (e.status !== 'discharge_initiated') throw new ApiError(409, 'Discharge must be initiated before it can be confirmed');
+        // Hard gates (plan §2c): signed discharge summary, completed discharge med reconciliation, blocking checklist tasks.
+        const gates = await computeDischargeGates(db, req.user.tenantId, e.id);
+        if (gates.blocked) {
+            throw new ApiError(409, `Discharge blocked: ${gates.blocking.map((g) => g.message).join('; ')}`, { gates: gates.gates, blocking: gates.blocking }, 'DISCHARGE_BLOCKED');
+        }
         const d = (
             await db.query(
                 `UPDATE encounters SET status = 'discharged', discharged_at = now(), bed_id = bed_id WHERE id = $1 RETURNING *`,
@@ -163,6 +155,7 @@ async function confirm(req, res, b) {
         return { encounterId: d.id, dischargeTimestamp: d.discharged_at.toISOString(), patientId: d.patient_id, bedId: e.bed_id, evsQueueId: evs?.id ?? null };
     });
     await notifyStaff(req, 'discharged', 'A patient was discharged', { encounterId: out.encounterId, patientId: out.patientId });
+    await enqueueAdtNotification(req, out.encounterId, 'A03');
     success(res, 'Patient discharged', out);
 }
 

@@ -649,19 +649,19 @@ export const patientDataAPI = {
   getAllAllergyList: (rcopiaID: string) =>
     api.get(`/Patient/getAllAllergyList?rcopiaID=${rcopiaID}`),
   
-  // Medications
-  getAllMedicationList: (rcopiaID: string) =>
-    api.get(`/Patient/getAllMedicationList?rcopiaID=${rcopiaID}`),
+  // Medications — inpatient actives + home medications (source=all) from the Postgres medications table
+  getAllMedicationList: (patientId: string) =>
+    api.get(`/api/patients/${encodeURIComponent(patientId)}/medications`, { params: { source: 'all' } }),
   
   // Diagnoses/Problems — prefer services/problemsApi.ts for new code
   getAllDiagnosesList: (patientId: string) =>
     api.get(`/api/patients/${encodeURIComponent(patientId)}/problems`),
   
-  // Prescriptions
-  getAllPrescriptionList: (rcopiaID: string) =>
-    api.get(`/Patient/getAllPrescriptionList?rcopiaID=${rcopiaID}`),
+  // Prescriptions — e-prescribing module (all statuses for the chart view)
+  getAllPrescriptionList: (patientId: string) =>
+    api.get(`/api/prescriptions/${encodeURIComponent(patientId)}`, { params: { status: 'all' } }),
   getPrescriptionByID: (id: string) =>
-    api.get(`/Patient/getPrescriptionByID/${id}`),
+    api.get(`/api/prescriptions/by-id/${encodeURIComponent(id)}`),
   
   // Documents
   getAllDocument: (patientId: string) =>
@@ -687,15 +687,13 @@ export const patientDataAPI = {
   getPatientHistoryById: (id: string) =>
     api.get(`/Patient/getPatientHistoryById/${id}`),
   
-  // Notes
-  getPatientWiseNotesList: (data: Record<string, any>) =>
-    api.post('/Patient/getPatientWiseNotesList', data),
+  // Notes — physician documentation (same table the Clinical Workspace writes)
+  getPatientWiseNotesList: (data: { patientId: string; encounterId?: string }) =>
+    api.get(`/api/inpatient/clinical/notes/patient/${encodeURIComponent(data.patientId)}`, {
+      params: data.encounterId ? { encounterId: data.encounterId } : {},
+    }),
   getPatientNoteById: (id: string) =>
-    api.get(`/Patient/getPatientNoteById/${id}`),
-  getSoapNotesByPatientId: (patientId: string) =>
-    api.get(`/Patient/getSoapNotesByPatientId/${patientId}`),
-  downloadNotes: (id: string) =>
-    api.get(`/Patient/downloadNotes/${id}`, { responseType: 'blob' }),
+    api.get(`/api/inpatient/clinical/notes/${encodeURIComponent(id)}`),
   
   // Immunizations
   getPatientImmunizationList: (patientId: string) =>

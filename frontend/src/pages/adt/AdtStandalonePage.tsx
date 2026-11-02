@@ -1,6 +1,7 @@
 import AdtModulePage from '../../modules/facesheet/adt/AdtModulePage';
 import { AdtPatientQuickSearch } from '../../components/adt/AdtPatientQuickSearch';
 import { usePatientId } from '../../hooks/usePatientId';
+import { AdtNotificationsPanel } from '../../components/adt/AdtNotificationsPanel';
 
 const AdtStandalonePage = () => {
     const patientId = usePatientId();
@@ -18,6 +19,7 @@ const AdtStandalonePage = () => {
                 <AdtPatientQuickSearch currentPatientId={patientId} />
             </div>
             <AdtModulePage />
+            <AdtNotificationsPanel patientId={patientId ?? ""} />
         </div>
     );
 };

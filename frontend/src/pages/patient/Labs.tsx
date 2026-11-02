@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { FaFlask, FaDownload, FaTimes, FaEye } from 'react-icons/fa';
 import { FaWandMagicSparkles } from 'react-icons/fa6';
 import IconSearch from '../../components/Icon/IconSearch';
+import { flagClass, flagLabel, listPatientResults } from '../../services/labs.service';
 
 interface LabRecord {
   _id: string;
@@ -59,6 +60,23 @@ const Labs: React.FC = () => {
     labName: item.labName || '—',
     result: item.value ? `${item.value}${item.unit ? ` ${item.unit}` : ''}` : item.notes || '—',
     statusDisplay: item.status ? 'Active' : 'Inactive',
+    kind: 'document',
+  });
+
+  /** Structured results entered against lab orders (lab_results table). */
+  const normalizeStructured = (r: any): LabRecord => ({
+    ...r,
+    _id: r.id,
+    testName: r.testName || '—',
+    testDate: r.resultedAt ? formatDate(r.resultedAt) : '—',
+    labName: r.accessionNumber ? `Accession ${r.accessionNumber}` : 'In-house',
+    result: `${r.value ?? ''}${r.unit ? ` ${r.unit}` : ''}${r.referenceRange ? ` (ref ${r.referenceRange})` : ''}`,
+    statusDisplay: r.status,
+    kind: 'result',
+    abnormalFlag: r.abnormalFlag,
+    isCritical: r.isCritical,
+    acknowledgedAt: r.acknowledgedAt,
+    comment: r.comment,
   });
 
   const updatePaginatedList = useCallback((data: LabRecord[], page: number) => {
@@ -73,10 +91,12 @@ const Labs: React.FC = () => {
     setLoading(true);
 
     try {
-      const response = await patientDataAPI.getAllLabDocuments(patientId);
+      const [structured, response] = await Promise.all([
+        listPatientResults(patientId).catch(() => []),
+        patientDataAPI.getAllLabDocuments(patientId),
+      ]);
       const raw = response.data?.data ?? response.data;
-
-      const formatted = raw.map((item: any) => normalizeRecord(item));
+      const formatted = [...structured.map(normalizeStructured), ...(Array.isArray(raw) ? raw : []).map((item: any) => normalizeRecord(item))];
 
       setLabsList(formatted);
     } catch {
@@ -234,17 +254,24 @@ const Labs: React.FC = () => {
               <div className="flex justify-between mb-3">
                 <div>
                   <h5 className="font-semibold">{lab.testName}</h5>
-                  <p className="text-xs">{lab.testDate}</p>
+                  <p className="text-xs">{lab.testDate} · {lab.labName}</p>
                 </div>
 
                 <div className="flex gap-2">
-                  <button
-                    className="btn btn-sm btn-outline-primary"
-                    onClick={() => handleViewDetail(lab._id)}
-                  >
-                    <FaEye />
-                  </button>
-
+                  {lab.kind === 'result' ? (
+                    <span className={`inline-flex h-fit rounded-full px-2 py-0.5 text-xs font-semibold ${flagClass(lab.abnormalFlag, lab.isCritical)}`}>
+                      {lab.isCritical ? 'CRITICAL · ' : ''}{flagLabel(lab.abnormalFlag)}
+                    </span>
+                  ) : (
+                    <>
+                      <button className="btn btn-sm btn-outline-primary" onClick={() => handleViewDetail(lab._id)}>
+                        <FaEye />
+                      </button>
+                      <button className="btn btn-sm btn-primary" onClick={() => handleDownload(lab._id)}>
+                        <FaDownload />
+                      </button>
+                    </>
+                  )}
                   <button
                     className="btn btn-sm btn-primary"
                     onClick={() =>
@@ -253,17 +280,14 @@ const Labs: React.FC = () => {
                   >
                     <FaWandMagicSparkles />
                   </button>
-
-                  <button
-                    className="btn btn-sm btn-primary"
-                    onClick={() => handleDownload(lab._id)}
-                  >
-                    <FaDownload />
-                  </button>
                 </div>
               </div>
 
-              <p className="text-sm">{lab.result}</p>
+              <p className="text-sm font-medium">{lab.result}</p>
+              {lab.kind === 'result' && lab.isCritical ? (
+                <p className={`mt-1 text-xs ${lab.acknowledgedAt ? 'text-emerald-700' : 'text-red-700'}`}>{lab.acknowledgedAt ? `Acknowledged ${formatDate(lab.acknowledgedAt)}` : 'Critical value — not yet acknowledged'}</p>
+              ) : null}
+              {lab.comment ? <p className="mt-1 whitespace-pre-wrap text-xs text-gray-500">{lab.comment}</p> : null}
             </div>
           ))
         )}

@@ -8,6 +8,7 @@ import { config, isProd } from '../config.js';
 import { query, withTx } from '../db/pool.js';
 import { ApiError, conflict, forbidden, h, notFound, ok, parse, created } from '../lib/http.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
+import { isValidNpi } from '../lib/npi.js';
 
 export const publicAuthRouter = Router();
 export const authRouter = Router();
@@ -16,6 +17,9 @@ const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 10);
 
 const ROLES = ['admin', 'physician', 'nurse', 'pharmacist', 'billing', 'staff'];
+/** Prescriber identity (e-prescribing): NPI with the real Luhn check digit; DEA = 2 letters + 7 digits. Blank clears. */
+const npiField = z.preprocess((v) => (v === null || v === undefined ? undefined : String(v).replace(/\D/g, '')), z.string().refine((s) => s === '' || isValidNpi(s), 'NPI check digit is invalid').optional());
+const deaField = z.preprocess((v) => (v === null || v === undefined ? undefined : String(v).trim().toUpperCase()), z.string().regex(/^$|^[A-Z]{2}\d{7}$/, 'DEA number must be 2 letters followed by 7 digits').optional());
 const password = z.string().min(8, 'Password must be at least 8 characters').max(128);
 
 function ttlMs(ttl) {
@@ -34,6 +38,8 @@ function publicUser(u, tenant) {
         lastName: u.last_name,
         name: [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email,
         role: u.role,
+        npi: u.npi ?? '',
+        deaNumber: u.dea_number ?? '',
         preferences: u.preferences || {},
         tenant: { id: u.tenant_id, name: tenant?.name ?? u.tenant_name ?? '' },
         tenantId: u.tenant_id,
@@ -226,13 +232,16 @@ authRouter.put(
                 firstName: z.string().trim().max(100).optional(),
                 lastName: z.string().trim().max(100).optional(),
                 preferences: z.record(z.string(), z.unknown()).optional(),
+                npi: npiField,
+                deaNumber: deaField,
             }),
             req.body,
         );
         await query(
             `UPDATE users SET first_name = COALESCE($1, first_name), last_name = COALESCE($2, last_name),
-                    preferences = COALESCE($3::jsonb, preferences), updated_at = now() WHERE id = $4`,
-            [b.firstName ?? null, b.lastName ?? null, b.preferences ? JSON.stringify(b.preferences) : null, req.user.id],
+                    preferences = COALESCE($3::jsonb, preferences), npi = CASE WHEN $5::text IS NULL THEN npi ELSE NULLIF($5, '') END,
+                    dea_number = CASE WHEN $6::text IS NULL THEN dea_number ELSE NULLIF($6, '') END, updated_at = now() WHERE id = $4`,
+            [b.firstName ?? null, b.lastName ?? null, b.preferences ? JSON.stringify(b.preferences) : null, req.user.id, b.npi ?? null, b.deaNumber ?? null],
         );
         ok(res, publicUser(await loadUser('u.id = $1', [req.user.id])));
     }),
@@ -299,6 +308,8 @@ const userBody = z.object({
     firstName: z.string().trim().max(100).default(''),
     lastName: z.string().trim().max(100).default(''),
     role: z.enum(ROLES).default('nurse'),
+    npi: npiField,
+    deaNumber: deaField,
 });
 
 authRouter.post(
@@ -310,9 +321,9 @@ authRouter.post(
         if (dup.rowCount) throw conflict('An account with this email or username already exists');
         const u = (
             await query(
-                `INSERT INTO users (tenant_id,email,username,password_hash,first_name,last_name,role)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-                [req.user.tenantId, b.email, b.username ?? null, await bcrypt.hash(b.password, 10), b.firstName, b.lastName, b.role],
+                `INSERT INTO users (tenant_id,email,username,password_hash,first_name,last_name,role,npi,dea_number)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+                [req.user.tenantId, b.email, b.username ?? null, await bcrypt.hash(b.password, 10), b.firstName, b.lastName, b.role, b.npi || null, b.deaNumber || null],
             )
         ).rows[0];
         created(res, publicUser(u));
@@ -328,9 +339,10 @@ const updateUser = h(async (req, res) => {
     const r = await query(
         `UPDATE users SET email = COALESCE($1,email), username = COALESCE($2,username), password_hash = COALESCE($3,password_hash),
                 first_name = COALESCE($4,first_name), last_name = COALESCE($5,last_name), role = COALESCE($6,role),
-                is_active = COALESCE($7,is_active), updated_at = now()
+                is_active = COALESCE($7,is_active), npi = CASE WHEN $10::text IS NULL THEN npi ELSE NULLIF($10, '') END,
+                dea_number = CASE WHEN $11::text IS NULL THEN dea_number ELSE NULLIF($11, '') END, updated_at = now()
          WHERE id = $8 AND tenant_id = $9 RETURNING *`,
-        [b.email ?? null, b.username ?? null, hash, b.firstName ?? null, b.lastName ?? null, b.role ?? null, b.isActive ?? null, req.params.id, req.user.tenantId],
+        [b.email ?? null, b.username ?? null, hash, b.firstName ?? null, b.lastName ?? null, b.role ?? null, b.isActive ?? null, req.params.id, req.user.tenantId, b.npi ?? null, b.deaNumber ?? null],
     );
     if (!r.rowCount) throw notFound('User not found');
     ok(res, publicUser(r.rows[0]));

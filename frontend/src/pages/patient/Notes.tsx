@@ -4,7 +4,7 @@ import { patientDataAPI, aiHealthInsightsAPI } from '../../services/api';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
-import { FaDownload, FaTimes } from 'react-icons/fa';
+import { FaTimes } from 'react-icons/fa';
 import IconSparkles from '../../components/Icon/IconSparkles';
 import IconSearch from '../../components/Icon/IconSearch';
 import IconX from '@/components/Icon/IconX';
@@ -71,9 +71,22 @@ const Notes: React.FC = () => {
       const response = await patientDataAPI.getPatientWiseNotesList({ patientId });
       if (response.data?.data || Array.isArray(response.data)) {
         const data = response.data?.data || response.data;
+        const typeLabel: Record<string, string> = { hp: 'H&P', progress: 'Progress Note', discharge_summary: 'Discharge Summary', consult: 'Consult' };
         const formattedData = data.map((item: any) => ({
           ...item,
+          _id: item.id ?? item._id,
+          noteTitle: item.title || typeLabel[item.type] || item.type || 'Note',
+          notesType: `${typeLabel[item.type] || item.type || ''}${item.status ? ` · ${item.status}` : ''}`,
+          providerName: item.signedByName || item.createdByName || '',
+          date: item.signedAt || item.createdAt ? formatDate(item.signedAt || item.createdAt) : '',
           noteDate: item.noteDate || item.createdAt ? formatDate(item.noteDate || item.createdAt) : '',
+          sections: [
+            ['HPI', item.content?.hpi],
+            ['ROS', item.content?.ros],
+            ['Assessment', item.content?.assessment],
+            ['Plan', item.content?.plan],
+          ].filter(([, v]) => typeof v === 'string' && v.trim()),
+          addendaList: Array.isArray(item.addenda) ? item.addenda : [],
         }));
         setNotesList(formattedData);
         setPaginatedCardList(formattedData);
@@ -133,21 +146,6 @@ const Notes: React.FC = () => {
     updatePaginatedList(paginatedCardList, page);
   };
 
-  const downloadNote = async (id: string) => {
-    try {
-      const response = await patientDataAPI.downloadNotes(id);
-      const blob = response.data as Blob;
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `note-${id}.pdf`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-      toast.success('Download started');
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Download failed');
-    }
-  };
 
   const handleAIClick = async (noteId: string) => {
     setSelectedNoteId(noteId);
@@ -293,15 +291,6 @@ const Notes: React.FC = () => {
                         >
                           <IconSparkles className="w-4 h-4" />
                         </button>
-                        
-                      <button
-                        className="btn btn-sm btn-outline-primary p-2"
-                        onClick={() => downloadNote(note._id)}
-                      >
-                        <FaDownload className="w-4 h-4" />
-                        
-                      </button>
-                    
                       </div>
                     </div>
                   </div>
@@ -329,6 +318,24 @@ const Notes: React.FC = () => {
                             {note.date || '---'}
                           </span>
                         </div>
+                        {Array.isArray(note.sections) && note.sections.length > 0 ? (
+                          <dl className="mt-2 space-y-1.5 border-t border-white-light pt-2 dark:border-[#191e3a]">
+                            {note.sections.map(([label, text]: [string, string]) => (
+                              <div key={label}>
+                                <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</dt>
+                                <dd className="whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200">{text}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        ) : null}
+                        {Array.isArray(note.addendaList) && note.addendaList.length > 0 ? (
+                          <div className="mt-2 border-t border-white-light pt-2 dark:border-[#191e3a]">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Addenda</p>
+                            {note.addendaList.map((a: any, i: number) => (
+                              <p key={i} className="text-sm text-gray-800 dark:text-gray-200"><span className="text-xs text-gray-500">{a.createdAt ? formatDate(a.createdAt) : ''}{a.createdByName ? ` · ${a.createdByName}` : ''} — </span>{a.text}</p>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                    

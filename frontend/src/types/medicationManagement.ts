@@ -5,6 +5,8 @@ export interface PatientMedicationRow {
     dose?: string;
     route?: string;
     frequency?: string;
+    instructions?: string;
+    source?: 'home' | 'inpatient';
     nextScheduledTime?: string;
 }
 
@@ -56,19 +58,93 @@ export interface PrescriptionMedicineRow {
     medicineId: string;
     name: string;
     strength?: string;
+    dose?: string;
+    route?: string;
+    frequency?: string;
+    duration?: string;
+    instructions?: string;
+    quantity?: number | null;
+    refills?: number | null;
+    rxnormCode?: string;
+    controlledSchedule?: 'II' | 'III' | 'IV' | 'V' | null;
     quantityOrdered: number;
     batchNumber?: string;
     expiryDate?: string;
     unitPrice: number;
 }
 
+export type PrescriptionStatus = 'draft' | 'signed' | 'transmitted' | 'printed' | 'dispensed' | 'cancelled' | 'error';
+
+export interface PrescriptionStatusEvent {
+    status: PrescriptionStatus;
+    at: string;
+    by?: string;
+    byName?: string | null;
+    reason?: string | null;
+}
+
 export interface PrescriptionRow {
+    id?: string;
     prescriptionId: string;
     patientId: string;
+    encounterId?: string | null;
     medicines: PrescriptionMedicineRow[];
     prescriberName?: string;
+    prescriberId?: string | null;
+    prescriberNpi?: string;
+    prescriberDea?: string;
+    pharmacyId?: string | null;
+    pharmacyName?: string;
+    status?: PrescriptionStatus;
+    controlledSchedule?: 'II' | 'III' | 'IV' | 'V' | null;
+    notes?: string;
     orderedAt?: string;
+    signedAt?: string | null;
+    transmittedAt?: string | null;
+    transmissionRef?: string | null;
+    dispensedAt?: string | null;
+    cancelledAt?: string | null;
+    errorMessage?: string | null;
+    statusHistory?: PrescriptionStatusEvent[];
 }
+
+export interface NewPrescriptionLine {
+    name: string;
+    strength?: string;
+    dose?: string;
+    route?: string;
+    frequency?: string;
+    duration?: string;
+    instructions?: string;
+    quantity: number;
+    refills: number;
+    unitPrice?: number;
+    rxnormCode?: string;
+    controlledSchedule?: 'II' | 'III' | 'IV' | 'V' | null;
+}
+
+export interface CreatePrescriptionRequest {
+    patientId: string;
+    encounterId?: string;
+    pharmacyId?: string;
+    notes?: string;
+    medicines: NewPrescriptionLine[];
+}
+
+export interface Pharmacy {
+    id: string;
+    name: string;
+    ncpdpId: string;
+    npi: string;
+    phone: string;
+    fax: string;
+    address: { line1?: string; line2?: string; city?: string; state?: string; zip?: string };
+    isDefault: boolean;
+    active: boolean;
+    createdAt?: string;
+}
+
+export type PharmacyInput = Partial<Omit<Pharmacy, 'id' | 'createdAt'>> & { name: string };
 
 export interface DispenseMedicineLine {
     medicineId: string;

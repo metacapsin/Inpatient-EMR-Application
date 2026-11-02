@@ -7,6 +7,10 @@ import { format } from 'date-fns';
 import { FaFlask, FaTimes } from 'react-icons/fa';
 import IconSparkles from '../../components/Icon/IconSparkles';
 import IconSearch from '../../components/Icon/IconSearch';
+import { useSelector } from 'react-redux';
+import type { IRootState } from '../../store';
+import { canNursingActions, normalizeRoles } from '../../features/clinical-workflows/clinicalRole';
+import { LabOrderResultsPanel, LAB_STATUS_CLASS } from '../../components/labs/LabOrderResultsPanel';
 
 interface LabOrder {
   _id: string;
@@ -42,6 +46,9 @@ const orDash = (v: unknown): string => {
 const LabOrders: React.FC = () => {
   const patientId = usePatientId();
   const { moduleSurfaceClass } = useFacesheetChartLayout();
+  const authRole = useSelector((s: IRootState) => s.auth.role);
+  const authUser = useSelector((s: IRootState) => s.auth.user);
+  const canClinical = canNursingActions(normalizeRoles(authRole, authUser));
   const [labOrdersList, setLabOrdersList] = useState<LabOrder[]>([]);
   const [paginatedCardList, setPaginatedCardList] = useState<LabOrder[]>([]);
   const [filteredCardList, setFilteredCardList] = useState<LabOrder[]>([]);
@@ -291,18 +298,13 @@ const LabOrders: React.FC = () => {
                         if (!raw) {
                           return <span className="text-sm text-gray-500 dark:text-gray-400">--</span>;
                         }
-                        const lower = raw.toLowerCase();
                         return (
-                          <span
-                            className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                              lower === 'completed' || lower === 'closed' || lower === 'active'
-                                ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200'
-                                : lower === 'pending'
-                                  ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
-                                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-                            }`}
-                          >
-                            {raw}
+                          <span className="flex items-center gap-1.5">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${LAB_STATUS_CLASS[raw] ?? 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
+                              {raw}
+                            </span>
+                            {labOrder.priority && labOrder.priority !== 'Routine' ? <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200">{labOrder.priority}</span> : null}
+                            {Number(labOrder.criticalUnacknowledged) > 0 ? <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-600 text-white">{labOrder.criticalUnacknowledged} critical</span> : null}
                           </span>
                         );
                       })()}
@@ -315,6 +317,12 @@ const LabOrders: React.FC = () => {
                         {orDash(labOrder.providerName || labOrder.orderingProviderName)}
                       </p>
                     </div>
+                    {labOrder.clinicalIndication ? (
+                      <div>
+                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Clinical indication</span>
+                        <p className="text-sm text-gray-900 dark:text-white mt-0.5">{labOrder.clinicalIndication}</p>
+                      </div>
+                    ) : null}
                     <div className="flex-1 min-h-0">
                       <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                         Notes
@@ -342,6 +350,18 @@ const LabOrders: React.FC = () => {
                         })()}
                       </p>
                     </div>
+                    <LabOrderResultsPanel
+                      orderId={labOrder.labOrderId || labOrder._id}
+                      orderStatus={String(labOrder.orderStatus || labOrder.status || 'Ordered')}
+                      labTests={Array.isArray(labOrder.labTests) ? labOrder.labTests : []}
+                      accessionNumber={labOrder.accessionNumber}
+                      specimenType={labOrder.specimenType}
+                      collectedAt={labOrder.collectedAt}
+                      canCollect={canClinical}
+                      canResult={canClinical}
+                      canAcknowledge={canClinical}
+                      onChanged={getPatientLabOrders}
+                    />
                   </div>
                 </div>
               ))

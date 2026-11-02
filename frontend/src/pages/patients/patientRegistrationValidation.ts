@@ -66,6 +66,10 @@ export interface PersonalState {
     race: string;
     noticeOfPrivacyPracticesDate: string;
     countryOfBirth: string;
+    /** Primary care physician — used for CMS CoP ADT notifications (#65). */
+    pcpName: string;
+    pcpNpi: string;
+    pcpRecipientId: string;
 }
 
 export type InsuranceState = Required<Omit<PatientInsuranceInput, 'coPayAmount' | 'insuranceStatus'>> & {
@@ -82,6 +86,7 @@ export const EMPTY_PERSONAL: PersonalState = {
     mailingSameAsHome: false, mailingAddress1: '', mailingAddress2: '', mailingCity: '', mailingState: '', mailingZipCode: '',
     homePhone: '', mobilePhone: '', workPhone: '', otherPhone: '',
     advancedHealthCareDirective: '', preferredLanguage: '', ethnicity: '', race: '', noticeOfPrivacyPracticesDate: '', countryOfBirth: '',
+    pcpName: '', pcpNpi: '', pcpRecipientId: '',
 };
 
 export const EMPTY_INSURANCE: InsuranceState = {
@@ -139,6 +144,7 @@ export function validateRegistration(input: RegistrationInput, today = todayYmd(
     const e: Errors = {};
     const age = ageInYears(form.dOB, new Date(today));
     const isMinor = age !== null && age < 18;
+    if (form.pcpNpi.trim() && !/^[1-9]\d{9}$/.test(form.pcpNpi.trim())) e.pcpNpi = 'PCP NPI must be 10 digits.';
 
     const name = (k: 'firstName' | 'lastName' | 'middleName', label: string, required: boolean) => {
         const v = form[k].trim();

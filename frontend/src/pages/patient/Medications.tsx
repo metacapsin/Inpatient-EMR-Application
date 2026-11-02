@@ -68,6 +68,22 @@ const Medications: React.FC = () => {
       if (response.data?.data || Array.isArray(response.data)) {
         const data = response.data?.data || response.data;
         const formattedData = data.map((item: any) => {
+          // Flat rows from the Postgres medications table (inpatient actives + home medications).
+          if (!item.Sig && typeof item.name === 'string') {
+            return {
+              ...item,
+              _id: item.id ?? item._id,
+              medicationName: item.name,
+              dosage: item.dose || '',
+              frequency: item.frequency || '',
+              route: item.route || '',
+              startDate: item.createdAt ? formatDate(item.createdAt) : '',
+              endDate: '',
+              status: item.source === 'home' ? 'Home medication' : 'Active',
+              source: item.source || 'inpatient',
+              instructions: item.instructions || '',
+            };
+          }
           let medicationName = '';
           if (item.Sig && Array.isArray(item.Sig) && item.Sig.length > 0) {
             const sig = item.Sig[0];

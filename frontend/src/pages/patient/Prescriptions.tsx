@@ -42,12 +42,40 @@ function first(val: any): string {
   return String(val).trim();
 }
 
+/** e-Rx rows carry a `medicines[]` array: one chart card per medicine line, inheriting prescription-level fields. */
+function flattenPrescriptionLines(rows: any[]): any[] {
+  const out: any[] = [];
+  for (const rx of rows) {
+    if (rx && Array.isArray(rx.medicines) && rx.medicines.length) {
+      for (const m of rx.medicines) {
+        out.push({
+          ...rx,
+          _id: `${rx.id ?? rx.prescriptionId}-${m.medicineId}`,
+          prescriptionId: rx.id ?? rx.prescriptionId,
+          medicationName: m.name,
+          drugName: m.name,
+          strength: m.strength || m.dose || '',
+          dosage: [m.dose, m.route, m.frequency, m.duration ? `× ${m.duration}` : ''].filter(Boolean).join(' '),
+          frequency: m.frequency || '',
+          quantity: m.quantity ?? m.quantityOrdered ?? '',
+          refills: m.refills ?? '',
+          instructions: m.instructions || '',
+          controlledSchedule: m.controlledSchedule || rx.controlledSchedule || null,
+          createdAt: rx.orderedAt,
+          medicines: undefined,
+        });
+      }
+    } else if (rx) out.push(rx);
+  }
+  return out;
+}
+
 /** Supports { data: [...] }, { data: { prescriptionList: [...] } }}, top-level arrays, etc. */
 function extractPrescriptionListFromResponse(res: any): any[] {
   if (res == null) return [];
-  if (Array.isArray(res)) return res;
+  if (Array.isArray(res)) return flattenPrescriptionLines(res);
   const inner = res.data;
-  if (Array.isArray(inner)) return inner;
+  if (Array.isArray(inner)) return flattenPrescriptionLines(inner);
   if (inner != null && typeof inner === 'object') {
     for (const k of NESTED_LIST_KEYS) {
       const v = inner[k as keyof typeof inner];

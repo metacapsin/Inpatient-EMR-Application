@@ -30,6 +30,11 @@ import { evsRouter } from './routes/evs.js';
 import { transferRequestsRouter } from './routes/transferRequests.js';
 import { eligibilityRouter } from './routes/eligibility.js';
 import { problemsRouter } from './routes/problems.js';
+import { clinicalNotesRouter } from './routes/clinicalNotes.js';
+import { dischargeReadinessRouter } from './routes/dischargeReadiness.js';
+import { medReconciliationRouter } from './routes/medReconciliation.js';
+import { labsRouter } from './routes/labs.js';
+import { adtNotificationsRouter } from './routes/adtNotifications.js';
 
 export function createApp() {
     const app = express();
@@ -81,7 +86,7 @@ export function createApp() {
     app.use(authRouter); // authenticates itself
     app.use(requireAuth);
     app.use(requireModuleGate);
-    for (const r of [facilityRouter, tenantProfileRouter, patientsRouter, adtRouter, patientDataRouter, inpatientDocsRouter, consentRouter, medicationRouter, revenueRouter, dashboardRouter, appointmentsRouter, recordsRouter, staffingRouter, clinicalOpsRouter, ordersRouter, bedReservationsRouter, evsRouter, transferRequestsRouter, eligibilityRouter, problemsRouter]) {
+    for (const r of [facilityRouter, tenantProfileRouter, patientsRouter, adtRouter, patientDataRouter, inpatientDocsRouter, consentRouter, medicationRouter, revenueRouter, dashboardRouter, appointmentsRouter, recordsRouter, staffingRouter, clinicalOpsRouter, ordersRouter, bedReservationsRouter, evsRouter, transferRequestsRouter, eligibilityRouter, problemsRouter, clinicalNotesRouter, dischargeReadinessRouter, medReconciliationRouter, labsRouter, adtNotificationsRouter]) {
         app.use(r);
     }
 

@@ -13,6 +13,10 @@ import { toast } from 'react-hot-toast';
 import { Activity } from 'lucide-react';
 import { FaClipboardList } from 'react-icons/fa';
 import { IpdAlertsStrip } from '../components/ipd/IpdAlertsStrip';
+import { IpdCriticalResultsStrip } from '../components/ipd/IpdCriticalResultsStrip';
+import { useSelector } from 'react-redux';
+import type { IRootState } from '../store';
+import { canNursingActions, normalizeRoles } from '../features/clinical-workflows/clinicalRole';
 import { IpdPpeAlertStrip } from '../components/ipd/IpdPpeAlertStrip';
 import { IpdPriorAuthExpiringStrip } from '../components/ipd/IpdPriorAuthExpiringStrip';
 import { StaffCoverageWidget } from '../components/ipd/StaffCoverageWidget';
@@ -42,9 +46,11 @@ const emptyPayload = (): IpdDashboardPayload => ({
         occupiedBeds: 0,
         availableBeds: 0,
         dischargedToday: 0,
+        unacknowledgedCriticalResults: 0,
     },
     bedBoard: [],
     alerts: { criticalPatients: [], bedsPendingCleaning: [], transferRequests: [] },
+    criticalResults: [],
 });
 
 const Dashboard: React.FC = () => {
@@ -55,6 +61,9 @@ const Dashboard: React.FC = () => {
     const [transferOpen, setTransferOpen] = useState(false);
     const [codeModalOpen, setCodeModalOpen] = useState(false);
     const { events: activeCodeEvents } = useActiveCodeEvents(DEFAULT_CODE_EVENT_UNIT_ID);
+    const authRole = useSelector((s: IRootState) => s.auth.role);
+    const authUser = useSelector((s: IRootState) => s.auth.user);
+    const canAckCritical = canNursingActions(normalizeRoles(authRole, authUser));
 
     useEffect(() => {
         connectCodeEventWebSocket(DEFAULT_CODE_EVENT_UNIT_ID);
@@ -183,6 +192,8 @@ const Dashboard: React.FC = () => {
             </div>
 
             <IpdCodeAlertStrip events={activeCodeEvents} />
+
+            <IpdCriticalResultsStrip results={payload.criticalResults} canAcknowledge={canAckCritical} onChanged={() => void dashboardQuery.refetch()} />
 
             <div className={ipdMetricsBandClass}>
                 <IpdKpiRow kpis={payload.kpis} loading={dashboardQuery.isFetching && !dashboardQuery.isLoading} />

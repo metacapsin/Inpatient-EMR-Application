@@ -38,6 +38,7 @@ export function NewOrderForm({ patientId, encounterId, onPlaced }: NewOrderFormP
 
     const [labTests, setLabTests] = useState('');
     const [labPriority, setLabPriority] = useState<'Routine' | 'Urgent' | 'STAT'>('Routine');
+    const [labIndication, setLabIndication] = useState('');
 
     const [radModality, setRadModality] = useState('');
     const [radBodyRegion, setRadBodyRegion] = useState('');
@@ -48,6 +49,7 @@ export function NewOrderForm({ patientId, encounterId, onPlaced }: NewOrderFormP
         setMedName(''); setMedDose(''); setMedRoute(''); setMedFrequency(''); setMedScheduledFor('');
         setPrnName(''); setPrnIndication(''); setPrnGivenBy('');
         setLabTests('');
+        setLabIndication('');
         setRadModality(''); setRadBodyRegion(''); setRadIndication('');
     }
 
@@ -75,7 +77,8 @@ export function NewOrderForm({ patientId, encounterId, onPlaced }: NewOrderFormP
         } else if (type === 'lab') {
             const tests = labTests.split(',').map((s) => s.trim()).filter(Boolean).map((name) => ({ name }));
             if (!tests.length) return toast.error('At least one lab test is required');
-            body = { orderType: 'lab' as const, patientId, encounterId, labTests: tests, priority: labPriority };
+            if (!labIndication.trim()) return toast.error('Clinical indication (reason for order) is required');
+            body = { orderType: 'lab' as const, patientId, encounterId, labTests: tests, priority: labPriority, clinicalIndication: labIndication.trim() };
         } else {
             if (!radModality.trim() || !radBodyRegion.trim() || !radIndication.trim()) return toast.error('Modality, body region and clinical indication are required');
             body = { orderType: 'radiology' as const, patientId, encounterId, modality: radModality.trim(), bodyRegion: radBodyRegion.trim(), clinicalIndication: radIndication.trim(), priority: radPriority };
@@ -178,6 +181,10 @@ export function NewOrderForm({ patientId, encounterId, onPlaced }: NewOrderFormP
                                 <option value="Urgent">Urgent</option>
                                 <option value="STAT">STAT</option>
                             </select>
+                        </div>
+                        <div className="sm:col-span-4">
+                            <label className={LABEL_CLASS}>Clinical indication *</label>
+                            <input className={INPUT_CLASS} value={labIndication} onChange={(e) => setLabIndication(e.target.value)} placeholder="Reason for order, e.g. suspected hypokalaemia" />
                         </div>
                     </>
                 )}
