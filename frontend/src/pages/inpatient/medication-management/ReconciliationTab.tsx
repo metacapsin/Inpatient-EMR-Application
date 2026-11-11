@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Loader2, Plus, Trash2, Home, Hospital, CheckCircle2 } from 'lucide-react';
+import { ConfirmDialog } from '../../../components/shared/ConfirmDialog';
 import { cn } from '../../../lib/utils';
 import {
     addHomeMedication,
@@ -48,6 +49,8 @@ export function ReconciliationTab({ patientId, encounterId, canEdit }: Props) {
     const [loading, setLoading] = useState(false);
     const [busy, setBusy] = useState(false);
     const [newHome, setNewHome] = useState({ name: '', dose: '', route: '', frequency: '', reportedBy: 'patient' });
+    const [deleteHome, setDeleteHome] = useState<HomeMedication | null>(null);
+    const [deletingHome, setDeletingHome] = useState(false);
 
     const loadHome = useCallback(async () => {
         if (!patientId) return;
@@ -101,12 +104,17 @@ export function ReconciliationTab({ patientId, encounterId, canEdit }: Props) {
         }
     }
 
-    async function dropHome(m: HomeMedication) {
+    async function dropHomeConfirmed() {
+        if (!deleteHome) return;
+        setDeletingHome(true);
         try {
-            await removeHomeMedication(patientId, m.id);
+            await removeHomeMedication(patientId, deleteHome.id);
+            setDeleteHome(null);
             await loadHome();
         } catch {
             toast.error('Could not remove home medication');
+        } finally {
+            setDeletingHome(false);
         }
     }
 
@@ -155,7 +163,7 @@ export function ReconciliationTab({ patientId, encounterId, canEdit }: Props) {
                                     <div className="font-medium text-gray-900 dark:text-gray-100">{m.name}</div>
                                     <div className="text-xs text-gray-600 dark:text-gray-400">{[m.dose, m.route, m.frequency].filter(Boolean).join(' · ') || '—'}{m.reportedBy ? ` · reported by ${m.reportedBy}` : ''}</div>
                                 </div>
-                                {canEdit ? <button type="button" className="text-gray-400 hover:text-red-600" title="Remove" onClick={() => void dropHome(m)}><Trash2 className="h-4 w-4" aria-hidden /></button> : null}
+                                {canEdit ? <button type="button" className="text-gray-400 hover:text-red-600" title="Remove" onClick={() => setDeleteHome(m)}><Trash2 className="h-4 w-4" aria-hidden /></button> : null}
                             </li>
                         ))}
                     </ul>
@@ -264,6 +272,18 @@ export function ReconciliationTab({ patientId, encounterId, canEdit }: Props) {
                     )}
                 </section>
             </div>
+
+            <ConfirmDialog
+                open={Boolean(deleteHome)}
+                title="Remove home medication"
+                message="Remove this medication from the patient's home medication list?"
+                detail={deleteHome?.name}
+                confirmLabel="Remove"
+                variant="danger"
+                busy={deletingHome}
+                onCancel={() => setDeleteHome(null)}
+                onConfirm={() => void dropHomeConfirmed()}
+            />
         </div>
     );
 }

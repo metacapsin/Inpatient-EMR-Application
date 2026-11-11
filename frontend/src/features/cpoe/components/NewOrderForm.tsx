@@ -1,37 +1,35 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Pill, Syringe, TestTubes, ScanLine } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { placeOrder } from '../../../services/cpoeOrders.service';
-import type { CpoeOrderRow, CpoeOrderType } from '../../../types/cpoeOrders';
+import { checkInteractions, cdsAlertsFromError } from '../../../services/cds.service';
+import { DrugTypeahead, type DrugSelection } from '../../../components/cds/DrugTypeahead';
+import { CdsAlertPanel } from '../../../components/cds/CdsAlertPanel';
+import type { CdsAlert, CdsCheckState } from '../../../types/cds';
+import { requiresOverride } from '../../../types/cds';
+import type { CpoeOrderRow, CpoeOrderType, PlaceOrderBody } from '../../../types/cpoeOrders';
 
 const LABEL_CLASS = 'mb-1 block text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400';
 const INPUT_CLASS =
     'w-full rounded-md border border-gray-200/80 bg-white px-2.5 py-1.5 text-xs text-gray-900 outline-none transition focus:border-primary/60 focus:ring-1 focus:ring-primary/30 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100';
 
-const TYPE_TABS: Array<{ type: CpoeOrderType; label: string; icon: typeof Pill }> = [
-    { type: 'medication', label: 'Medication', icon: Pill },
-    { type: 'prn_stat', label: 'PRN / STAT', icon: Syringe },
-    { type: 'lab', label: 'Lab', icon: TestTubes },
-    { type: 'radiology', label: 'Radiology', icon: ScanLine },
-];
-
 type NewOrderFormProps = {
     patientId: string;
     encounterId: string;
+    orderType: CpoeOrderType;
     onPlaced: (order: CpoeOrderRow) => void;
 };
 
-export function NewOrderForm({ patientId, encounterId, onPlaced }: NewOrderFormProps) {
-    const [type, setType] = useState<CpoeOrderType>('medication');
+export function NewOrderForm({ patientId, encounterId, orderType: type, onPlaced }: NewOrderFormProps) {
     const [submitting, setSubmitting] = useState(false);
 
-    const [medName, setMedName] = useState('');
+    const [medDrug, setMedDrug] = useState<DrugSelection>({ name: '', rxnormCode: null });
     const [medDose, setMedDose] = useState('');
     const [medRoute, setMedRoute] = useState('');
     const [medFrequency, setMedFrequency] = useState('');
     const [medScheduledFor, setMedScheduledFor] = useState('');
 
-    const [prnName, setPrnName] = useState('');
+    const [prnDrug, setPrnDrug] = useState<DrugSelection>({ name: '', rxnormCode: null });
     const [prnKind, setPrnKind] = useState<'PRN' | 'STAT'>('PRN');
     const [prnIndication, setPrnIndication] = useState('');
     const [prnGivenBy, setPrnGivenBy] = useState('');
@@ -45,45 +43,143 @@ export function NewOrderForm({ patientId, encounterId, onPlaced }: NewOrderFormP
     const [radIndication, setRadIndication] = useState('');
     const [radPriority, setRadPriority] = useState<'Routine' | 'Urgent' | 'STAT'>('Routine');
 
+    const [cdsState, setCdsState] = useState<CdsCheckState>({ status: 'idle' });
+    const [blockingAlerts, setBlockingAlerts] = useState<CdsAlert[] | null>(null);
+    const pendingBody = useRef<PlaceOrderBody | null>(null);
+    const previewSeq = useRef(0);
+
     function resetForm() {
-        setMedName(''); setMedDose(''); setMedRoute(''); setMedFrequency(''); setMedScheduledFor('');
-        setPrnName(''); setPrnIndication(''); setPrnGivenBy('');
+        setMedDrug({ name: '', rxnormCode: null });
+        setMedDose('');
+        setMedRoute('');
+        setMedFrequency('');
+        setMedScheduledFor('');
+        setPrnDrug({ name: '', rxnormCode: null });
+        setPrnIndication('');
+        setPrnGivenBy('');
         setLabTests('');
         setLabIndication('');
-        setRadModality(''); setRadBodyRegion(''); setRadIndication('');
+        setRadModality('');
+        setRadBodyRegion('');
+        setRadIndication('');
+        setCdsState({ status: 'idle' });
+        setBlockingAlerts(null);
+        pendingBody.current = null;
     }
 
-    async function handleSubmit() {
-        if (!encounterId.trim()) {
-            toast.error('No active encounter for this patient — admit the patient first');
+    // Live CDS: immediate after coded RxNorm select; short debounce while typing free text.
+    useEffect(() => {
+        if (type !== 'medication' && type !== 'prn_stat') {
+            setCdsState({ status: 'idle' });
+            setBlockingAlerts(null);
             return;
         }
-        let body;
+        if (!patientId.trim()) {
+            setCdsState({ status: 'idle' });
+            return;
+        }
+        const drug = type === 'medication' ? medDrug : prnDrug;
+        if (!drug.name.trim()) {
+            setCdsState({ status: 'idle' });
+            setBlockingAlerts(null);
+            return;
+        }
+        // New drug selection invalidates any open place-order override panel.
+        setBlockingAlerts(null);
+        pendingBody.current = null;
+
+        const mine = ++previewSeq.current;
+        setCdsState({ status: 'checking' });
+        const delayMs = drug.rxnormCode ? 0 : 280;
+        const t = window.setTimeout(async () => {
+            const res = await checkInteractions(patientId, [
+                { name: drug.name.trim(), rxnormCode: drug.rxnormCode },
+            ]);
+            if (mine !== previewSeq.current) return;
+            if (!res.ok) setCdsState({ status: 'error', message: res.message });
+            else setCdsState({ status: 'alerts', alerts: res.data });
+        }, delayMs);
+        return () => window.clearTimeout(t);
+    }, [type, medDrug.name, medDrug.rxnormCode, prnDrug.name, prnDrug.rxnormCode, patientId]);
+
+    function buildBody(): PlaceOrderBody | null {
+        if (!encounterId.trim()) {
+            toast.error('No active encounter for this patient — admit the patient first');
+            return null;
+        }
         if (type === 'medication') {
-            if (!medName.trim()) return toast.error('Medication name is required');
-            body = {
-                orderType: 'medication' as const,
+            if (!medDrug.name.trim()) {
+                toast.error('Medication name is required');
+                return null;
+            }
+            return {
+                orderType: 'medication',
                 patientId,
                 encounterId,
-                name: medName.trim(),
+                name: medDrug.name.trim(),
                 dose: medDose.trim() || undefined,
                 route: medRoute.trim() || undefined,
                 frequency: medFrequency.trim() || undefined,
                 nextScheduledTime: medScheduledFor ? new Date(medScheduledFor).toISOString() : undefined,
+                rxnormCode: medDrug.rxnormCode,
             };
-        } else if (type === 'prn_stat') {
-            if (!prnName.trim() || !prnIndication.trim() || !prnGivenBy.trim()) return toast.error('Medication, indication and given-by are required');
-            body = { orderType: 'prn_stat' as const, patientId, encounterId, medicationName: prnName.trim(), type: prnKind, indication: prnIndication.trim(), orderedTime: new Date().toISOString(), givenBy: prnGivenBy.trim() };
-        } else if (type === 'lab') {
-            const tests = labTests.split(',').map((s) => s.trim()).filter(Boolean).map((name) => ({ name }));
-            if (!tests.length) return toast.error('At least one lab test is required');
-            if (!labIndication.trim()) return toast.error('Clinical indication (reason for order) is required');
-            body = { orderType: 'lab' as const, patientId, encounterId, labTests: tests, priority: labPriority, clinicalIndication: labIndication.trim() };
-        } else {
-            if (!radModality.trim() || !radBodyRegion.trim() || !radIndication.trim()) return toast.error('Modality, body region and clinical indication are required');
-            body = { orderType: 'radiology' as const, patientId, encounterId, modality: radModality.trim(), bodyRegion: radBodyRegion.trim(), clinicalIndication: radIndication.trim(), priority: radPriority };
         }
+        if (type === 'prn_stat') {
+            if (!prnDrug.name.trim() || !prnIndication.trim() || !prnGivenBy.trim()) {
+                toast.error('Medication, indication and given-by are required');
+                return null;
+            }
+            return {
+                orderType: 'prn_stat',
+                patientId,
+                encounterId,
+                medicationName: prnDrug.name.trim(),
+                type: prnKind,
+                indication: prnIndication.trim(),
+                orderedTime: new Date().toISOString(),
+                givenBy: prnGivenBy.trim(),
+                rxnormCode: prnDrug.rxnormCode,
+            };
+        }
+        if (type === 'lab') {
+            const tests = labTests
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean)
+                .map((name) => ({ name }));
+            if (!tests.length) {
+                toast.error('At least one lab test is required');
+                return null;
+            }
+            if (!labIndication.trim()) {
+                toast.error('Clinical indication (reason for order) is required');
+                return null;
+            }
+            return {
+                orderType: 'lab',
+                patientId,
+                encounterId,
+                labTests: tests,
+                priority: labPriority,
+                clinicalIndication: labIndication.trim(),
+            };
+        }
+        if (!radModality.trim() || !radBodyRegion.trim() || !radIndication.trim()) {
+            toast.error('Modality, body region and clinical indication are required');
+            return null;
+        }
+        return {
+            orderType: 'radiology',
+            patientId,
+            encounterId,
+            modality: radModality.trim(),
+            bodyRegion: radBodyRegion.trim(),
+            clinicalIndication: radIndication.trim(),
+            priority: radPriority,
+        };
+    }
 
+    async function submitBody(body: PlaceOrderBody) {
         setSubmitting(true);
         try {
             const order = await placeOrder(body);
@@ -91,39 +187,41 @@ export function NewOrderForm({ patientId, encounterId, onPlaced }: NewOrderFormP
             resetForm();
             onPlaced(order);
         } catch (err) {
-            const e = err as { response?: { data?: { message?: string } } };
-            toast.error(e?.response?.data?.message || 'Could not place order');
+            const alerts = cdsAlertsFromError(err);
+            if (alerts) {
+                pendingBody.current = body;
+                setBlockingAlerts(alerts);
+            } else {
+                const e = err as { response?: { data?: { message?: string } } };
+                toast.error(e?.response?.data?.message || 'Could not place order');
+            }
         } finally {
             setSubmitting(false);
         }
     }
 
-    return (
-        <div className="rounded-lg border border-gray-200/70 bg-white p-3 dark:border-white/[0.08] dark:bg-[#141210]">
-            <div className="mb-3 flex flex-wrap gap-1.5">
-                {TYPE_TABS.map(({ type: t, label, icon: Icon }) => (
-                    <button
-                        key={t}
-                        type="button"
-                        onClick={() => setType(t)}
-                        className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
-                            type === t
-                                ? 'border-primary/40 bg-primary/10 text-primary'
-                                : 'border-gray-200/80 bg-white text-gray-600 hover:bg-gray-50 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-300 dark:hover:bg-white/[0.04]'
-                        }`}
-                    >
-                        <Icon className="h-3.5 w-3.5" aria-hidden />
-                        {label}
-                    </button>
-                ))}
-            </div>
+    async function handleSubmit() {
+        const body = buildBody();
+        if (!body) return;
+        // Soft preview: if live check already shows hard alerts, open panel before server round-trip
+        if ((body.orderType === 'medication' || body.orderType === 'prn_stat') && cdsState.status === 'alerts' && requiresOverride(cdsState.alerts) && !body.cdsOverride) {
+            pendingBody.current = body;
+            setBlockingAlerts(cdsState.alerts);
+            return;
+        }
+        await submitBody(body);
+    }
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    const liveAlerts = cdsState.status === 'alerts' ? cdsState.alerts : [];
+
+    return (
+        <div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {type === 'medication' && (
                     <>
                         <div className="sm:col-span-2">
                             <label className={LABEL_CLASS}>Medication *</label>
-                            <input className={INPUT_CLASS} value={medName} onChange={(e) => setMedName(e.target.value)} placeholder="Lisinopril" />
+                            <DrugTypeahead id="cpoe-med" value={medDrug} onChange={setMedDrug} placeholder="Search medication…" />
                         </div>
                         <div>
                             <label className={LABEL_CLASS}>Dose</label>
@@ -148,7 +246,7 @@ export function NewOrderForm({ patientId, encounterId, onPlaced }: NewOrderFormP
                     <>
                         <div className="sm:col-span-2">
                             <label className={LABEL_CLASS}>Medication *</label>
-                            <input className={INPUT_CLASS} value={prnName} onChange={(e) => setPrnName(e.target.value)} placeholder="Morphine" />
+                            <DrugTypeahead id="cpoe-prn" value={prnDrug} onChange={setPrnDrug} placeholder="Search medication…" />
                         </div>
                         <div>
                             <label className={LABEL_CLASS}>Type *</label>
@@ -161,7 +259,7 @@ export function NewOrderForm({ patientId, encounterId, onPlaced }: NewOrderFormP
                             <label className={LABEL_CLASS}>Given by *</label>
                             <input className={INPUT_CLASS} value={prnGivenBy} onChange={(e) => setPrnGivenBy(e.target.value)} placeholder="RN Priya" />
                         </div>
-                        <div className="sm:col-span-4">
+                        <div className="sm:col-span-2">
                             <label className={LABEL_CLASS}>Indication *</label>
                             <input className={INPUT_CLASS} value={prnIndication} onChange={(e) => setPrnIndication(e.target.value)} placeholder="Severe pain" />
                         </div>
@@ -170,7 +268,7 @@ export function NewOrderForm({ patientId, encounterId, onPlaced }: NewOrderFormP
 
                 {type === 'lab' && (
                     <>
-                        <div className="sm:col-span-3">
+                        <div className="sm:col-span-2">
                             <label className={LABEL_CLASS}>Lab tests * (comma-separated)</label>
                             <input className={INPUT_CLASS} value={labTests} onChange={(e) => setLabTests(e.target.value)} placeholder="BMP, CBC, Lactate" />
                         </div>
@@ -182,7 +280,7 @@ export function NewOrderForm({ patientId, encounterId, onPlaced }: NewOrderFormP
                                 <option value="STAT">STAT</option>
                             </select>
                         </div>
-                        <div className="sm:col-span-4">
+                        <div className="sm:col-span-2">
                             <label className={LABEL_CLASS}>Clinical indication *</label>
                             <input className={INPUT_CLASS} value={labIndication} onChange={(e) => setLabIndication(e.target.value)} placeholder="Reason for order, e.g. suspected hypokalaemia" />
                         </div>
@@ -207,28 +305,64 @@ export function NewOrderForm({ patientId, encounterId, onPlaced }: NewOrderFormP
                                 <option value="STAT">STAT</option>
                             </select>
                         </div>
-                        <div className="sm:col-span-4">
+                        <div className="sm:col-span-2">
                             <label className={LABEL_CLASS}>Clinical indication *</label>
                             <input className={INPUT_CLASS} value={radIndication} onChange={(e) => setRadIndication(e.target.value)} placeholder="r/o PE" />
                         </div>
-                        <p className="sm:col-span-4 text-[11px] text-gray-500 dark:text-gray-400">
+                        <p className="sm:col-span-2 text-[11px] text-gray-500 dark:text-gray-400">
                             Radiology orders require a physician — nurse accounts will be rejected by the server.
                         </p>
                     </>
                 )}
             </div>
 
-            <div className="mt-3 flex justify-end">
-                <button
-                    type="button"
-                    disabled={submitting}
-                    onClick={() => void handleSubmit()}
-                    className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-primary/90 disabled:opacity-60"
-                >
-                    {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
-                    Place order
-                </button>
-            </div>
+            {(type === 'medication' || type === 'prn_stat') && cdsState.status === 'checking' ? (
+                <p className="mt-2 text-[11px] text-gray-500">Checking interactions…</p>
+            ) : null}
+            {(type === 'medication' || type === 'prn_stat') && cdsState.status === 'error' ? (
+                <p className="mt-2 text-[11px] text-danger" role="alert">
+                    {cdsState.message}
+                </p>
+            ) : null}
+            {/* Live CDS results immediately after drug selection (all severities). */}
+            {(type === 'medication' || type === 'prn_stat') && liveAlerts.length > 0 && !blockingAlerts ? (
+                <div className="mt-3">
+                    <CdsAlertPanel alerts={liveAlerts} variant="preview" title="Clinical alerts for this medication" />
+                </div>
+            ) : null}
+
+            {blockingAlerts ? (
+                <div className="mt-3">
+                    <CdsAlertPanel
+                        alerts={blockingAlerts}
+                        variant="blocking"
+                        submitting={submitting}
+                        onCancel={() => {
+                            setBlockingAlerts(null);
+                            pendingBody.current = null;
+                        }}
+                        onProceed={(reason) => {
+                            const body = pendingBody.current;
+                            if (!body) return;
+                            const next = { ...body, cdsOverride: reason ? { reason } : undefined };
+                            setBlockingAlerts(null);
+                            void submitBody(next);
+                        }}
+                    />
+                </div>
+            ) : (
+                <div className="mt-4 flex justify-end">
+                    <button
+                        type="button"
+                        disabled={submitting || cdsState.status === 'checking'}
+                        onClick={() => void handleSubmit()}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-primary/90 disabled:opacity-60"
+                    >
+                        {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+                        Place order
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

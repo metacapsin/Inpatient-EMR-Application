@@ -6,7 +6,7 @@ import {
     computeDischargeTabCompletion,
     dischargeWorkspaceProgressPercent,
 } from '../../../utils/dischargeReadinessUi';
-import { AppModal } from '../../shared/AppModal';
+import { ConfirmDialog } from '../../shared/ConfirmDialog';
 
 export function DischargeReadinessCommandStrip() {
     const { encounterId, view, snapshot } = useDischargeReadiness();
@@ -196,55 +196,30 @@ export function DischargeReadinessCommandStrip() {
                 </div>
             </div>
 
-            <AppModal
+            <ConfirmDialog
                 open={confirmOpen}
-                onClose={() => {
+                title="Confirm discharge"
+                message="Review the following before you continue. This finalizes the inpatient discharge."
+                confirmLabel="Confirm discharge"
+                variant="danger"
+                busy={flow.finalizeMutation.isPending}
+                onCancel={() => {
                     if (!flow.finalizeMutation.isPending) setConfirmOpen(false);
                 }}
-                title="Confirm Discharge"
-                description="Review the following before you continue."
-                size="md"
-                footer={
-                    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                        <button
-                            type="button"
-                            disabled={flow.finalizeMutation.isPending}
-                            onClick={() => setConfirmOpen(false)}
-                            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-800 transition hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="button"
-                            disabled={flow.finalizeMutation.isPending}
-                            onClick={() => {
-                                flow.finalizeMutation.mutate(undefined, {
-                                    onSuccess: () => setConfirmOpen(false),
-                                    onError: () => setConfirmOpen(false),
-                                });
-                            }}
-                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-red-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:opacity-60"
-                        >
-                            {flow.finalizeMutation.isPending ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                                    Confirming…
-                                </>
-                            ) : (
-                                'Confirm Discharge'
-                            )}
-                        </button>
-                    </div>
-                }
+                onConfirm={() => {
+                    flow.finalizeMutation.mutate(undefined, {
+                        onSuccess: () => setConfirmOpen(false),
+                        onError: () => setConfirmOpen(false),
+                    });
+                }}
             >
-                <p className="mb-3 text-sm font-medium text-gray-800 dark:text-gray-200">This will:</p>
-                <ul className="list-inside list-disc space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                <ul className="list-inside list-disc space-y-1.5 text-sm text-gray-600 dark:text-gray-400">
                     <li>Release bed</li>
                     <li>Close encounter</li>
                     <li>Lock billing</li>
                     <li>Complete patient discharge</li>
                 </ul>
-            </AppModal>
+            </ConfirmDialog>
         </>
     );
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ClipboardList } from 'lucide-react';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import {
     OrderDashboardFiltersBar,
     type OrderDashboardFilters,
@@ -59,6 +60,7 @@ export default function OrderDashboardPage() {
     const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
     const [loading, setLoading] = useState(true);
     const [actionId, setActionId] = useState<string | null>(null);
+    const [cancelTarget, setCancelTarget] = useState<UnifiedOrderRow | null>(null);
 
     const staffName = useMemo(() => displayStaffName(), []);
 
@@ -141,16 +143,17 @@ export default function OrderDashboardPage() {
         }
     };
 
-    const handleCancel = async (row: UnifiedOrderRow) => {
-        if (!window.confirm('Cancel this order in the source module workflow?')) return;
-        setActionId(row.id);
+    const handleCancel = async () => {
+        if (!cancelTarget) return;
+        setActionId(cancelTarget.id);
         try {
-            const res = await cancelUnifiedOrder(row.id, { cancelledBy: staffName });
+            const res = await cancelUnifiedOrder(cancelTarget.id, { cancelledBy: staffName });
             if (!res.ok) {
                 toast.error(res.message || 'Cancel failed');
                 return;
             }
             toast.success('Order cancelled');
+            setCancelTarget(null);
             await load();
         } catch {
             toast.error('Cancel failed');
@@ -203,9 +206,21 @@ export default function OrderDashboardPage() {
                         setPage(1);
                     }}
                     onAcknowledge={(row) => void handleAcknowledge(row)}
-                    onCancel={(row) => void handleCancel(row)}
+                    onCancel={(row) => setCancelTarget(row)}
                 />
             </div>
+
+            <ConfirmDialog
+                open={Boolean(cancelTarget)}
+                title="Cancel order"
+                message="Cancel this order in the source module workflow? This cannot be undone from the dashboard."
+                detail={cancelTarget ? `${cancelTarget.summary} · ${cancelTarget.patientName}` : undefined}
+                confirmLabel="Cancel order"
+                variant="danger"
+                busy={Boolean(cancelTarget && actionId === cancelTarget.id)}
+                onCancel={() => setCancelTarget(null)}
+                onConfirm={() => void handleCancel()}
+            />
         </div>
     );
 }

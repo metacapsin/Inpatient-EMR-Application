@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { AlertTriangle, X } from 'lucide-react';
+import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import { platformTenantsAPI, type Tenant } from '../../services/platformApi';
 
 interface Props {
@@ -53,57 +53,38 @@ const DeleteTenantModal = ({ tenant, onClose, onDeleted }: Props) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-emr-border bg-white p-6 shadow-xl">
-        <div className="mb-4 flex items-start justify-between">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-rose-600" />
-            <h2 className="text-base font-semibold text-emr-text">Delete tenant</h2>
-          </div>
-          <button onClick={onClose} className="text-emr-muted hover:text-emr-text">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {loadingImpact ? (
-          <p className="text-sm text-emr-muted">Checking what this will remove…</p>
-        ) : impact ? (
-          <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
-            Deleting <strong>{tenant.name}</strong> will permanently remove{' '}
-            <strong>
-              {impact.patientCount} patient{impact.patientCount === 1 ? '' : 's'}
-            </strong>
-            , {impact.userCount} staff account{impact.userCount === 1 ? '' : 's'}, and {impact.encounterCount} admission
-            {impact.encounterCount === 1 ? '' : 's'} — along with every other clinical record under it. This cannot be undone.
-          </div>
-        ) : (
-          <p className="mb-4 text-sm text-rose-700">Could not load deletion impact — try again.</p>
-        )}
-
-        <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-          Type <span className="font-mono text-rose-700">{tenant.name}</span> to confirm
-        </label>
-        <input
-          value={confirmText}
-          onChange={(e) => setConfirmText(e.target.value)}
-          placeholder={tenant.name}
-          className="mb-4 h-11 w-full rounded-[10px] border border-slate-200/70 bg-[#eef1f7] px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-rose-400/60 focus:outline-none focus:ring-[3px] focus:ring-rose-500/15"
-        />
-
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg border border-emr-border px-3 py-2 text-xs font-medium text-emr-text hover:bg-emr-hover">
-            Cancel
-          </button>
-          <button
-            onClick={onConfirmDelete}
-            disabled={!canDelete}
-            className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {deleting ? 'Deleting…' : 'Delete permanently'}
-          </button>
-        </div>
-      </div>
-    </div>
+    <ConfirmDialog
+      open
+      title="Delete tenant"
+      message={
+        loadingImpact
+          ? 'Checking what this will remove…'
+          : impact
+            ? `Deleting ${tenant.name} will permanently remove ${impact.patientCount} patient(s), ${impact.userCount} staff account(s), and ${impact.encounterCount} admission(s) — along with every other clinical record under it.`
+            : 'Could not load deletion impact — try again.'
+      }
+      detail={tenant.name}
+      confirmLabel="Delete permanently"
+      variant="danger"
+      busy={deleting}
+      confirmDisabled={!canDelete}
+      onCancel={onClose}
+      onConfirm={() => void onConfirmDelete()}
+    >
+      <label className="mb-1.5 block text-xs font-semibold text-gray-700 dark:text-gray-300">
+        Type <span className="font-mono text-danger">{tenant.name}</span> to confirm
+      </label>
+      <input
+        value={confirmText}
+        onChange={(e) => setConfirmText(e.target.value)}
+        placeholder={tenant.name}
+        disabled={deleting}
+        className="h-10 w-full rounded-lg border border-emr-border/90 bg-white px-3 text-sm text-gray-900 outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 dark:border-white/10 dark:bg-[#1c1916] dark:text-gray-100"
+      />
+      {confirmText.trim() && confirmText.trim() !== tenant.name ? (
+        <p className="mt-1.5 text-xs text-danger">Name must match exactly before delete is enabled.</p>
+      ) : null}
+    </ConfirmDialog>
   );
 };
 

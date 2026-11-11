@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { FaUser, FaClipboardList, FaPlus, FaTimes } from '../../lib/fa-icons';
-import { Pencil, Trash2, AlertTriangle, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { usePatientId } from '../../hooks/usePatientId';
 import  AppButton from "../../components/ui/AppButton";
@@ -19,6 +19,7 @@ import {
     updateVisitorRecord,
 } from '../../services/visitorsFamily.service';
 import IconSearch from '@/components/Icon/IconSearch';
+import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 
 // Validation functions
 const validateName = (name: string): { isValid: boolean; error: string } => {
@@ -79,68 +80,6 @@ const validateRestrictions = (restrictions: string): { isValid: boolean; error: 
     const htmlRegex = /<[^>]*>/;
     if (htmlRegex.test(trimmed)) return { isValid: false, error: 'HTML tags are not allowed' };
     return { isValid: true, error: '' };
-};
-
-// Confirmation Dialog Component
-const ConfirmationDialog = ({
-    open,
-    title,
-    message,
-    onConfirm,
-    onCancel,
-    isDeleting,
-}: {
-    open: boolean;
-    title: string;
-    message: string;
-    onConfirm: () => void;
-    onCancel: () => void;
-    isDeleting?: boolean;
-}) => {
-    if (!open) return null;
-
-    return (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black/50 backdrop-blur-sm">
-            <div className="relative mx-auto w-full max-w-md animate-fadeIn p-4">
-                <div className="relative rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800">
-                    <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
-                                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
-                            </div>
-                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
-                        </div>
-                        <button
-                            onClick={onCancel}
-                            className="rounded-lg p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
-                        >
-                            <X className="h-5 w-5" />
-                        </button>
-                    </div>
-                    <div className="p-4">
-                        <p className="text-sm text-gray-600 dark:text-gray-300">{message}</p>
-                    </div>
-                    <div className="flex justify-end gap-2 border-t border-gray-200 p-4 dark:border-gray-700">
-                        <button
-                            type="button"
-                            onClick={onCancel}
-                            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="button"
-                            onClick={onConfirm}
-                            disabled={isDeleting}
-                            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-red-700 dark:hover:bg-red-800"
-                        >
-                            {isDeleting ? 'Deleting...' : 'Delete'}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
 };
 
 // Pagination Component
@@ -1043,13 +982,15 @@ const paginatedContacts = filteredContacts.slice(
                 />
             ) : null}
 
-            <ConfirmationDialog
+            <ConfirmDialog
                 open={confirmDialog.open}
                 title={confirmDialog.title}
                 message={confirmDialog.message}
+                confirmLabel="Delete"
+                variant="danger"
                 onConfirm={confirmDialog.onConfirm}
                 onCancel={() => setConfirmDialog({ open: false, title: '', message: '', onConfirm: () => {} })}
-                isDeleting={deleteVisitorMut.isPending || deleteContactMut.isPending}
+                busy={deleteVisitorMut.isPending || deleteContactMut.isPending}
             />
         </div>
     );

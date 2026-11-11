@@ -17,17 +17,30 @@ const recipientOut = (r) => ({
     id: r.id, _id: r.id, name: r.name, kind: r.kind, transport: r.transport, endpoint: r.endpoint ?? '',
     hasSecret: Boolean(r.auth_header_secret), enabled: r.enabled, createdAt: iso(r.created_at), updatedAt: iso(r.updated_at),
 });
-const recipientBody = z.object({
+const recipientFields = {
     name: z.string().trim().min(1).max(200),
     kind: z.enum(['pcp', 'post_acute', 'hie', 'other']),
     transport: z.enum(['stub', 'https_webhook', 'mllp', 'email', 'direct']),
     endpoint: z.string().trim().max(500).optional().nullable(),
     authHeaderSecret: z.string().max(500).optional().nullable(),
     enabled: z.boolean().optional(),
-}).superRefine((b, ctx) => {
+};
+const refineEndpoint = (b, ctx) => {
     if (b.transport === 'https_webhook' && !/^https?:\/\//.test(b.endpoint ?? '')) ctx.addIssue({ code: 'custom', path: ['endpoint'], message: 'Webhook transport needs an http(s) URL' });
     if (b.transport === 'mllp' && !/^(mllp:\/\/)?[^:/\s]+:\d+$/.test(b.endpoint ?? '')) ctx.addIssue({ code: 'custom', path: ['endpoint'], message: 'MLLP transport needs host:port' });
     if (b.transport === 'email' && !/^[^@\s]+@[^@\s]+$/.test(b.endpoint ?? '')) ctx.addIssue({ code: 'custom', path: ['endpoint'], message: 'Email transport needs an email address' });
+};
+// Zod v4: .partial() cannot be used on schemas with refinements — keep create vs patch separate.
+const recipientBody = z.object(recipientFields).superRefine(refineEndpoint);
+const recipientPatch = z.object({
+    name: recipientFields.name.optional(),
+    kind: recipientFields.kind.optional(),
+    transport: recipientFields.transport.optional(),
+    endpoint: recipientFields.endpoint,
+    authHeaderSecret: recipientFields.authHeaderSecret,
+    enabled: recipientFields.enabled,
+}).superRefine((b, ctx) => {
+    if (b.transport !== undefined) refineEndpoint(b, ctx);
 });
 
 adtNotificationsRouter.get('/api/notification-recipients', h(async (req, res) => {
@@ -45,7 +58,7 @@ adtNotificationsRouter.post('/api/notification-recipients', admin, h(async (req,
 }));
 
 adtNotificationsRouter.put('/api/notification-recipients/:id', admin, h(async (req, res) => {
-    const b = parse(recipientBody.partial(), req.body);
+    const b = parse(recipientPatch, req.body);
     const r = await query(
         `UPDATE notification_recipients SET name = COALESCE($1, name), kind = COALESCE($2, kind), transport = COALESCE($3, transport),
                 endpoint = COALESCE($4, endpoint), auth_header_secret = CASE WHEN $5::text IS NULL THEN auth_header_secret WHEN $5 = '' THEN NULL ELSE $5 END,

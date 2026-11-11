@@ -8,6 +8,7 @@ import { AddInfectionModal } from '../../components/infection/AddInfectionModal'
 import { InfectionCard } from '../../components/infection/InfectionCard';
 import { InfectionEmptyState } from '../../components/infection/InfectionEmptyState';
 import { InfectionHeader } from '../../components/infection/InfectionHeader';
+import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import { useInfectionControl } from '../../contexts/InfectionControlContext';
 import usePatientId from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
@@ -36,6 +37,7 @@ export default function InfectionControlSection({ patientIdOverride }: Infection
 
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState<InfectionRecord | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<InfectionRecord | null>(null);
 
     const records = useMemo(() => {
         if (!patientId) return [];
@@ -121,8 +123,15 @@ export default function InfectionControlSection({ patientIdOverride }: Infection
     };
 
     const handleDelete = (id: string) => {
-        deleteRecord(id);
+        const record = records.find((r) => r.id === id) || null;
+        setDeleteTarget(record ?? { id } as InfectionRecord);
+    };
+
+    const confirmDelete = () => {
+        if (!deleteTarget) return;
+        deleteRecord(deleteTarget.id);
         toast.success('Infection removed successfully');
+        setDeleteTarget(null);
     };
 
     if (!patientId) {
@@ -152,6 +161,17 @@ export default function InfectionControlSection({ patientIdOverride }: Infection
             </div>
 
             <AddInfectionModal open={modalOpen} editing={editing} onClose={closeModal} onSave={handleSave} />
+
+            <ConfirmDialog
+                open={Boolean(deleteTarget)}
+                title="Delete infection record"
+                message="This removes the infection control entry from the patient chart."
+                detail={deleteTarget?.infectionType || deleteTarget?.id}
+                confirmLabel="Delete"
+                variant="danger"
+                onCancel={() => setDeleteTarget(null)}
+                onConfirm={confirmDelete}
+            />
         </div>
     );
 }

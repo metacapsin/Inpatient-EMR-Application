@@ -6,6 +6,11 @@ import { cn } from '../../../lib/utils';
 import * as medApi from '../../../services/medicationManagement.service';
 import type { DispenseMedicineLine, NewPrescriptionLine, Pharmacy, PrescriptionRow, PrescriptionStatus } from '../../../types/medicationManagement';
 import { Input } from '@/components/ui/input';
+import { DrugTypeahead } from '../../../components/cds/DrugTypeahead';
+import { CdsAlertPanel } from '../../../components/cds/CdsAlertPanel';
+import { cdsAlertsFromError } from '../../../services/cds.service';
+import type { CdsAlert } from '../../../types/cds';
+import api from '../../../services/api';
 
 interface PharmacyTabProps {
     patientId: string;
@@ -36,7 +41,7 @@ const STATUS_CLASS: Record<PrescriptionStatus, string> = {
 };
 const cell = 'h-9 w-full min-w-0 rounded border border-gray-300 px-2 text-sm dark:border-gray-600 dark:bg-gray-800';
 const SCHEDULES = ['', 'II', 'III', 'IV', 'V'] as const;
-const emptyLine = (): NewPrescriptionLine => ({ name: '', strength: '', dose: '', route: 'PO', frequency: '', duration: '', instructions: '', quantity: 30, refills: 0, unitPrice: 0, controlledSchedule: null });
+const emptyLine = (): NewPrescriptionLine => ({ name: '', strength: '', dose: '', route: 'PO', frequency: '', duration: '', instructions: '', quantity: 30, refills: 0, unitPrice: 0, controlledSchedule: null, rxnormCode: '' });
 
 export function PharmacyTab({ patientId, encounterId, defaultDispensedBy, canPrescribe }: PharmacyTabProps) {
     const [prescriptions, setPrescriptions] = useState<EditableRx[]>([]);
@@ -48,6 +53,7 @@ export function PharmacyTab({ patientId, encounterId, defaultDispensedBy, canPre
     const [busyId, setBusyId] = useState<string | null>(null);
     const [showForm, setShowForm] = useState(false);
     const [lines, setLines] = useState<NewPrescriptionLine[]>([emptyLine()]);
+    const [signCds, setSignCds] = useState<{ rxId: string; alerts: CdsAlert[] } | null>(null);
     const [pharmacyId, setPharmacyId] = useState('');
     const [notes, setNotes] = useState('');
     const [creating, setCreating] = useState(false);
@@ -112,16 +118,35 @@ export function PharmacyTab({ patientId, encounterId, defaultDispensedBy, canPre
         }
     }
 
+    async function signWithOverride(rxId: string, reason?: string) {
+        setBusyId(rxId);
+        try {
+            await api.post(`/api/prescriptions/${encodeURIComponent(rxId)}/sign`, reason ? { cdsOverride: { reason } } : {});
+            setSignCds(null);
+            toast.success('Prescription signed');
+            await load();
+        } catch (e) {
+            const alerts = cdsAlertsFromError(e);
+            if (alerts) setSignCds({ rxId, alerts });
+            else toast.error(getApiErrorMessage(e, 'Could not sign prescription'));
+        } finally {
+            setBusyId(null);
+        }
+    }
+
     async function act(rx: PrescriptionRow, action: 'sign' | 'transmit' | 'print' | 'cancel') {
+        if (action === 'sign') {
+            await signWithOverride(rx.prescriptionId);
+            return;
+        }
         setBusyId(rx.prescriptionId);
         const r =
-            action === 'sign' ? await medApi.signPrescription(rx.prescriptionId)
-            : action === 'transmit' ? await medApi.transmitPrescription(rx.prescriptionId, rx.pharmacyId ?? pharmacyId ?? undefined)
+            action === 'transmit' ? await medApi.transmitPrescription(rx.prescriptionId, rx.pharmacyId ?? pharmacyId ?? undefined)
             : action === 'print' ? await medApi.printPrescription(rx.prescriptionId)
             : await medApi.cancelPrescription(rx.prescriptionId);
         setBusyId(null);
         if (!r.ok) return toast.error(r.message);
-        toast.success(action === 'sign' ? 'Prescription signed' : action === 'transmit' ? `Transmitted to ${r.data.pharmacyName || 'pharmacy'} (ref ${r.data.transmissionRef})` : action === 'print' ? 'Marked as printed' : 'Prescription cancelled');
+        toast.success(action === 'transmit' ? `Transmitted to ${r.data.pharmacyName || 'pharmacy'} (ref ${r.data.transmissionRef})` : action === 'print' ? 'Marked as printed' : 'Prescription cancelled');
         await load();
     }
 
@@ -145,6 +170,16 @@ export function PharmacyTab({ patientId, encounterId, defaultDispensedBy, canPre
     return (
         <div className="space-y-4">
             {error && <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100">{error}</div>}
+
+            {signCds ? (
+                <CdsAlertPanel
+                    title="Prescription signing — clinical alerts"
+                    alerts={signCds.alerts}
+                    submitting={busyId === signCds.rxId}
+                    onCancel={() => setSignCds(null)}
+                    onProceed={(reason) => void signWithOverride(signCds.rxId, reason || undefined)}
+                />
+            ) : null}
 
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <div className="flex flex-wrap items-end gap-3">
@@ -177,7 +212,13 @@ export function PharmacyTab({ patientId, encounterId, defaultDispensedBy, canPre
                             <tbody>
                                 {lines.map((l, i) => (
                                     <tr key={i}>
-                                        <td className="px-2 py-1"><input className={cell} value={l.name} onChange={(e) => setL(i, { name: e.target.value })} placeholder="Amoxicillin" /></td>
+                                        <td className="px-2 py-1 min-w-[160px]">
+                                            <DrugTypeahead
+                                                value={{ name: l.name, rxnormCode: l.rxnormCode || null }}
+                                                onChange={(d) => setL(i, { name: d.name, rxnormCode: d.rxnormCode || '' })}
+                                                placeholder="Search medication…"
+                                            />
+                                        </td>
                                         <td className="px-2 py-1"><input className={cell} value={l.dose ?? ''} onChange={(e) => setL(i, { dose: e.target.value, strength: e.target.value })} placeholder="500 mg" /></td>
                                         <td className="px-2 py-1"><input className={cell} value={l.route ?? ''} onChange={(e) => setL(i, { route: e.target.value })} /></td>
                                         <td className="px-2 py-1"><input className={cell} value={l.frequency ?? ''} onChange={(e) => setL(i, { frequency: e.target.value })} placeholder="TID" /></td>

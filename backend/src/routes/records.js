@@ -101,36 +101,79 @@ recordsRouter.delete('/Patient/deleteDocumentById/:id', clinical, h(async (req, 
 }));
 
 // ================================================================= allergies
-// Emitted in the nested eRx shape the Allergies page parses, plus flat fields for other consumers.
+// Flat fields for the Facesheet page; nested eRx-shaped keys kept for older consumers.
 const allergyOut = (a) => {
     const date = dateOf(a.onset_date);
+    const clinicalStatus = a.clinical_status || (a.is_active ? 'active' : 'inactive');
     return {
         id: a.id,
         _id: a.id,
         patientId: a.patient_id,
         allergyName: a.allergen,
         allergyType: a.allergy_type,
+        recordType: a.record_type || 'allergy',
         reaction: a.reaction ?? '',
         severity: a.severity ?? '',
+        criticality: a.criticality ?? '',
+        clinicalStatus,
+        verificationStatus: a.verification_status || 'unconfirmed',
         onsetDate: date,
-        status: a.is_active,
+        lastOccurrenceDate: dateOf(a.last_occurrence_date),
+        exposureRoute: a.exposure_route ?? '',
+        reportedBy: a.reported_by ?? '',
+        clinicalNotes: a.clinical_notes ?? '',
+        status: clinicalStatus === 'active',
+        rxnormCode: a.rxnorm_code ?? '',
+        allergyClass: a.allergy_class ?? '',
         Allergen: [{ Name: [a.allergen], ...(a.allergy_type === 'Ingredient' ? { Ingredient: [a.allergen] } : { Drug: [a.allergen] }) }],
         ReactionList: a.reaction ? [{ Reaction: [{ Description: [a.reaction] }] }] : [],
         Severity: a.severity ? [{ Description: [a.severity] }] : [],
         OnsetDate: date ? [date] : [],
-        Status: [a.is_active ? { Active: ['true'] } : { Inactive: ['true'] }],
+        Status: [clinicalStatus === 'active' ? { Active: ['true'] } : { Inactive: ['true'] }],
     };
 };
 
 const allergyBody = z.object({
     patientId: z.string().min(1),
     allergyName: z.string().trim().min(1).max(200),
-    allergyType: z.enum(['Drug', 'Ingredient', 'Food', 'Environmental', 'Other']).default('Drug'),
+    allergyType: z.enum(['Drug', 'Ingredient', 'Food', 'Environmental', 'Biologic', 'Other']).default('Drug'),
+    recordType: z.enum(['allergy', 'intolerance']).default('allergy'),
     reaction: optText(500),
     severity: z.enum(['Mild', 'Moderate', 'Severe', 'Life-threatening']).optional().nullable(),
+    criticality: z.enum(['low', 'high', 'unable-to-assess']).optional().nullable(),
+    clinicalStatus: z.enum(['active', 'inactive', 'resolved']).default('active'),
+    verificationStatus: z.enum(['unconfirmed', 'confirmed', 'refuted', 'entered-in-error']).default('unconfirmed'),
     onsetDate: optDate,
-    status: z.boolean().default(true),
+    lastOccurrenceDate: optDate,
+    exposureRoute: z.enum(['oral', 'intravenous', 'intramuscular', 'subcutaneous', 'topical', 'inhalation', 'other', 'unknown']).optional().nullable(),
+    reportedBy: z.enum(['patient', 'family', 'practitioner', 'prior-records', 'pharmacy', 'other']).optional().nullable(),
+    clinicalNotes: optText(2000),
+    status: z.boolean().optional(),
+    rxnormCode: z.string().trim().max(20).optional().nullable(),
+    allergyClass: z.string().trim().max(80).optional().nullable(),
 });
+
+function allergyWriteValues(b) {
+    const clinicalStatus = b.clinicalStatus || (b.status === false ? 'inactive' : 'active');
+    const isActive = clinicalStatus === 'active';
+    return {
+        clinicalStatus,
+        isActive,
+        reaction: b.reaction || null,
+        severity: b.severity ?? null,
+        criticality: b.criticality ?? null,
+        verificationStatus: b.verificationStatus || 'unconfirmed',
+        onsetDate: b.onsetDate ?? null,
+        lastOccurrenceDate: b.lastOccurrenceDate ?? null,
+        exposureRoute: b.exposureRoute || null,
+        reportedBy: b.reportedBy || null,
+        clinicalNotes: b.clinicalNotes || null,
+        rxnormCode: b.rxnormCode || null,
+        allergyClass: b.allergyClass || null,
+        recordType: b.recordType || 'allergy',
+        allergyType: b.allergyType || 'Drug',
+    };
+}
 
 recordsRouter.get('/Patient/getAllAllergyList', h(async (req, res) => {
     const { rcopiaID } = parse(z.object({ rcopiaID: z.string().min(1) }), req.query);
@@ -141,18 +184,37 @@ recordsRouter.get('/Patient/getAllAllergyList', h(async (req, res) => {
 recordsRouter.post('/Patient/createAllergy', prescriber, h(async (req, res) => {
     const b = parse(allergyBody, req.body);
     await assertPatient(req, b.patientId);
+    const w = allergyWriteValues(b);
     const r = await query(
-        `INSERT INTO patient_allergies (tenant_id, patient_id, allergen, allergy_type, reaction, severity, onset_date, is_active) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-        [req.user.tenantId, b.patientId, b.allergyName, b.allergyType, b.reaction || null, b.severity ?? null, b.onsetDate ?? null, b.status],
+        `INSERT INTO patient_allergies (
+            tenant_id, patient_id, allergen, allergy_type, record_type, reaction, severity, criticality,
+            clinical_status, verification_status, onset_date, last_occurrence_date, exposure_route,
+            reported_by, clinical_notes, is_active, rxnorm_code, allergy_class
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+        [
+            req.user.tenantId, b.patientId, b.allergyName, w.allergyType, w.recordType, w.reaction, w.severity, w.criticality,
+            w.clinicalStatus, w.verificationStatus, w.onsetDate, w.lastOccurrenceDate, w.exposureRoute,
+            w.reportedBy, w.clinicalNotes, w.isActive, w.rxnormCode, w.allergyClass,
+        ],
     );
     created(res, allergyOut(r.rows[0]));
 }));
 
 recordsRouter.put('/Patient/updateAllergy/:id', prescriber, h(async (req, res) => {
     const b = parse(allergyBody.omit({ patientId: true }), req.body);
+    const w = allergyWriteValues(b);
     const r = await query(
-        `UPDATE patient_allergies SET allergen=$1, allergy_type=$2, reaction=$3, severity=$4, onset_date=$5, is_active=$6 WHERE id=$7 AND tenant_id=$8 RETURNING *`,
-        [b.allergyName, b.allergyType, b.reaction || null, b.severity ?? null, b.onsetDate ?? null, b.status, req.params.id, req.user.tenantId],
+        `UPDATE patient_allergies SET
+            allergen=$1, allergy_type=$2, record_type=$3, reaction=$4, severity=$5, criticality=$6,
+            clinical_status=$7, verification_status=$8, onset_date=$9, last_occurrence_date=$10,
+            exposure_route=$11, reported_by=$12, clinical_notes=$13, is_active=$14, rxnorm_code=$15, allergy_class=$16
+         WHERE id=$17 AND tenant_id=$18 RETURNING *`,
+        [
+            b.allergyName, w.allergyType, w.recordType, w.reaction, w.severity, w.criticality,
+            w.clinicalStatus, w.verificationStatus, w.onsetDate, w.lastOccurrenceDate,
+            w.exposureRoute, w.reportedBy, w.clinicalNotes, w.isActive, w.rxnormCode, w.allergyClass,
+            req.params.id, req.user.tenantId,
+        ],
     );
     if (!r.rowCount) throw notFound('Allergy not found');
     ok(res, allergyOut(r.rows[0]));

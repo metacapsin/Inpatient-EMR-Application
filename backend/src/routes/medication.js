@@ -263,7 +263,7 @@ medicationRouter.post('/api/prescriptions/:id/sign', requireRole('physician'), h
         if (controlled) throw new ApiError(409, `Schedule ${controlled} controlled substance: electronic prescribing of controlled substances (EPCS, DEA 21 CFR 1311) is not enabled`, { controlledSchedule: controlled }, 'EPCS_NOT_ENABLED');
         const prescriber = (await db.query('SELECT npi, dea_number, first_name, last_name FROM users WHERE id = $1', [req.user.id])).rows[0];
         if (!prescriber?.npi && req.user.role !== 'admin') throw new ApiError(409, 'Add your NPI to your profile before signing prescriptions', undefined, 'PRESCRIBER_NPI_MISSING');
-        await erx.runBeforeSign({ prescription: rx, user: req.user, db });
+        await erx.runBeforeSign({ prescription: rx, user: req.user, db, body: req.body ?? {} });
         await setRxStatus(db, req, rx, 'signed', `, signed_at = now(), prescriber_id = $4, prescriber_npi = $5, prescriber_dea = $6, prescriber_name = COALESCE(prescriber_name, $7)`,
             [req.user.id, prescriber?.npi ?? null, prescriber?.dea_number ?? null, `${prescriber?.first_name ?? ''} ${prescriber?.last_name ?? ''}`.trim() || req.user.name]);
     });

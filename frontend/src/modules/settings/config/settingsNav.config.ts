@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
-import { BellRing, Building2, ClipboardList, Pill } from 'lucide-react';
+import { BellRing, Building2, ClipboardList, Pill, ShieldAlert, AppWindow } from 'lucide-react';
 
-export type SettingsNavId = 'facility' | 'practice' | 'pharmacies' | 'careNotifications';
+export type SettingsNavId = 'facility' | 'practice' | 'pharmacies' | 'careNotifications' | 'clinicalAlerts' | 'connectedApps';
 
 export interface SettingsNavItem {
     id: SettingsNavId;
@@ -40,5 +40,19 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
         description: 'ADT notifications to PCP / post-acute (CMS CoP)',
         icon: BellRing,
         sectionId: 'settings-care-notifications',
+    },
+    {
+        id: 'clinicalAlerts',
+        label: 'Clinical Alerts',
+        description: 'Drug interaction severity policy (CDS)',
+        icon: ShieldAlert,
+        sectionId: 'settings-clinical-alerts',
+    },
+    {
+        id: 'connectedApps',
+        label: 'Connected Apps',
+        description: 'SMART on FHIR third-party apps',
+        icon: AppWindow,
+        sectionId: 'settings-connected-apps',
     },
 ];

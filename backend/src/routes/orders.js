@@ -3,6 +3,9 @@ import { z } from 'zod';
 import { query, withTx } from '../db/pool.js';
 import { ApiError, badRequest, conflict, h, notFound, ok, created, parse, row } from '../lib/http.js';
 import { requireRole } from '../middleware/auth.js';
+import { checkInteractions, recordCdsAlerts } from '../lib/cds/check.js';
+import { requiresOverride } from '../lib/cds/policy.js';
+import { cdsOverrideSchema } from '../lib/cds/schemas.js';
 
 const TERMINAL_STATUSES = ['completed', 'discontinued', 'cancelled'];
 
@@ -26,6 +29,8 @@ async function assertEncounter(req, encounterId, patientId) {
 // Same field shapes the four existing endpoints already validate (see medication.js, records.js,
 // clinicalOps.js) — `encounterId` is newly required on all four here because the orders ledger
 // row points at exactly one encounter.
+const cdsOverrideField = cdsOverrideSchema.optional();
+
 const medicationVariant = z.object({
     orderType: z.literal('medication'),
     patientId: z.string().min(1),
@@ -35,6 +40,8 @@ const medicationVariant = z.object({
     route: z.string().max(50).optional(),
     frequency: z.string().max(100).optional(),
     nextScheduledTime: ts.optional(),
+    rxnormCode: z.string().trim().max(20).optional().nullable(),
+    cdsOverride: cdsOverrideField,
 });
 
 const prnStatVariant = z.object({
@@ -52,6 +59,8 @@ const prnStatVariant = z.object({
     givenBy: z.string().trim().min(1).max(200),
     doctorApproval: z.string().max(200).optional(),
     remarks: z.string().max(1000).optional(),
+    rxnormCode: z.string().trim().max(20).optional().nullable(),
+    cdsOverride: cdsOverrideField,
 });
 
 const labVariant = z.object({
@@ -100,22 +109,40 @@ ordersRouter.post('/api/orders', requireRole('physician', 'nurse'), h(async (req
     const out = await withTx(async (db) => {
         let detail;
         let refTable;
+        /** @type {import('../lib/cds/schemas.js').CdsAlert[] | null} */
+        let cdsAlerts = null;
+        /** @type {string | null} */
+        let cdsOverrideReason = null;
+
+        if (b.orderType === 'medication' || b.orderType === 'prn_stat') {
+            const candidateName = b.orderType === 'medication' ? b.name : b.medicationName;
+            const rxnormCode = b.rxnormCode ?? null;
+            cdsAlerts = await checkInteractions(db, {
+                tenantId: req.user.tenantId,
+                patientId: b.patientId,
+                candidates: [{ name: candidateName, rxnormCode }],
+            });
+            if (requiresOverride(cdsAlerts) && !b.cdsOverride) {
+                throw new ApiError(409, 'Clinical decision support override required', { alerts: cdsAlerts }, 'CDS_OVERRIDE_REQUIRED');
+            }
+            if (b.cdsOverride) cdsOverrideReason = b.cdsOverride.reason;
+        }
 
         if (b.orderType === 'medication') {
             refTable = 'medications';
             detail = (await db.query(
-                `INSERT INTO medications (tenant_id, patient_id, encounter_id, name, dose, route, frequency, next_scheduled_time)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-                [req.user.tenantId, b.patientId, b.encounterId, b.name, b.dose ?? null, b.route ?? null, b.frequency ?? null, b.nextScheduledTime ?? null],
+                `INSERT INTO medications (tenant_id, patient_id, encounter_id, name, dose, route, frequency, next_scheduled_time, rxnorm_code)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+                [req.user.tenantId, b.patientId, b.encounterId, b.name, b.dose ?? null, b.route ?? null, b.frequency ?? null, b.nextScheduledTime ?? null, b.rxnormCode ?? null],
             )).rows[0];
         } else if (b.orderType === 'prn_stat') {
             refTable = 'prn_stat_orders';
             detail = (await db.query(
                 `INSERT INTO prn_stat_orders (tenant_id, patient_id, encounter_id, medication_name, order_type, indication, last_given_time, dose_interval, max_dose,
-                                              ordered_time, urgency_level, given_by, doctor_approval, remarks)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+                                              ordered_time, urgency_level, given_by, doctor_approval, remarks, rxnorm_code)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
                 [req.user.tenantId, b.patientId, b.encounterId, b.medicationName, b.type, b.indication, b.lastGivenTime || null, b.interval ?? null, b.maxDose ?? null,
-                 b.orderedTime, b.urgencyLevel ?? null, b.givenBy, b.doctorApproval ?? null, b.remarks ?? null],
+                 b.orderedTime, b.urgencyLevel ?? null, b.givenBy, b.doctorApproval ?? null, b.remarks ?? null, b.rxnormCode ?? null],
             )).rows[0];
         } else if (b.orderType === 'lab') {
             refTable = 'lab_orders';
@@ -140,6 +167,19 @@ ordersRouter.post('/api/orders', requireRole('physician', 'nurse'), h(async (req
              VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
             [req.user.tenantId, b.patientId, b.encounterId, b.orderType, refTable, detail.id, req.user.id],
         )).rows[0];
+
+        if (cdsAlerts?.length) {
+            await recordCdsAlerts(db, {
+                tenantId: req.user.tenantId,
+                patientId: b.patientId,
+                contextType: 'cpoe_order',
+                contextId: ledger.id,
+                alerts: cdsAlerts,
+                outcome: cdsOverrideReason ? 'overridden' : 'advisory',
+                userId: req.user.id,
+                overrideReason: cdsOverrideReason,
+            });
+        }
 
         return { ledger, detail };
     });

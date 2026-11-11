@@ -6,6 +6,8 @@ import { FacilityManagementCard } from '../modules/settings/components/FacilityM
 import { PracticeInformationCard } from '../modules/settings/components/PracticeInformationCard';
 import { PharmaciesCard } from '../modules/settings/components/PharmaciesCard';
 import { CareNotificationsCard } from '../modules/settings/components/CareNotificationsCard';
+import { ClinicalAlertsCard } from '../modules/settings/components/ClinicalAlertsCard';
+import { ConnectedAppsCard } from '../modules/settings/components/ConnectedAppsCard';
 import {
     settingsContentClass,
     settingsContentInnerClass,
@@ -28,6 +30,8 @@ const Settings: React.FC = () => {
                     {activeId === 'practice' ? <PracticeInformationCard /> : null}
                     {activeId === 'pharmacies' ? <PharmaciesCard /> : null}
                     {activeId === 'careNotifications' ? <CareNotificationsCard /> : null}
+                    {activeId === 'clinicalAlerts' ? <ClinicalAlertsCard /> : null}
+                    {activeId === 'connectedApps' ? <ConnectedAppsCard /> : null}
                 </div>
             </div>
         </div>

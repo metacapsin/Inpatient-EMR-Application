@@ -18,6 +18,7 @@ import {
 import type { StaffShift } from '../../../types/staffScheduling.types';
 import type { IRootState } from '../../../store';
 import NewDropdown from '../../../components/ui/NewDropdown';
+import { ConfirmDialog } from '../../../components/shared/ConfirmDialog';
 import {
     ABDOMEN_APPEARANCE_OPTIONS,
     BEHAVIOR_OPTIONS,
@@ -1466,56 +1467,28 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                 />
             </Dialog>
 
-            <Dialog
-                className="nfs-chart-dialog !rounded-2xl"
-                contentClassName="!pt-3 !pb-3"
-                header={
-                    <div className="flex items-start gap-3 pe-8">
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/12 text-amber-800 dark:text-amber-400/15 dark:text-amber-100">
-                            <i className="pi pi-lock text-lg" aria-hidden />
-                        </span>
-                        <div className="min-w-0 space-y-0.5">
-                            <h2 className="text-base font-semibold leading-tight text-gray-900 dark:text-white">Confirm signature</h2>
-                            <p className="text-[11px] font-medium text-gray-600 dark:text-gray-400">This action cannot be undone in demo mode</p>
-                        </div>
-                    </div>
-                }
-                visible={signConfirmOpen}
-                style={{ width: 'min(96vw, 420px)' }}
-                onHide={cancelSignConfirm}
-                draggable={false}
-                resizable={false}
-                closable
-                footer={
-                    <div className="flex flex-wrap justify-end gap-3">
-                        <Button type="button" label="Go back" size="small" severity="secondary" outlined onClick={cancelSignConfirm} />
-                        <Button
-                            type="button"
-                            label="Sign & lock chart"
-                            size="small"
-                            icon="pi pi-check"
-                            severity="success"
-                            onClick={confirmSignAndLock}
-                        />
-                    </div>
-                }
+            <ConfirmDialog
+                open={signConfirmOpen}
+                title="Confirm signature"
+                message="This action cannot be undone in demo mode. Signing locks this assessment to the legal record for this shift."
+                detail={`${signerName.trim() || d.shiftInfo.primaryNurseDisplay}${d.signerCredentials ? `, ${d.signerCredentials}` : ''}`}
+                confirmLabel="Sign & lock chart"
+                cancelLabel="Go back"
+                variant="primary"
+                onCancel={cancelSignConfirm}
+                onConfirm={confirmSignAndLock}
             >
-                <div className="flex gap-3">
-                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300">
-                        <i className="pi pi-info-circle text-sm" aria-hidden />
-                    </span>
-                    <p className="text-[12px] leading-relaxed text-gray-700 dark:text-gray-200">
-                        Signing locks this assessment to the legal record for this shift. You are signing as{' '}
-                        <span className="font-semibold text-gray-900 dark:text-white">{signerName.trim() || d.shiftInfo.primaryNurseDisplay}</span>
-                        {d.signerCredentials ? (
-                            <>
-                                , <span className="font-semibold">{d.signerCredentials}</span>
-                            </>
-                        ) : null}
-                        .
-                    </p>
-                </div>
-            </Dialog>
+                <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300">
+                    You are about to sign as{' '}
+                    <span className="font-semibold text-gray-900 dark:text-white">{signerName.trim() || d.shiftInfo.primaryNurseDisplay}</span>
+                    {d.signerCredentials ? (
+                        <>
+                            , <span className="font-semibold">{d.signerCredentials}</span>
+                        </>
+                    ) : null}
+                    .
+                </p>
+            </ConfirmDialog>
         </div>
     );
 }

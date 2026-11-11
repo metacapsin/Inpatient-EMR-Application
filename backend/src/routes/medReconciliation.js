@@ -193,6 +193,34 @@ medReconciliationRouter.post('/api/encounters/:id/med-reconciliation/:type/compl
                     [req.user.tenantId, enc.patient_id, enc.id, l.name, l.dose || null, l.route || null, l.frequency || null, l.instructions || null, l.rxnormCode || null],
                 );
             }
+            // Advisory-only CDS: never blocks nursing reconciliation; physician sees hard stops at order entry.
+            try {
+                const { checkInteractions, recordCdsAlerts } = await import('../lib/cds/check.js');
+                const candidates = lines
+                    .filter((l) => l.action !== 'stop')
+                    .map((l) => ({ name: l.name, rxnormCode: l.rxnormCode || null }));
+                if (candidates.length) {
+                    const alerts = await checkInteractions(db, {
+                        tenantId: req.user.tenantId,
+                        patientId: enc.patient_id,
+                        candidates,
+                    });
+                    if (alerts.length) {
+                        await recordCdsAlerts(db, {
+                            tenantId: req.user.tenantId,
+                            patientId: enc.patient_id,
+                            contextType: 'med_rec',
+                            contextId: rec.id,
+                            alerts,
+                            outcome: 'advisory',
+                            userId: req.user.id,
+                        });
+                    }
+                }
+            } catch (e) {
+                // Table may not exist yet on old DBs; never fail reconciliation on CDS advisory.
+                if (e?.code !== '42P01') console.warn('[med-rec] CDS advisory skipped:', e?.message || e);
+            }
         }
         if (type === 'discharge') {
             const kept = keptLines(lines).map((l) => ({ name: l.name, dose: l.dose, route: l.route, frequency: l.frequency, duration: l.duration, instructions: l.instructions, rxnormCode: l.rxnormCode, source: l.source }));

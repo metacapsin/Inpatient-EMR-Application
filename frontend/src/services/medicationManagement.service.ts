@@ -284,7 +284,8 @@ async function rxAction(id: string, action: 'sign' | 'transmit' | 'print' | 'can
         return { ok: false, message: getApiErrorMessage(e, `Could not ${action} prescription`) };
     }
 }
-export const signPrescription = (id: string) => rxAction(id, 'sign');
+export const signPrescription = (id: string, cdsOverride?: { reason: string }) =>
+    rxAction(id, 'sign', cdsOverride ? { cdsOverride } : {});
 export const transmitPrescription = (id: string, pharmacyId?: string) => rxAction(id, 'transmit', pharmacyId ? { pharmacyId } : {});
 export const printPrescription = (id: string) => rxAction(id, 'print');
 export const cancelPrescription = (id: string, reason?: string) => rxAction(id, 'cancel', reason ? { reason } : {});

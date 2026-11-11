@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": false,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "types": ["node", "fhir"],
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/types/**/*.d.ts",
+    "src/lib/cds/**/*.js",
+    "src/lib/rxnav.js",
+    "src/routes/cds.js",
+    "src/routes/drugs.js",
+    "src/lib/fhir/**/*.js",
+    "src/lib/sql.js",
+    "src/routes/fhir.js",
+    "src/routes/smartAuth.js",
+    "src/middleware/smartAuth.js",
+    "src/routes/patientAccounts.js"
+  ]
+}

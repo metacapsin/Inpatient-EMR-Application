@@ -643,11 +643,52 @@ export const vitalsAPI = {
     api.delete(`/PatientVitals/deletePatientVitals/${id}`),
 };
 
-// Patient Data API (read-only)
+// Patient Data API
 export const patientDataAPI = {
   // Allergies
   getAllAllergyList: (rcopiaID: string) =>
     api.get(`/Patient/getAllAllergyList?rcopiaID=${rcopiaID}`),
+  createAllergy: (data: {
+    patientId: string;
+    allergyName: string;
+    allergyType?: 'Drug' | 'Ingredient' | 'Food' | 'Environmental' | 'Biologic' | 'Other';
+    recordType?: 'allergy' | 'intolerance';
+    reaction?: string | null;
+    severity?: 'Mild' | 'Moderate' | 'Severe' | 'Life-threatening' | null;
+    criticality?: 'low' | 'high' | 'unable-to-assess' | null;
+    clinicalStatus?: 'active' | 'inactive' | 'resolved';
+    verificationStatus?: 'unconfirmed' | 'confirmed' | 'refuted' | 'entered-in-error';
+    onsetDate?: string | null;
+    lastOccurrenceDate?: string | null;
+    exposureRoute?: string | null;
+    reportedBy?: string | null;
+    clinicalNotes?: string | null;
+    status?: boolean;
+    rxnormCode?: string | null;
+    allergyClass?: string | null;
+  }) => api.post('/Patient/createAllergy', data),
+  updateAllergy: (
+    id: string,
+    data: {
+      allergyName: string;
+      allergyType?: 'Drug' | 'Ingredient' | 'Food' | 'Environmental' | 'Biologic' | 'Other';
+      recordType?: 'allergy' | 'intolerance';
+      reaction?: string | null;
+      severity?: 'Mild' | 'Moderate' | 'Severe' | 'Life-threatening' | null;
+      criticality?: 'low' | 'high' | 'unable-to-assess' | null;
+      clinicalStatus?: 'active' | 'inactive' | 'resolved';
+      verificationStatus?: 'unconfirmed' | 'confirmed' | 'refuted' | 'entered-in-error';
+      onsetDate?: string | null;
+      lastOccurrenceDate?: string | null;
+      exposureRoute?: string | null;
+      reportedBy?: string | null;
+      clinicalNotes?: string | null;
+      status?: boolean;
+      rxnormCode?: string | null;
+      allergyClass?: string | null;
+    },
+  ) => api.put(`/Patient/updateAllergy/${encodeURIComponent(id)}`, data),
+  deleteAllergy: (id: string) => api.delete(`/Patient/deleteAllergy/${encodeURIComponent(id)}`),
   
   // Medications — inpatient actives + home medications (source=all) from the Postgres medications table
   getAllMedicationList: (patientId: string) =>

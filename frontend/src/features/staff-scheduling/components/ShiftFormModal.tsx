@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { AppModal } from '../../../components/shared/AppModal';
+import { ConfirmDialog } from '../../../components/shared/ConfirmDialog';
 import NewDropdown from '../../../components/ui/NewDropdown';
 import {
     NOTCHED_FIELD_FRAME_CLASS,
@@ -71,6 +72,7 @@ export function ShiftFormModal({
     const [staff, setStaff] = useState<StaffMember[]>([]);
     const [shiftTypes, setShiftTypes] = useState<ShiftType[]>([]);
     const [busy, setBusy] = useState(false);
+    const [confirmDelete, setConfirmDelete] = useState(false);
     const [staffId, setStaffId] = useState('');
     const [wardId, setWardId] = useState('');
     const [shiftTypeId, setShiftTypeId] = useState('');
@@ -173,11 +175,11 @@ export function ShiftFormModal({
 
     const onDelete = async () => {
         if (!shift || !canManage) return;
-        if (!window.confirm('Delete this shift?')) return;
         setBusy(true);
         try {
             await deleteShift(shift.id);
             toast.success('Shift deleted');
+            setConfirmDelete(false);
             onSaved();
             onClose();
         } catch (e) {
@@ -188,6 +190,7 @@ export function ShiftFormModal({
     };
 
     return (
+        <>
         <AppModal
             open={open}
             title={shift ? 'Edit shift' : 'Add shift'}
@@ -202,7 +205,7 @@ export function ShiftFormModal({
                                 type="button"
                                 className="inline-flex h-10 items-center justify-center rounded-lg border border-red-200 px-4 text-sm font-semibold text-red-700 transition hover:bg-red-50 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-950/40"
                                 disabled={busy}
-                                onClick={() => void onDelete()}
+                                onClick={() => setConfirmDelete(true)}
                             >
                                 Delete
                             </button>
@@ -333,5 +336,18 @@ export function ShiftFormModal({
                 </div>
             </div>
         </AppModal>
+
+        <ConfirmDialog
+            open={confirmDelete}
+            title="Delete shift"
+            message="This permanently removes the scheduled shift. Staff coverage for this slot will be cleared."
+            detail={shift ? `Shift · ${toLocalInput(shift.startAt)}` : undefined}
+            confirmLabel="Delete shift"
+            variant="danger"
+            busy={busy}
+            onCancel={() => setConfirmDelete(false)}
+            onConfirm={() => void onDelete()}
+        />
+        </>
     );
 }

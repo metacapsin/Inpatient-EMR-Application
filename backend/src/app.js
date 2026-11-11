@@ -10,6 +10,8 @@ import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { authRouter, publicAuthRouter } from './routes/auth.js';
 import { publicPlatformAuthRouter } from './routes/platformAuth.js';
 import { platformAdminRouter } from './routes/platformAdmin.js';
+import { smartAuthRouter } from './routes/smartAuth.js';
+import { fhirRouter } from './routes/fhir.js';
 import { facilityRouter } from './routes/facility.js';
 import { tenantProfileRouter } from './routes/tenantProfile.js';
 import { patientsRouter } from './routes/patients.js';
@@ -35,6 +37,9 @@ import { dischargeReadinessRouter } from './routes/dischargeReadiness.js';
 import { medReconciliationRouter } from './routes/medReconciliation.js';
 import { labsRouter } from './routes/labs.js';
 import { adtNotificationsRouter } from './routes/adtNotifications.js';
+import { cdsRouter } from './routes/cds.js';
+import { drugsRouter } from './routes/drugs.js';
+import { patientAccountsRouter } from './routes/patientAccounts.js';
 
 export function createApp() {
     const app = express();
@@ -83,10 +88,14 @@ export function createApp() {
     // Platform (Super Admin) branch: its own credential space, gated by requirePlatformAuth on each
     // of its routes — deliberately NOT behind the tenant-scoped requireAuth below.
     app.use(platformAdminRouter);
+    // SMART App Launch + patient portal auth (public; patient JWT / SMART JWT, not staff JWT).
+    app.use(smartAuthRouter);
+    // FHIR R4 patient-access API (public mount; each resource route uses requireSmartAuth).
+    app.use(fhirRouter);
     app.use(authRouter); // authenticates itself
     app.use(requireAuth);
     app.use(requireModuleGate);
-    for (const r of [facilityRouter, tenantProfileRouter, patientsRouter, adtRouter, patientDataRouter, inpatientDocsRouter, consentRouter, medicationRouter, revenueRouter, dashboardRouter, appointmentsRouter, recordsRouter, staffingRouter, clinicalOpsRouter, ordersRouter, bedReservationsRouter, evsRouter, transferRequestsRouter, eligibilityRouter, problemsRouter, clinicalNotesRouter, dischargeReadinessRouter, medReconciliationRouter, labsRouter, adtNotificationsRouter]) {
+    for (const r of [facilityRouter, tenantProfileRouter, patientsRouter, adtRouter, patientDataRouter, inpatientDocsRouter, consentRouter, medicationRouter, revenueRouter, dashboardRouter, appointmentsRouter, recordsRouter, staffingRouter, clinicalOpsRouter, ordersRouter, bedReservationsRouter, evsRouter, transferRequestsRouter, eligibilityRouter, problemsRouter, clinicalNotesRouter, dischargeReadinessRouter, medReconciliationRouter, labsRouter, adtNotificationsRouter, cdsRouter, drugsRouter, patientAccountsRouter]) {
         app.use(r);
     }
 

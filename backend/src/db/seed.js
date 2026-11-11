@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import { isProd } from '../config.js';
 import { pool, withTx } from './pool.js';
 import { seedOpsDemo } from './seedOps.js';
+import { seedCdsRules } from './seedCds.js';
 
 const NANDA = [
     ['00146', 'Risk for Falls', 'Vulnerable to increased susceptibility to falling.'],
@@ -40,6 +41,12 @@ async function run() {
         // Modules added after the first seed (appointments, records, staffing, radiology) get their demo data on re-runs.
         const tenantId = (await pool.query('SELECT tenant_id FROM users WHERE lower(email) = lower($1)', [email])).rows[0].tenant_id;
         const added = await withTx((db) => seedOpsDemo(db, tenantId, { password }));
+        try {
+            await seedCdsRules();
+            console.log('[seed] CDS stub teaching rules ensured');
+        } catch (e) {
+            console.warn('[seed] CDS rules skipped (run migrations first):', e.message);
+        }
         console.log(added ? '[seed] already seeded; added demo data for scheduling/records/staffing/radiology' : '[seed] already seeded (use -- --reset to start over)');
         return;
     }
@@ -130,6 +137,7 @@ async function run() {
         await db.query(`INSERT INTO io_records (tenant_id,patient_id,encounter_id,record_type,intake_category,fluid_type,volume_ml,recorded_at,recorded_by_name) VALUES ($1,$2,$3,'Intake','IV','Normal Saline',500, now() - interval '2 hours','Seed')`, [t, pid[0], enc1]);
         await db.query(`INSERT INTO io_records (tenant_id,patient_id,encounter_id,record_type,output_category,volume_ml,recorded_at,recorded_by_name) VALUES ($1,$2,$3,'Output','Urine',300, now() - interval '30 minutes','Seed')`, [t, pid[0], enc1]);
         await seedOpsDemo(db, t, { password });
+        await seedCdsRules(db);
     });
     console.log(`[seed] done. Log in as ${email} with the SEED_ADMIN_PASSWORD from backend/.env (other demo users use the same password).`);
 }

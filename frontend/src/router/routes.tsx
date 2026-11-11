@@ -7,6 +7,9 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 const LoginPage = lazy(() => import('../pages/auth/LoginPage'));
 const ForgotPasswordPage = lazy(() => import('../pages/auth/ForgotPasswordPage'));
 const SetPasswordPage = lazy(() => import('../pages/auth/SetPasswordPage'));
+const PatientSetPasswordPage = lazy(() => import('../pages/patient-access/SetPasswordPage'));
+const PatientLoginPage = lazy(() => import('../pages/patient-access/LoginPage'));
+const PatientAuthorizePage = lazy(() => import('../pages/patient-access/AuthorizePage'));
 const PlatformLoginPage = lazy(() => import('../pages/platform/PlatformLoginPage'));
 const TenantDirectoryPage = lazy(() => import('../pages/platform/TenantDirectoryPage'));
 const TenantProvisioningPage = lazy(() => import('../pages/platform/TenantProvisioningPage'));
@@ -88,6 +91,21 @@ const routes = [
     {
         path: '/set-password',
         element: <SetPasswordPage />,
+        layout: 'blank' as const,
+    },
+    {
+        path: '/patient/set-password',
+        element: <PatientSetPasswordPage />,
+        layout: 'blank' as const,
+    },
+    {
+        path: '/patient/login',
+        element: <PatientLoginPage />,
+        layout: 'blank' as const,
+    },
+    {
+        path: '/patient/authorize',
+        element: <PatientAuthorizePage />,
         layout: 'blank' as const,
     },
     {

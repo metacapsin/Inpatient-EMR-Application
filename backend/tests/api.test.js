@@ -6,6 +6,9 @@ import bcrypt from 'bcryptjs';
 import { createApp } from '../src/app.js';
 import { pool } from '../src/db/pool.js';
 import { boss, startQueue, QUEUES } from '../src/db/queue.js';
+import { seedCdsRules } from '../src/db/seedCds.js';
+import { cdsAlertSchema } from '../src/lib/cds/schemas.js';
+import crypto from 'node:crypto';
 
 let server;
 let base;
@@ -17,6 +20,7 @@ before(async () => {
     server = createApp().listen(0);
     base = `http://127.0.0.1:${server.address().port}`;
     await startQueue();
+    await seedCdsRules();
 });
 
 after(async () => {
@@ -2040,4 +2044,252 @@ test('ADT notifications: recipient directory, A01/A02/A03 log rows with HL7 payl
     assert.match(pv1[45], /^\d{14}$/, 'PV1-45 discharge time');
     assert.equal((await call('GET', `/api/adt-notifications?encounterId=${encounterId}`, { token: (await newTenant('adtnB')).token })).body.data.length, 0);
     assert.equal((await call('DELETE', `/api/notification-recipients/${pcpOther.id}`, { token: tk })).status, 200);
+});
+
+test('CDS #9: drug search, DDI/DA checks, CPOE override, severity suppress, e-Rx sign, uncoded advisory', async () => {
+    const t = await newTenant('cds');
+    const tk = t.token;
+    const md = await addUser(t, 'mdcds', 'physician');
+    const rn = await addUser(t, 'rncds', 'nurse');
+    await call('PUT', '/auth/profile', { token: md.token, body: { npi: '1234567895' } });
+    const { patient, encounterId } = await admitPatient(tk, 'Cds');
+
+    const search = await call('GET', '/api/drugs/search?q=warf', { token: md.token });
+    assert.equal(search.status, 200, JSON.stringify(search.body));
+    assert.ok(search.body.data.some((d) => d.rxnormCode === '11289'));
+
+    const tenantId = t.user.tenant.id;
+    await pool.query(
+        `INSERT INTO medications (tenant_id, patient_id, encounter_id, name, rxnorm_code, source, is_active)
+         VALUES ($1,$2,$3,'Warfarin','11289','inpatient',true)`,
+        [tenantId, patient.id, encounterId],
+    );
+
+    const check = await call('POST', '/api/cds/check', {
+        token: md.token,
+        body: { patientId: patient.id, candidates: [{ name: 'Aspirin', rxnormCode: '1191' }] },
+    });
+    assert.equal(check.status, 200, JSON.stringify(check.body));
+    assert.ok(check.body.data.length >= 1);
+    cdsAlertSchema.array().parse(check.body.data);
+    assert.ok(check.body.data.some((a) => a.severity === 'major'));
+
+    const blocked = await call('POST', '/api/orders', {
+        token: md.token,
+        body: { orderType: 'medication', patientId: patient.id, encounterId, name: 'Aspirin', rxnormCode: '1191' },
+    });
+    assert.equal(blocked.status, 409);
+    assert.equal(blocked.body.code, 'CDS_OVERRIDE_REQUIRED');
+    cdsAlertSchema.array().parse(blocked.body.details.alerts);
+
+    const placed = await call('POST', '/api/orders', {
+        token: md.token,
+        body: {
+            orderType: 'medication',
+            patientId: patient.id,
+            encounterId,
+            name: 'Aspirin',
+            rxnormCode: '1191',
+            cdsOverride: { reason: 'Cardiology approved dual antiplatelet therapy' },
+        },
+    });
+    assert.equal(placed.status, 201, JSON.stringify(placed.body));
+    const ledger = await pool.query(`SELECT outcome FROM cds_alerts WHERE tenant_id = $1 AND patient_id = $2 AND context_type = 'cpoe_order'`, [tenantId, patient.id]);
+    assert.ok(ledger.rows.some((r) => r.outcome === 'overridden'));
+
+    await pool.query(
+        `INSERT INTO patient_allergies (tenant_id, patient_id, allergen, allergy_type, allergy_class, is_active)
+         VALUES ($1,$2,'Penicillin','Drug','penicillins',true)`,
+        [tenantId, patient.id],
+    );
+    const allergyCheck = await call('POST', '/api/cds/check', {
+        token: md.token,
+        body: { patientId: patient.id, candidates: [{ name: 'Amoxicillin', rxnormCode: '723' }] },
+    });
+    assert.ok(allergyCheck.body.data.some((a) => a.severity === 'contraindicated'));
+
+    const rules = await call('GET', '/api/cds/rules', { token: md.token });
+    assert.equal(rules.status, 200);
+    const majorRule = rules.body.data.find((r) => r.rxnormCodeA === '11289' && r.rxnormCodeB === '1191');
+    assert.ok(majorRule);
+    assert.equal((await call('PUT', `/api/cds/severity-overrides/${majorRule.id}`, { token: rn.token, body: { severity: 'suppressed' } })).status, 403);
+    assert.equal((await call('PUT', `/api/cds/severity-overrides/${majorRule.id}`, { token: tk, body: { severity: 'suppressed' } })).status, 201);
+    const suppressed = await call('POST', '/api/cds/check', {
+        token: md.token,
+        body: { patientId: patient.id, candidates: [{ name: 'Aspirin', rxnormCode: '1191' }] },
+    });
+    assert.ok(!suppressed.body.data.some((a) => a.ruleId === majorRule.id));
+
+    const uncoded = await call('POST', '/api/cds/check', {
+        token: md.token,
+        body: { patientId: patient.id, candidates: [{ name: 'Mystery Herb', rxnormCode: null }] },
+    });
+    assert.ok(uncoded.body.data.some((a) => a.severity === 'minor' && /Unmatched/i.test(a.message)));
+    const uncodedOrder = await call('POST', '/api/orders', {
+        token: md.token,
+        body: { orderType: 'medication', patientId: patient.id, encounterId, name: 'Mystery Herb' },
+    });
+    assert.equal(uncodedOrder.status, 201, 'uncoded advisory does not block');
+
+    const rx = (
+        await call('POST', '/api/prescriptions', {
+            token: md.token,
+            body: {
+                patientId: patient.id,
+                encounterId,
+                medicines: [{ name: 'Ibuprofen', rxnormCode: '5640', dose: '400 mg', quantity: 30, refills: 0 }],
+            },
+        })
+    ).body.data;
+    // Ensure warfarin still active for NSAID major
+    const signBlocked = await call('POST', `/api/prescriptions/${rx.id}/sign`, { token: md.token });
+    assert.equal(signBlocked.status, 409);
+    assert.equal(signBlocked.body.code, 'CDS_OVERRIDE_REQUIRED');
+    const signOk = await call('POST', `/api/prescriptions/${rx.id}/sign`, {
+        token: md.token,
+        body: { cdsOverride: { reason: 'Short course NSAID with PPI cover' } },
+    });
+    assert.equal(signOk.status, 200, JSON.stringify(signOk.body));
+    const erxLedger = await pool.query(
+        `SELECT 1 FROM cds_alerts WHERE tenant_id = $1 AND context_type = 'prescription_sign' AND outcome = 'overridden'`,
+        [tenantId],
+    );
+    assert.ok(erxLedger.rowCount >= 1);
+
+    const other = await newTenant('cdsB');
+    assert.equal((await call('GET', `/api/cds/alerts?patientId=${patient.id}`, { token: other.token })).body.data.length, 0);
+});
+
+test('Patient Access #64: portal invite, SMART PKCE, FHIR search, isolation, access log', async () => {
+    const t = await newTenant('pa');
+    const tk = t.token;
+    const { patient } = await admitPatient(tk, 'Pa');
+    await pool.query(`UPDATE patients SET email = $1 WHERE id = $2`, [`patient-${suffix}@test.example`, patient.id]);
+
+    const invite = await call('POST', `/api/patients/${patient.id}/portal-invite`, {
+        token: tk,
+        body: { email: `patient-${suffix}@test.example` },
+    });
+    assert.equal(invite.status, 200, JSON.stringify(invite.body));
+    assert.ok(invite.body.data.inviteToken);
+    const setPw = await call('POST', '/patient-auth/set-password', {
+        body: { token: invite.body.data.inviteToken, newPassword: 'Patient-passw0rd!', confirmPassword: 'Patient-passw0rd!' },
+    });
+    assert.equal(setPw.status, 200, JSON.stringify(setPw.body));
+    const login = await call('POST', '/patient-auth/login', {
+        body: { email: `patient-${suffix}@test.example`, password: 'Patient-passw0rd!' },
+    });
+    assert.equal(login.status, 200, JSON.stringify(login.body));
+    const patientJwt = login.body.data.token;
+
+    const badLogin = await call('POST', '/patient-auth/login', {
+        body: { email: `patient-${suffix}@test.example`, password: 'wrong-password!!' },
+    });
+    assert.equal(badLogin.status, 401);
+
+    const client = await call('POST', '/api/smart-clients', {
+        token: tk,
+        body: {
+            name: 'Test App',
+            redirectUris: ['http://127.0.0.1:9999/cb'],
+            allowedScopes: ['openid', 'fhirUser', 'launch/patient', 'offline_access', 'patient/*.read'],
+            isConfidential: false,
+        },
+    });
+    assert.equal(client.status, 201, JSON.stringify(client.body));
+    const clientId = client.body.data.clientId;
+
+    const verifier = crypto.randomBytes(32).toString('base64url');
+    const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+    const state = 'xyz';
+    const authz = await call(
+        'GET',
+        `/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent('http://127.0.0.1:9999/cb')}&scope=${encodeURIComponent('openid fhirUser launch/patient offline_access patient/*.read')}&state=${state}&code_challenge=${challenge}&code_challenge_method=S256`,
+    );
+    // Express redirect — fetch follows by default; use redirect:manual via raw fetch
+    const authzRes = await fetch(
+        base +
+            `/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent('http://127.0.0.1:9999/cb')}&scope=${encodeURIComponent('openid fhirUser launch/patient offline_access patient/*.read')}&state=${state}&code_challenge=${challenge}&code_challenge_method=S256`,
+        { redirect: 'manual' },
+    );
+    assert.equal(authzRes.status, 302);
+    assert.match(authzRes.headers.get('location') || '', /\/patient\/authorize/);
+
+    const wrongRedirect = await call('GET', `/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent('http://evil.example/cb')}&scope=patient/*.read&state=${state}&code_challenge=${challenge}&code_challenge_method=S256`);
+    assert.ok(wrongRedirect.status >= 400);
+
+    const decision = await call('POST', '/oauth/authorize/decision', {
+        token: patientJwt,
+        body: {
+            allow: true,
+            client_id: clientId,
+            redirect_uri: 'http://127.0.0.1:9999/cb',
+            scope: 'openid fhirUser launch/patient offline_access patient/*.read',
+            state,
+            code_challenge: challenge,
+            code_challenge_method: 'S256',
+        },
+    });
+    assert.equal(decision.status, 200, JSON.stringify(decision.body));
+    const redirectUrl = new URL(decision.body.data.redirectUrl);
+    const code = redirectUrl.searchParams.get('code');
+    assert.ok(code);
+
+    const tokenRes = await call('POST', '/oauth/token', {
+        body: {
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: 'http://127.0.0.1:9999/cb',
+            client_id: clientId,
+            code_verifier: verifier,
+        },
+    });
+    assert.equal(tokenRes.status, 200, JSON.stringify(tokenRes.body));
+    assert.ok(tokenRes.body.access_token);
+    assert.ok(tokenRes.body.refresh_token);
+    const smartToken = tokenRes.body.access_token;
+    const refresh = tokenRes.body.refresh_token;
+
+    const reused = await call('POST', '/oauth/token', {
+        body: {
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: 'http://127.0.0.1:9999/cb',
+            client_id: clientId,
+            code_verifier: verifier,
+        },
+    });
+    assert.ok(reused.status >= 400);
+
+    const meta = await call('GET', '/fhir/metadata', { token: smartToken });
+    assert.equal(meta.status, 200);
+    assert.equal(meta.body.resourceType, 'CapabilityStatement');
+
+    const pt = await call('GET', `/fhir/Patient/${patient.id}`, { token: smartToken });
+    assert.equal(pt.status, 200, JSON.stringify(pt.body));
+    assert.equal(pt.body.resourceType, 'Patient');
+    assert.equal(pt.body.id, patient.id);
+
+    const cond = await call('GET', `/fhir/Condition?patient=${patient.id}`, { token: smartToken });
+    assert.equal(cond.status, 200);
+    assert.equal(cond.body.resourceType, 'Bundle');
+    assert.equal(cond.body.type, 'searchset');
+
+    const otherT = await newTenant('paB');
+    const { patient: otherPatient } = await admitPatient(otherT.token, 'PaX');
+    const cross = await call('GET', `/fhir/Patient/${otherPatient.id}`, { token: smartToken });
+    assert.ok(cross.status === 403 || cross.status === 404);
+
+    const crossSearch = await call('GET', `/fhir/Condition?patient=${otherPatient.id}`, { token: smartToken });
+    assert.equal(crossSearch.status, 403);
+
+    const refreshRes = await call('POST', '/oauth/token', {
+        body: { grant_type: 'refresh_token', refresh_token: refresh, client_id: clientId },
+    });
+    assert.equal(refreshRes.status, 200, JSON.stringify(refreshRes.body));
+
+    await call('POST', '/oauth/revoke', { body: { token: refreshRes.body.refresh_token || refresh, client_id: clientId } });
+    const logs = await pool.query(`SELECT 1 FROM fhir_access_log WHERE tenant_id = $1 AND patient_id = $2`, [t.user.tenant.id, patient.id]);
+    assert.ok(logs.rowCount >= 1);
+    void authz;
 });

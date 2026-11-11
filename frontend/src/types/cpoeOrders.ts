@@ -20,6 +20,8 @@ export type CpoeOrderRow = {
     detail: Record<string, unknown> | null;
 };
 
+export type CdsOverrideInput = { reason: string };
+
 export type MedicationOrderInput = {
     orderType: 'medication';
     name: string;
@@ -27,6 +29,8 @@ export type MedicationOrderInput = {
     route?: string;
     frequency?: string;
     nextScheduledTime?: string;
+    rxnormCode?: string | null;
+    cdsOverride?: CdsOverrideInput;
 };
 
 export type PrnStatOrderInput = {
@@ -39,6 +43,8 @@ export type PrnStatOrderInput = {
     interval?: string;
     maxDose?: string;
     urgencyLevel?: string;
+    rxnormCode?: string | null;
+    cdsOverride?: CdsOverrideInput;
 };
 
 export type LabOrderInput = {

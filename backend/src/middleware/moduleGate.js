@@ -17,6 +17,7 @@ const MODULE_RULES = [
     { module: 'medication', test: (p) => /^\/api\/discharges\/[^/]+\/medications\/?$/.test(p) },
     { module: 'medication', test: (p) => p.startsWith('/api/patients/') && p.includes('/medications') },
     { module: 'medication', test: (p) => /^\/api\/(mar|prn-stat|prescriptions|dispense|discharge)(\/|$)/.test(p) },
+    { module: 'medication', test: (p) => /^\/api\/(cds|drugs)(\/|$)/.test(p) },
 
     { module: 'adt', test: (p) => /^\/api\/(admissions|transfers|discharges)(\/|$)/.test(p) },
     { module: 'adt', test: (p) => /^\/(Wards|Rooms|Beds)(\/|$)/i.test(p) },

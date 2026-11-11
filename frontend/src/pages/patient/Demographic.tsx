@@ -8,6 +8,7 @@ import { format } from 'date-fns';
 import { FaUser, FaCalendarCheck, FaHistory, FaShieldAlt } from 'react-icons/fa';
 import { Pencil } from 'lucide-react';
 import { PatientEligibilityCard } from '../../components/patients/PatientEligibilityCard';
+import { PatientPortalAccessBlock } from '../../components/patient-access/PatientPortalAccessBlock';
 
 interface DemographicData {
   demographics?: any;
@@ -264,6 +265,7 @@ const Demographic: React.FC = () => {
         {activeTab === 'profile' && (
           <div>
             {demographics ? (
+              <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <div>
@@ -365,6 +367,10 @@ const Demographic: React.FC = () => {
                   </div>
                 </div>
               </div>
+                <div className="mt-6">
+                  <PatientPortalAccessBlock patientId={routePatientId || getLegacyPatientId()} defaultEmail={demographics.email || demographics.emailAddress || ''} />
+                </div>
+              </>
             ) : (
               <div className="flex justify-center items-center p-8">
                 <p className="text-gray-600 dark:text-gray-400">No demographic information found</p>
