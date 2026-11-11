@@ -50,7 +50,7 @@ export const label12 = (mins) => {
 const weekdayOf = (iso) => DAYS[new Date(`${iso}T12:00:00Z`).getUTCDay()];
 
 // ------------------------------------------------------------ output mappers
-const APPT_SELECT = `
+export const APPT_SELECT = `
     SELECT a.*, to_char(a.start_date,'MM/DD/YYYY') AS start_date_us, to_char(a.start_time,'HH12:MI AM') AS start_time_12,
            to_char(a.start_date + a.start_time + make_interval(mins => a.duration),'MM/DD/YYYY') AS end_date_us,
            to_char(a.start_date + a.start_time + make_interval(mins => a.duration),'HH12:MI AM') AS end_time_12,
@@ -63,7 +63,7 @@ const APPT_SELECT = `
     LEFT JOIN service_locations sl ON sl.id = a.service_location_id
     LEFT JOIN visit_types vt ON vt.id = a.visit_type_id`;
 
-const apptOut = (a) => ({
+export const apptOut = (a) => ({
     id: a.id,
     _id: a.id,
     appointmentId: a.id,

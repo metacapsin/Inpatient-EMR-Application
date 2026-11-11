@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI } from '../../services/api';
 import { usePatientId } from '../../hooks/usePatientId';
@@ -26,12 +26,30 @@ function getLegacyPatientId(): string {
   return currentUser.patientId || currentUser.rcopiaID || '';
 }
 
+/** Keep only appointments that belong to this patient (guards against stale/mismatched payloads). */
+function appointmentsForPatient(rows: unknown, patientId: string): any[] {
+  if (!Array.isArray(rows)) return [];
+  const pid = patientId.trim();
+  return rows.filter((a) => {
+    const apid = String((a as any)?.patientId ?? (a as any)?.patient_id ?? '').trim();
+    return apid === pid;
+  });
+}
+
 const Demographic: React.FC = () => {
   const [demographicData, setDemographicData] = useState<DemographicData>({});
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
+  const { id: facesheetParamId } = useParams<{ id?: string }>();
   const routePatientId = usePatientId();
+  // Facesheet URL param wins — never fall back to another patient's id from localStorage while chart is open.
+  const patientId =
+    (facesheetParamId?.trim() && decodeURIComponent(facesheetParamId.trim())) ||
+    routePatientId ||
+    (!facesheetParamId ? getLegacyPatientId() : '') ||
+    '';
   const { moduleRootClass } = useFacesheetChartLayout();
+  const fetchGen = useRef(0);
 
   const formatDate = (dateString: string): string => {
     if (!dateString) return '';
@@ -54,15 +72,22 @@ const Demographic: React.FC = () => {
   };
 
   const getPatientDemographics = useCallback(async () => {
-    const patientId = routePatientId || getLegacyPatientId();
     if (!patientId) {
       toast.error('Patient ID is required');
       return;
     }
 
+    const gen = ++fetchGen.current;
     setLoading(true);
+    // Clear previous patient's appointments immediately when switching charts.
+    setDemographicData((prev) => ({
+      ...prev,
+      pastAppointments: [],
+      futureAppointments: [],
+    }));
     try {
       const response = await patientDataAPI.getPatientDemographics(patientId);
+      if (gen !== fetchGen.current) return;
       if (response.data?.data) {
         const data = response.data.data;
         // The backend returns the enriched flat patient (insurance / secondaryInsurance / emergencyContacts
@@ -75,18 +100,19 @@ const Demographic: React.FC = () => {
         setDemographicData({
           demographics: demo,
           additionalInformation: data.additionalInformation || {},
-          pastAppointments: data.pastAppointments || [],
-          futureAppointments: data.futureAppointments || [],
+          pastAppointments: appointmentsForPatient(data.pastAppointments, patientId),
+          futureAppointments: appointmentsForPatient(data.futureAppointments, patientId),
           insuranceDetails: withType(demo.insurance),
           secondaryInsuranceDetails: withType(demo.secondaryInsurance),
         });
       }
     } catch (error: any) {
+      if (gen !== fetchGen.current) return;
       toast.error(error.response?.data?.message || 'Failed to fetch demographic data');
     } finally {
-      setLoading(false);
+      if (gen === fetchGen.current) setLoading(false);
     }
-  }, [routePatientId]);
+  }, [patientId]);
 
   useEffect(() => {
     getPatientDemographics();
@@ -187,9 +213,9 @@ const Demographic: React.FC = () => {
             <li>/</li>
             <li className="text-gray-900 dark:text-white font-medium">Demographic</li>
           </ul>
-          {routePatientId ? (
+          {patientId ? (
             <Link
-              to={`/app/patients/${encodeURIComponent(routePatientId)}/edit`}
+              to={`/app/patients/${encodeURIComponent(patientId)}/edit`}
               className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5"
             >
               <Pencil className="h-3.5 w-3.5" aria-hidden />
@@ -455,12 +481,12 @@ const Demographic: React.FC = () => {
           <div>
             {demographicData.futureAppointments && demographicData.futureAppointments.length > 0 ? (
               <div className="space-y-4">
-                {demographicData.futureAppointments.map((appointment: any, index: number) => (
-                  <div key={index} className="panel p-4">
+                {demographicData.futureAppointments.map((appointment: any) => (
+                  <div key={appointment.appointmentId || appointment.id || `${appointment.startDate}-${appointment.startTime}`} className="panel p-4">
                     <div className="flex items-start gap-4">
                       <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
                         <img
-                          alt="Patient"
+                          alt="Provider"
                           src="https://www.pngarts.com/files/10/Default-Profile-Picture-Download-PNG-Image.png"
                           className="w-full h-full rounded-full object-cover"
                         />
@@ -473,7 +499,7 @@ const Demographic: React.FC = () => {
                           <span className="text-gray-500 dark:text-gray-400 text-sm">{appointment.startTime}</span>
                         </div>
                         <h3 className="mb-1 text-gray-900 dark:text-white">
-                          {appointment.providerName || appointment.patientName}
+                          {appointment.providerName ? `Provider: ${appointment.providerName}` : 'Provider: —'}
                           <span className="text-gray-500 dark:text-gray-400 ms-2">
                             {getStatusMessage(appointment.appointmentStatus, false)}{' '}
                             {appointment.serviceLocationName}
@@ -506,12 +532,12 @@ const Demographic: React.FC = () => {
           <div>
             {demographicData.pastAppointments && demographicData.pastAppointments.length > 0 ? (
               <div className="space-y-4">
-                {demographicData.pastAppointments.map((appointment: any, index: number) => (
-                  <div key={index} className="panel p-4">
+                {demographicData.pastAppointments.map((appointment: any) => (
+                  <div key={appointment.appointmentId || appointment.id || `${appointment.startDate}-${appointment.startTime}`} className="panel p-4">
                     <div className="flex items-start gap-4">
                       <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
                         <img
-                          alt="Patient"
+                          alt="Provider"
                           src="https://www.pngarts.com/files/10/Default-Profile-Picture-Download-PNG-Image.png"
                           className="w-full h-full rounded-full object-cover"
                         />
@@ -524,7 +550,7 @@ const Demographic: React.FC = () => {
                           <span className="text-gray-500 dark:text-gray-400 text-sm">{appointment.startTime}</span>
                         </div>
                         <h3 className="mb-1 text-gray-900 dark:text-white">
-                          {appointment.providerName || appointment.patientName}
+                          {appointment.providerName ? `Provider: ${appointment.providerName}` : 'Provider: —'}
                           <span className="text-gray-500 dark:text-gray-400 ms-2">
                             {getStatusMessage(appointment.appointmentStatus, true)}{' '}
                             {appointment.serviceLocationName}

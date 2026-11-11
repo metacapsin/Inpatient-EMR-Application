@@ -508,6 +508,10 @@ test('appointments: dropdowns, slots, conflicts, CRUD, filters, tenant isolation
     assert.equal(upd.body.data.note, 'moved');
     assert.equal((await call('GET', `/Appointment/getAppointmentById/${appt.id}`, { token: tk })).body.data.providerName, 'docappt User');
     assert.equal((await call('GET', `/Appointment/getAppointmentListByPatientId/${p.id}`, { token: tk })).body.data.length, 1);
+    const demo = (await call('GET', `/Patient/getPatientDemographics/${p.id}`, { token: tk })).body.data;
+    assert.equal(demo.futureAppointments.length, 1);
+    assert.equal(demo.futureAppointments[0].id, appt.id);
+    assert.equal(demo.pastAppointments.length, 0);
 
     const list = (payload) => call('POST', '/Appointment/getAppointmentListPaginated', { token: tk, body: payload });
     const l = (await list({ fromDate: '2099-06-01', toDate: '2099-06-30', page: 1, limit: 10, sortField: 'startDate', sortOrder: 'asc' })).body.data;
@@ -1303,15 +1307,18 @@ test('patient registration: full demographics, both insurances and emergency con
     };
     expectEnriched(p);
 
-    // All three read aliases return the identical enriched shape.
+    // getPatientById / getPatientByID share the same shape; demographics adds appointment arrays.
     const reads = await Promise.all([
         call('GET', `/Patient/getPatientById/${p.id}`, { token: tk }),
         call('GET', `/Patient/getPatientDemographics/${p.id}`, { token: tk }),
         call('GET', `/patient/getPatientByID/${p.id}`, { token: tk }),
     ]);
     for (const r of reads) { assert.equal(r.status, 200); expectEnriched(r.body.data); }
-    assert.deepEqual(reads[0].body.data, reads[1].body.data);
-    assert.deepEqual(reads[1].body.data, reads[2].body.data);
+    assert.deepEqual(reads[0].body.data, reads[2].body.data);
+    assert.deepEqual(reads[1].body.data.pastAppointments, []);
+    assert.deepEqual(reads[1].body.data.futureAppointments, []);
+    const { pastAppointments, futureAppointments, ...demoPatient } = reads[1].body.data;
+    assert.deepEqual(demoPatient, reads[0].body.data);
 
     // Paginated list inherits the same fields.
     const list = await call('GET', '/Patient/getAllPatientListPaginated?page=1&limit=10', { token: tk });

@@ -6,6 +6,7 @@ import { requireRole } from '../middleware/auth.js';
 import { boss, QUEUES } from '../db/queue.js';
 import { runForPatient, runInline } from '../lib/eligibility.js';
 import { isEnabled as stediEnabled } from '../lib/stedi.js';
+import { APPT_SELECT, apptOut } from './appointments.js';
 
 export const patientsRouter = Router();
 
@@ -257,8 +258,39 @@ async function getOne(req, res) {
     if (!r.rowCount) throw notFound('Patient not found');
     ok(res, patientOut(r.rows[0]));
 }
+
+/** Same patient payload as getOne, plus past/future appointments for the Demographic tabs. */
+async function getDemographics(req, res) {
+    const r = await query(`${PATIENT_SELECT} WHERE p.id = $1 AND p.tenant_id = $2`, [req.params.id, req.user.tenantId]);
+    if (!r.rowCount) throw notFound('Patient not found');
+    const params = [req.user.tenantId, req.params.id];
+    const [future, past] = await Promise.all([
+        query(
+            `${APPT_SELECT}
+             WHERE a.tenant_id = $1 AND a.patient_id = $2
+               AND (a.start_date + a.start_time) >= now()
+             ORDER BY a.start_date ASC, a.start_time ASC`,
+            params,
+        ),
+        query(
+            `${APPT_SELECT}
+             WHERE a.tenant_id = $1 AND a.patient_id = $2
+               AND (a.start_date + a.start_time) < now()
+             ORDER BY a.start_date DESC, a.start_time DESC`,
+            params,
+        ),
+    ]);
+    const pid = req.params.id;
+    const onlyThisPatient = (rows) => rows.map(apptOut).filter((a) => a.patientId === pid);
+    ok(res, {
+        ...patientOut(r.rows[0]),
+        pastAppointments: onlyThisPatient(past.rows),
+        futureAppointments: onlyThisPatient(future.rows),
+    });
+}
+
 patientsRouter.get('/Patient/getPatientById/:id', h(getOne));
-patientsRouter.get('/Patient/getPatientDemographics/:id', h(getOne));
+patientsRouter.get('/Patient/getPatientDemographics/:id', h(getDemographics));
 patientsRouter.get('/patient/getPatientByID/:id', h(getOne));
 
 /**
