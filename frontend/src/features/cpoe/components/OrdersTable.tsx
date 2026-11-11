@@ -17,7 +17,7 @@ const TH_CLASS =
 
 const TD_CLASS = 'px-3 py-2 text-xs font-medium text-gray-800 dark:text-gray-200';
 
-function summarize(order: CpoeOrderRow): string {
+export function summarizeOrder(order: CpoeOrderRow): string {
     const d = order.detail ?? {};
     switch (order.orderType) {
         case 'medication':
@@ -108,7 +108,7 @@ export function OrdersTable({ orderType, orders, loading, busyId, onStatusChange
                     {orders.map((o) => (
                         <tr key={o.id} className="hover:bg-gray-50/70 dark:hover:bg-white/[0.03]">
                             <td className={`${TD_CLASS} max-w-[280px]`}>
-                                <span className="line-clamp-2">{summarize(o)}</span>
+                                <span className="line-clamp-2">{summarizeOrder(o)}</span>
                             </td>
                             <td className={`${TD_CLASS} whitespace-nowrap text-gray-600 dark:text-gray-400`}>
                                 {detailExtra(o)}

@@ -9,7 +9,7 @@ import { selectAdtEncounter } from '../../store/adtEncounterSlice';
 import { AppModal } from '../../components/shared/AppModal';
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import { NewOrderForm } from '../../features/cpoe/components/NewOrderForm';
-import { OrdersTable } from '../../features/cpoe/components/OrdersTable';
+import { OrdersTable, summarizeOrder } from '../../features/cpoe/components/OrdersTable';
 import { listEncounterOrders, updateOrderStatus } from '../../services/cpoeOrders.service';
 import type { CpoeOrderRow, CpoeOrderType } from '../../types/cpoeOrders';
 
@@ -186,7 +186,7 @@ export default function UnifiedOrders() {
                         ? 'Cancel this order in the chart workflow? This cannot be undone from this screen.'
                         : 'Discontinue this active order? The order will move out of the active list.'
                 }
-                detail={statusConfirm?.order.name}
+                detail={statusConfirm ? summarizeOrder(statusConfirm.order) : undefined}
                 confirmLabel={statusConfirm?.status === 'cancelled' ? 'Cancel order' : 'Discontinue'}
                 variant={statusConfirm?.status === 'cancelled' ? 'danger' : 'warning'}
                 busy={Boolean(statusConfirm && busyId === statusConfirm.order.id)}
