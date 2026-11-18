@@ -486,11 +486,21 @@ async function writeNested(client, tenantId, patientId, b) {
 
 const clinicalWriters = requireRole('physician', 'nurse', 'staff');
 
-/** Next sequential MRN for a tenant; the upsert takes a row lock so concurrent callers serialize. */
+/**
+ * Next sequential MRN for a tenant; the upsert takes a row lock so concurrent callers serialize.
+ * The counter is self-healing: it never hands out a number at or below the highest existing `MRN<digits>`
+ * for the tenant, so patients inserted outside this endpoint (seed scripts, imports, manual MRNs, a
+ * counter row that is missing or stale) can't make it re-issue an allocated MRN. Existing MRNs are never touched.
+ */
 async function nextMrn(client, tenantId) {
     const r = await client.query(
-        `INSERT INTO mrn_counters (tenant_id, last_value) VALUES ($1, 1)
-         ON CONFLICT (tenant_id) DO UPDATE SET last_value = mrn_counters.last_value + 1
+        `INSERT INTO mrn_counters (tenant_id, last_value)
+         VALUES ($1, 1 + COALESCE((SELECT max(substring(mrn FROM '^MRN([0-9]{1,9})$')::int)
+                                     FROM patients WHERE tenant_id = $1), 0))
+         ON CONFLICT (tenant_id) DO UPDATE SET last_value = GREATEST(
+             mrn_counters.last_value + 1,
+             1 + COALESCE((SELECT max(substring(mrn FROM '^MRN([0-9]{1,9})$')::int)
+                             FROM patients WHERE tenant_id = $1), 0))
          RETURNING last_value`,
         [tenantId],
     );

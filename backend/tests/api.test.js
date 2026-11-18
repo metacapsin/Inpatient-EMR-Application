@@ -1439,6 +1439,42 @@ test('tenant profile (Practice Information): GET/PUT round-trip, NPI Luhn checks
     assert.notEqual(otherGet.body.data.name, 'Acme Health Clinic');
 });
 
+test('MRN allocation: unseeded/stale counter, existing MRNs kept, per-tenant, concurrent', async () => {
+    const a = await newTenant('mrnA');
+    const b = await newTenant('mrnB');
+    const aId = a.user.tenant.id;
+    // Simulate the local-DB bug: patients inserted directly (like seed.js) with NO mrn_counters row.
+    await pool.query('DELETE FROM mrn_counters WHERE tenant_id = $1', [aId]);
+    for (let i = 1; i <= 5; i++) {
+        await pool.query(`INSERT INTO patients (tenant_id, mrn, first_name, last_name) VALUES ($1,$2,'Seed',$3)`, [aId, `MRN${String(i).padStart(6, '0')}`, `P${i}`]);
+    }
+    // Also a stale (too-low) counter must self-heal.
+    await pool.query('INSERT INTO mrn_counters (tenant_id, last_value) VALUES ($1, 2) ON CONFLICT (tenant_id) DO UPDATE SET last_value = 2', [aId]);
+    const before = (await pool.query('SELECT id, mrn FROM patients WHERE tenant_id = $1 ORDER BY mrn', [aId])).rows;
+
+    // First new patient gets MRN000006, never a duplicate.
+    const first = await call('POST', '/Patient/createPatient', { token: a.token, body: { firstName: 'New', lastName: 'One' } });
+    assert.equal(first.status, 201, JSON.stringify(first.body));
+    assert.equal(first.body.data.mrn, 'MRN000006');
+
+    // Concurrent creates in tenant A and tenant B at once: all unique within their tenant.
+    const [ra, rb] = await Promise.all([
+        Promise.all(Array.from({ length: 12 }, (_, i) => call('POST', '/Patient/createPatient', { token: a.token, body: { firstName: `CA${i}`, lastName: 'Race' } }))),
+        Promise.all(Array.from({ length: 12 }, (_, i) => call('POST', '/Patient/createPatient', { token: b.token, body: { firstName: `CB${i}`, lastName: 'Race' } }))),
+    ]);
+    for (const r of [...ra, ...rb]) assert.equal(r.status, 201, JSON.stringify(r.body));
+    const ma = ra.map((r) => r.body.data.mrn);
+    const mb = rb.map((r) => r.body.data.mrn);
+    assert.equal(new Set(ma).size, 12);
+    assert.equal(new Set(mb).size, 12);
+    assert.ok(ma.every((m) => !before.some((p) => p.mrn === m)), 'tenant A reissued an existing MRN');
+    assert.equal(mb.sort()[0], 'MRN000001'); // tenant B numbering is independent of tenant A
+
+    // Existing patients keep their original MRNs.
+    const after = (await pool.query('SELECT id, mrn FROM patients WHERE tenant_id = $1 AND id = ANY($2)', [aId, before.map((p) => p.id)])).rows;
+    assert.deepEqual(after.sort((x, y) => x.mrn.localeCompare(y.mrn)), before);
+});
+
 test('patient registration follow-ups: race-safe MRNs, duplicate check, profile photo', async () => {
     const t = await newTenant('reg2');
     const tk = t.token;
