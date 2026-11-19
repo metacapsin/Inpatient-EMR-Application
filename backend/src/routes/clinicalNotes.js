@@ -3,7 +3,7 @@ import { z } from 'zod';
 import crypto from 'node:crypto';
 import { query } from '../db/pool.js';
 import { ApiError, conflict, forbidden, h, notFound, parse } from '../lib/http.js';
-import { requireRole } from '../middleware/auth.js';
+import { requireRole, requireClinicalRole } from '../middleware/auth.js';
 
 /**
  * Physician documentation — the backend for the Clinical Workspace "physician" tab.
@@ -21,10 +21,20 @@ const NOTE_TYPES = ['hp', 'progress', 'discharge_summary', 'consult'];
 /** Note types only a physician may author (admin always passes requireRole). */
 const PHYSICIAN_ONLY_TYPES = new Set(['hp', 'consult', 'discharge_summary']);
 const authors = requireRole('physician', 'nurse');
-const signers = requireRole('physician');
+// SEC-17: signing (and adding an addendum to a signed note) is a clinical attestation — unlike every
+// other requireRole() gate in this file, an admin account cannot do this on someone else's behalf.
+const signers = requireClinicalRole('physician');
+// A nurse may sign a 'progress' note she authored herself (co-sign item below); every other note
+// type, and any note authored by someone else, still requires a physician. Still excludes admin.
+const noteSigners = requireClinicalRole('physician', 'nurse');
+// Any authenticated user with the right role may read — staff included, matching this app's other
+// read-gated clinical endpoints (labs.js, records.js, patientData.js all use the same three roles).
+const readers = requireRole('physician', 'nurse', 'staff');
 const H_P_DEADLINE_HOURS = 24; // 42 CFR 482.24(c)(4): H&P in the record within 24h of admission
 
 const success = (res, message, data) => res.json({ status: 'success', message, data });
+// BUG-16a: creation is a resource-creation response — 201, not the generic 200 `success()` sends.
+const createdSuccess = (res, message, data) => res.status(201).json({ status: 'success', message, data });
 const checksum = (obj) => crypto.createHash('sha256').update(JSON.stringify(obj ?? {})).digest('hex').slice(0, 24);
 const iso = (d) => (d instanceof Date ? d.toISOString() : d ?? null);
 
@@ -60,17 +70,26 @@ function noteOut(n) {
         createdAt: iso(n.created_at),
         updatedAt: iso(n.updated_at),
         cmsCompliance: cmsCompliance(n, n.admitted_at),
+        // BUG-16b: a note touched while its encounter is discharged is a legitimate late entry, not a
+        // blocked action — surfaced here instead of hidden, never silently allowed to look ordinary.
+        isLateEntry: n.encounter_status === 'discharged',
+        requiresCosign: n.requires_cosign ?? false,
+        cosignedBy: n.cosigned_by ?? null,
+        cosignedByName: n.cosigned_by_name ?? null,
+        cosignedAt: iso(n.cosigned_at),
     };
 }
 
 const NOTE_SELECT = `
-    SELECT n.*, e.admitted_at,
+    SELECT n.*, e.admitted_at, e.status AS encounter_status,
            cu.first_name || ' ' || cu.last_name AS created_by_name,
-           su.first_name || ' ' || su.last_name AS signed_by_name
+           su.first_name || ' ' || su.last_name AS signed_by_name,
+           ku.first_name || ' ' || ku.last_name AS cosigned_by_name
     FROM clinical_notes n
     JOIN encounters e ON e.id = n.encounter_id
     LEFT JOIN users cu ON cu.id = n.created_by
-    LEFT JOIN users su ON su.id = n.signed_by`;
+    LEFT JOIN users su ON su.id = n.signed_by
+    LEFT JOIN users ku ON ku.id = n.cosigned_by`;
 
 async function loadNote(req, id) {
     const r = await query(`${NOTE_SELECT} WHERE n.id = $1 AND n.tenant_id = $2`, [id, req.user.tenantId]);
@@ -78,12 +97,16 @@ async function loadNote(req, id) {
     return r.rows[0];
 }
 
-/** Mirrors the reference `requireActiveEncounter`: the encounter must belong to the patient and not be discharged. */
-async function requireActiveEncounter(req, encounterId, patientId) {
+/**
+ * BUG-16b: the encounter must belong to the patient, but a discharged encounter is no longer a hard
+ * block — finishing or amending documentation shortly after discharge is normal, expected clinical
+ * practice ("late entry"), not an error condition. Callers surface this via `noteOut()`'s
+ * `isLateEntry` flag instead of refusing the request outright.
+ */
+async function requireEncounterForPatient(req, encounterId, patientId) {
     const e = (await query('SELECT * FROM encounters WHERE id = $1 AND tenant_id = $2', [encounterId, req.user.tenantId])).rows[0];
     if (!e) throw notFound('Encounter not found');
     if (e.patient_id !== patientId) throw new ApiError(400, 'Encounter does not belong to this patient');
-    if (e.status === 'discharged') throw conflict('Encounter is discharged; notes can no longer be added or changed');
     return e;
 }
 
@@ -104,19 +127,22 @@ clinicalNotesRouter.post(`${BASE}/notes/create`, authors, h(async (req, res) => 
     if (PHYSICIAN_ONLY_TYPES.has(b.type) && !['physician', 'admin'].includes(req.user.role)) {
         throw forbidden('Only a physician can author this note type');
     }
-    await requireActiveEncounter(req, b.encounterId, b.patientId);
-    const version = [{ version: 1, checksum: checksum(b.content), editedBy: req.user.id, editedAt: new Date().toISOString() }];
+    await requireEncounterForPatient(req, b.encounterId, b.patientId);
+    // Retained note versions: each history entry carries the actual content/richText/title snapshot
+    // at that point, not just a checksum — a checksum alone proves something changed but can't show
+    // what the note actually said before.
+    const version = [{ version: 1, content: b.content, richText: b.richText ?? null, title: b.title ?? null, checksum: checksum(b.content), editedBy: req.user.id, editedAt: new Date().toISOString() }];
     const r = await query(
         `INSERT INTO clinical_notes (tenant_id, patient_id, encounter_id, note_type, title, content, rich_text, version_history, linked_order_ids, created_by)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
         [req.user.tenantId, b.patientId, b.encounterId, b.type, b.title ?? null, JSON.stringify(b.content), b.richText ?? null,
          JSON.stringify(version), JSON.stringify(b.linkedOrderIds ?? []), req.user.id],
     );
-    success(res, 'Note created', noteOut(await loadNote(req, r.rows[0].id)));
+    createdSuccess(res, 'Note created', noteOut(await loadNote(req, r.rows[0].id)));
 }));
 
 // GET /notes/patient/:patientId?encounterId=&limit=&skip=
-clinicalNotesRouter.get(`${BASE}/notes/patient/:patientId`, h(async (req, res) => {
+clinicalNotesRouter.get(`${BASE}/notes/patient/:patientId`, readers, h(async (req, res) => {
     const q = parse(z.object({ encounterId: z.string().optional(), limit: z.coerce.number().int().min(1).max(200).default(50), skip: z.coerce.number().int().min(0).default(0) }), req.query);
     const params = [req.user.tenantId, req.params.patientId];
     let where = 'n.tenant_id = $1 AND n.patient_id = $2';
@@ -127,7 +153,7 @@ clinicalNotesRouter.get(`${BASE}/notes/patient/:patientId`, h(async (req, res) =
 }));
 
 // GET /notes/:id
-clinicalNotesRouter.get(`${BASE}/notes/:id`, h(async (req, res) => {
+clinicalNotesRouter.get(`${BASE}/notes/:id`, readers, h(async (req, res) => {
     success(res, '', noteOut(await loadNote(req, req.params.id)));
 }));
 
@@ -141,27 +167,59 @@ clinicalNotesRouter.put(`${BASE}/notes/update/:id`, authors, h(async (req, res) 
     }), req.body);
     const existing = await loadNote(req, req.params.id);
     if (existing.status === 'signed') throw conflict('Signed note cannot be modified; use addendum');
-    await requireActiveEncounter(req, existing.encounter_id, existing.patient_id);
+    await requireEncounterForPatient(req, existing.encounter_id, existing.patient_id);
     const nextContent = b.content ? { ...(existing.content ?? {}), ...b.content } : existing.content ?? {};
-    const history = [...(existing.version_history ?? []), { version: (existing.version_history?.length ?? 0) + 1, checksum: checksum(nextContent), editedBy: req.user.id, editedAt: new Date().toISOString() }];
+    const nextRichText = b.richText !== undefined ? b.richText : existing.rich_text;
+    const nextTitle = b.title !== undefined ? b.title : existing.title;
+    const history = [...(existing.version_history ?? []), {
+        version: (existing.version_history?.length ?? 0) + 1,
+        content: nextContent,
+        richText: nextRichText,
+        title: nextTitle,
+        checksum: checksum(nextContent),
+        editedBy: req.user.id,
+        editedAt: new Date().toISOString(),
+    }];
     await query(
         `UPDATE clinical_notes SET content = $1, rich_text = $2, title = $3, version_history = $4, linked_order_ids = $5, updated_at = now() WHERE id = $6`,
-        [JSON.stringify(nextContent), b.richText !== undefined ? b.richText : existing.rich_text, b.title !== undefined ? b.title : existing.title,
+        [JSON.stringify(nextContent), nextRichText, nextTitle,
          JSON.stringify(history), JSON.stringify(b.linkedOrderIds ?? existing.linked_order_ids ?? []), existing.id],
     );
     success(res, 'Note updated', noteOut(await loadNote(req, existing.id)));
 }));
 
 // POST /notes/sign/:id — draft → signed; response carries the CMS 24h H&P compliance flag.
-clinicalNotesRouter.post(`${BASE}/notes/sign/:id`, signers, h(async (req, res) => {
+// Co-sign: a nurse may sign only her own 'progress' note, and doing so requires a physician
+// co-signature before the record is complete — a nurse's own signature alone is not sufficient
+// legal authentication of the medical record.
+clinicalNotesRouter.post(`${BASE}/notes/sign/:id`, noteSigners, h(async (req, res) => {
     const existing = await loadNote(req, req.params.id);
     if (existing.status === 'signed') throw conflict('Note already signed');
-    await requireActiveEncounter(req, existing.encounter_id, existing.patient_id);
-    await query(`UPDATE clinical_notes SET status = 'signed', signed_by = $1, signed_at = now(), updated_at = now() WHERE id = $2`, [req.user.id, existing.id]);
+    if (req.user.role === 'nurse') {
+        if (existing.created_by !== req.user.id) throw forbidden('A nurse may only sign a note she authored herself');
+        if (existing.note_type !== 'progress') throw forbidden('Only a physician can sign this note type');
+    }
+    await requireEncounterForPatient(req, existing.encounter_id, existing.patient_id);
+    const requiresCosign = req.user.role === 'nurse';
+    await query(
+        `UPDATE clinical_notes SET status = 'signed', signed_by = $1, signed_at = now(), requires_cosign = $2, updated_at = now() WHERE id = $3`,
+        [req.user.id, requiresCosign, existing.id],
+    );
     const signed = await loadNote(req, existing.id);
     const out = noteOut(signed);
     const late = out.cmsCompliance?.isLate;
-    success(res, late ? 'Note signed (H&P signed after the 24-hour CMS window)' : 'Note signed', out);
+    success(res, late ? 'Note signed (H&P signed after the 24-hour CMS window)' : requiresCosign ? 'Note signed (physician co-signature required)' : 'Note signed', out);
+}));
+
+// POST /notes/cosign/:id — physician countersignature on a nurse-signed note; one-time, append-only.
+clinicalNotesRouter.post(`${BASE}/notes/cosign/:id`, signers, h(async (req, res) => {
+    const existing = await loadNote(req, req.params.id);
+    if (existing.status !== 'signed') throw new ApiError(400, 'Only a signed note can be co-signed');
+    if (!existing.requires_cosign) throw new ApiError(400, 'This note does not require a co-signature');
+    if (existing.cosigned_by) throw conflict('Note is already co-signed');
+    await requireEncounterForPatient(req, existing.encounter_id, existing.patient_id);
+    await query(`UPDATE clinical_notes SET cosigned_by = $1, cosigned_at = now(), updated_at = now() WHERE id = $2`, [req.user.id, existing.id]);
+    success(res, 'Note co-signed', noteOut(await loadNote(req, existing.id)));
 }));
 
 // POST /notes/addendum/:id — signed notes only; append-only.
@@ -169,8 +227,34 @@ clinicalNotesRouter.post(`${BASE}/notes/addendum/:id`, signers, h(async (req, re
     const b = parse(z.object({ text: z.string().trim().min(1).max(20000) }), req.body);
     const existing = await loadNote(req, req.params.id);
     if (existing.status !== 'signed') throw new ApiError(400, 'Addendum only allowed on signed notes');
-    await requireActiveEncounter(req, existing.encounter_id, existing.patient_id);
+    await requireEncounterForPatient(req, existing.encounter_id, existing.patient_id);
     const addenda = [...(existing.addenda ?? []), { text: b.text, createdBy: req.user.id, createdByName: req.user.name ?? null, createdAt: new Date().toISOString() }];
     await query(`UPDATE clinical_notes SET addenda = $1, updated_at = now() WHERE id = $2`, [JSON.stringify(addenda), existing.id]);
     success(res, 'Addendum saved', noteOut(await loadNote(req, existing.id)));
+}));
+
+// GET /hp-worklist — active encounters admitted over the 24h CMS window with no signed H&P yet.
+clinicalNotesRouter.get(`${BASE}/hp-worklist`, readers, h(async (req, res) => {
+    const r = await query(
+        `SELECT e.id AS encounter_id, e.patient_id, e.admitted_at,
+                p.first_name || ' ' || p.last_name AS patient_name, p.mrn
+         FROM encounters e
+         JOIN patients p ON p.id = e.patient_id
+         WHERE e.tenant_id = $1 AND e.status <> 'discharged'
+           AND e.admitted_at < now() - interval '${H_P_DEADLINE_HOURS} hours'
+           AND NOT EXISTS (
+               SELECT 1 FROM clinical_notes n
+               WHERE n.encounter_id = e.id AND n.note_type = 'hp' AND n.status = 'signed'
+           )
+         ORDER BY e.admitted_at ASC`,
+        [req.user.tenantId],
+    );
+    success(res, '', r.rows.map((e) => ({
+        encounterId: e.encounter_id,
+        patientId: e.patient_id,
+        patientName: e.patient_name,
+        mrn: e.mrn,
+        admittedAt: iso(e.admitted_at),
+        hoursOverdue: Math.floor((Date.now() - new Date(e.admitted_at).getTime()) / 3600_000) - H_P_DEADLINE_HOURS,
+    })));
 }));

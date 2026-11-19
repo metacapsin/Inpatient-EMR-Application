@@ -1,5 +1,5 @@
-/** When not "false", live staffing uses in-memory mock with API fallback. */
-export const USE_STAFFING_MOCK = import.meta.env.VITE_STAFFING_API_MOCK !== 'false';
+/** Opt-in in-memory mock (VITE_STAFFING_API_MOCK=true). Default: real backend. */
+export const USE_STAFFING_MOCK = import.meta.env.VITE_STAFFING_API_MOCK === 'true';
 
 export const STAFFING_API_TIMEOUT_MS = 4000;
 

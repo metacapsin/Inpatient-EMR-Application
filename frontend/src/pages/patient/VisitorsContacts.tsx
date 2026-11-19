@@ -880,7 +880,7 @@ const paginatedContacts = filteredContacts.slice(
         <input
           type="text"
           className="form-input pl-10 w-full"
-          placeholder="Search here"
+          aria-label="Search family contacts" placeholder="Search here"
           value={contactSearch}
           onChange={(e) => setContactSearch(e.target.value)}
         />

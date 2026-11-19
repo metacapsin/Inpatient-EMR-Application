@@ -27,6 +27,8 @@ export interface LabResultRow {
     acknowledgedBy: string | null;
     acknowledgedByName: string | null;
     acknowledgedAt: string | null;
+    readBackValue: string;
+    escalatedAt: string | null;
     comment: string;
     /** Only on the critical worklist */
     patientName?: string;
@@ -86,9 +88,9 @@ export async function listCriticalResults(): Promise<LabResultRow[]> {
     return list(unwrap(data));
 }
 
-export async function acknowledgeResult(resultId: string): Promise<ServiceResult<LabResultRow>> {
+export async function acknowledgeResult(resultId: string, readBackValue: string): Promise<ServiceResult<LabResultRow>> {
     try {
-        const { data } = await api.post(`/lab-results/${encodeURIComponent(resultId)}/acknowledge`, {});
+        const { data } = await api.post(`/lab-results/${encodeURIComponent(resultId)}/acknowledge`, { readBackValue });
         return { ok: true, data: unwrap(data) };
     } catch (e) {
         return { ok: false, message: getApiErrorMessage(e, 'Could not acknowledge result') };

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { DemoDataBanner } from '../../../components/shared/DemoDataBanner';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
@@ -225,6 +226,7 @@ export function PriorAuthModule({ patientId }: Props) {
 
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+            <DemoDataBanner feature="Prior authorization" reason="no-backend" />
             {summary ? (
                 <section>
                     <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:text-gray-500">

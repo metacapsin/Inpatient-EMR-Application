@@ -41,7 +41,9 @@ const GENDER_OPTIONS = [
     { value: 'F', label: 'Female' },
 ];
 
-const AGE_RANGE_URL_VALUES = ['0-18', '19-64', '65+'] as const;
+// BUG-06: '19-35' was missing here even though AGE_OPTIONS below offers it — selecting it got
+// silently coerced back to 'all' on the very next render.
+const AGE_RANGE_URL_VALUES = ['0-18', '19-35', '19-64', '65+'] as const;
 
 const AGE_OPTIONS = [
     { value: 'all', label: 'All ages' },
@@ -97,12 +99,7 @@ function readListQuery(sp: URLSearchParams): ListQueryState {
         recent: sp.get('recent') || 'all',
         startDate: sp.get('startDate') || sp.get('fromDate') || '',
         endDate: sp.get('endDate') || sp.get('toDate') || '',
-        sortBy: (() => {
-            const parsed = parsePatientListSortField(sp.get('sortBy'));
-            // `patient` previously mapped to API `fullName`; both now sort by `createdOn` — align URL state with the Created Date column.
-            if (parsed === 'patient') return 'createdDate';
-            return parsed ?? 'createdDate';
-        })(),
+        sortBy: parsePatientListSortField(sp.get('sortBy')) ?? 'createdDate',
         // sortOrder: sp.get('sortOrder') === 'desc' ? 'desc' : 'asc',
         sortOrder: sp.get('sortOrder') === 'asc' ? 'asc' : 'desc',
         search: sp.get('search') || '',

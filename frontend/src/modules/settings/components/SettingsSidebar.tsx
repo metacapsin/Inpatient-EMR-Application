@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSelector } from 'react-redux';
 import { Search } from 'lucide-react';
 import {
     SETTINGS_NAV_ITEMS,
@@ -10,6 +11,8 @@ import {
     settingsSidebarClass,
     settingsSidebarLabelClass,
 } from '../../../styles/settingsPageClasses';
+import { hasRole } from '../../../components/auth/RoleGuard';
+import type { IRootState } from '../../../store';
 
 interface SettingsSidebarProps {
     activeId: SettingsNavId;
@@ -18,16 +21,16 @@ interface SettingsSidebarProps {
 
 export function SettingsSidebar({ activeId, onNavigate }: SettingsSidebarProps) {
     const [search, setSearch] = useState('');
+    const role = useSelector((state: IRootState) => state.auth.role);
 
     const filteredItems = useMemo(() => {
         const q = search.trim().toLowerCase();
-        if (!q) return SETTINGS_NAV_ITEMS;
-        return SETTINGS_NAV_ITEMS.filter(
-            (item) =>
-                item.label.toLowerCase().includes(q) ||
-                item.description.toLowerCase().includes(q)
-        );
-    }, [search]);
+        return SETTINGS_NAV_ITEMS.filter((item) => {
+            if (item.roles && !hasRole(role, item.roles)) return false;
+            if (!q) return true;
+            return item.label.toLowerCase().includes(q) || item.description.toLowerCase().includes(q);
+        });
+    }, [search, role]);
 
     return (
         <aside className={settingsSidebarClass} aria-label="Settings navigation">

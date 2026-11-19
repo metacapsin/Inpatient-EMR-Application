@@ -18,7 +18,7 @@ const ONBOARDING_STYLES: Record<Tenant['onboardingStatus'], string> = {
   complete: 'text-emerald-600',
 };
 
-const MODULE_OPTIONS = ['adt', 'patients', 'medication', 'billing', 'staffing'];
+const MODULE_OPTIONS = ['adt', 'patients', 'medication', 'billing', 'staffing', 'ai'];
 
 const TenantDirectoryPage = () => {
   const [tenants, setTenants] = useState<Tenant[]>([]);

@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { DemoDataBanner } from '../../components/shared/DemoDataBanner';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { QualityMeasuresHeader } from '../../components/quality/QualityMeasuresHeader';
@@ -59,14 +60,18 @@ export default function QualityMeasuresPage() {
 
     if (isError || !data) {
         return (
-            <div className="rounded-lg border border-emr-danger/30 bg-emr-danger/5 px-3 py-4 text-xs text-emr-danger dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
-                Unable to load quality measures dashboard. Please refresh or try another unit.
+            <div>
+                <DemoDataBanner feature="Quality measures" reason="no-backend" />
+                <div className="rounded-lg border border-emr-danger/30 bg-emr-danger/5 px-3 py-4 text-xs text-emr-danger dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
+                    Unable to load quality measures dashboard. Please refresh or try another unit.
+                </div>
             </div>
         );
     }
 
     return (
         <div className={qmShellClass}>
+            <DemoDataBanner feature="Quality measures" reason="no-backend" />
             <QualityMeasuresHeader
                 unitName={data.unitName}
                 lastEvaluatedAt={data.lastEvaluatedAt}

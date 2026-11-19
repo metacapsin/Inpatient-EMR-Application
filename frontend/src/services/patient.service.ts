@@ -481,7 +481,9 @@ export function parsePatientListSortField(value: string | null | undefined): Pat
 /** Maps UI sort keys to API `sortField` names (Patient record fields). */
 function patientListSortFieldToApi(field: PatientListSortField | undefined): string {
     const map: Record<PatientListSortField, string> = {
-        patient: 'createdOn',
+        // BUG-06: this used to map to 'createdOn' (the backend has always supported a real name sort
+        // via its 'fullName' SORTS key — nothing stopped wiring it up correctly).
+        patient: 'fullName',
         mrn: 'mrn',
         dob: 'dOB',
         gender: 'sex',
@@ -594,6 +596,8 @@ export interface PatientInsuranceInput {
     guarantorSubscriberId?: string;
 }
 
+export type GuardianLegalRole = 'next_of_kin' | 'legal_guardian' | 'power_of_attorney' | 'healthcare_proxy';
+
 export interface PatientEmergencyContactInput {
     relationshipToPatient?: string;
     contactName?: string;
@@ -602,15 +606,22 @@ export interface PatientEmergencyContactInput {
     emergencyCity?: string;
     emergencyState?: string;
     emergencyZipCode?: string;
+    /** Distinct from relationshipToPatient (free text): a legal role, from a fixed code set. */
+    isGuardian?: boolean;
+    legalRole?: GuardianLegalRole | '';
 }
 
 export interface PatientRegistrationPayload {
     mrn?: string;
     prefix?: string;
-    firstName: string;
+    // Required for 'standard' registration (enforced server-side) — optional here only so the
+    // unknown-patient path can omit them and let the server fill in a placeholder.
+    firstName?: string;
     middleName?: string;
-    lastName: string;
+    lastName?: string;
     suffix?: string;
+    /** 'standard' (default) requires dOB/sex server-side; 'unknown' is the Jane/John Doe path. */
+    registrationType?: 'standard' | 'unknown';
     dOB?: string;
     sex?: string;
     maritalStatus?: string;
@@ -633,8 +644,10 @@ export interface PatientRegistrationPayload {
     mailingState?: string;
     mailingZipCode?: string;
     preferredLanguage?: string;
+    /** USCDI/CDC Race & Ethnicity OMB code (see constants/uscdiReference.ts), or '' for unspecified. */
     ethnicity?: string;
-    race?: string;
+    /** Multi-select — OMB allows more than one race category per USCDI/US Core. */
+    race?: string[];
     countryOfBirth?: string;
     advancedHealthCareDirective?: string;
     noticeOfPrivacyPracticesDate?: string;
@@ -645,6 +658,12 @@ export interface PatientRegistrationPayload {
     insurance?: PatientInsuranceInput | null;
     secondaryInsurance?: PatientInsuranceInput | null;
     emergencyContacts?: PatientEmergencyContactInput[] | null;
+    // USCDI v3 demographics — all coded, all optional.
+    genderIdentity?: string;
+    sexAtBirth?: string;
+    sexualOrientation?: string;
+    interpreterNeeded?: boolean;
+    communicationPreference?: string[];
 }
 
 export interface CreatePatientResult {

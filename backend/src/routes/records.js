@@ -4,6 +4,8 @@ import { query } from '../db/pool.js';
 import { badRequest, h, notFound, ok, created, parse } from '../lib/http.js';
 import { requireRole } from '../middleware/auth.js';
 import { assertLabTransition } from './labs.js';
+import { ALLOWED_DOCUMENT_MIME_TYPES, matchesMagicBytes } from '../lib/documentSecurity.js';
+import { resolveLabTestCodes } from '../lib/labCatalog.js';
 
 // Patient record lists: documents, allergies, immunizations, history, lab orders, lab results.
 export const recordsRouter = Router();
@@ -38,19 +40,19 @@ const docOut = (d) => ({
 });
 const DOC_COLS = `id, patient_id, name, document_type, notes, mime_type, document_date, created_at, coalesce(octet_length(content),0) AS size`;
 
-recordsRouter.get('/Patient/getAllDocument/:patientId', h(async (req, res) => {
-    const r = await query(`SELECT ${DOC_COLS} FROM patient_documents WHERE tenant_id = $1 AND patient_id = $2 ORDER BY document_date DESC, created_at DESC`, [req.user.tenantId, req.params.patientId]);
+recordsRouter.get('/Patient/getAllDocument/:patientId', clinical, h(async (req, res) => {
+    const r = await query(`SELECT ${DOC_COLS} FROM patient_documents WHERE tenant_id = $1 AND patient_id = $2 AND deleted_at IS NULL ORDER BY document_date DESC, created_at DESC`, [req.user.tenantId, req.params.patientId]);
     ok(res, r.rows.map(docOut));
 }));
 
-recordsRouter.get('/Patient/getDocumentById/:id', h(async (req, res) => {
-    const r = await query(`SELECT ${DOC_COLS} FROM patient_documents WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenantId]);
+recordsRouter.get('/Patient/getDocumentById/:id', clinical, h(async (req, res) => {
+    const r = await query(`SELECT ${DOC_COLS} FROM patient_documents WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`, [req.params.id, req.user.tenantId]);
     if (!r.rowCount) throw notFound('Document not found');
     ok(res, docOut(r.rows[0]));
 }));
 
-recordsRouter.get('/Patient/downloadDocument/:id', h(async (req, res) => {
-    const r = await query('SELECT name, mime_type, content FROM patient_documents WHERE id = $1 AND tenant_id = $2', [req.params.id, req.user.tenantId]);
+recordsRouter.get('/Patient/downloadDocument/:id', clinical, h(async (req, res) => {
+    const r = await query('SELECT name, mime_type, content FROM patient_documents WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL', [req.params.id, req.user.tenantId]);
     if (!r.rowCount) throw notFound('Document not found');
     if (!r.rows[0].content) throw notFound('This document has no stored file');
     res.set({
@@ -81,9 +83,18 @@ recordsRouter.post('/Patient/uploadDocument', clinical, h(async (req, res) => {
     if (b.contentBase64) {
         const m = /^data:([\w.+-]+\/[\w.+-]+);base64,(.*)$/s.exec(b.contentBase64);
         const raw = m ? m[2] : b.contentBase64;
+        // SEC-18: a data: URL's own mime prefix is what actually ends up stored — resolve it first,
+        // then validate *that* value (not the caller's separate `mimeType` field), so the allowlist
+        // and magic-bytes checks below can't be bypassed by declaring one type and uploading another.
         if (m) mime = m[1];
         if (!/^[A-Za-z0-9+/=\s]+$/.test(raw)) throw badRequest('contentBase64 is not valid base64');
         content = Buffer.from(raw, 'base64');
+        if (!ALLOWED_DOCUMENT_MIME_TYPES.has(mime)) {
+            throw badRequest(`Unsupported document type '${mime}'. Allowed: ${[...ALLOWED_DOCUMENT_MIME_TYPES].join(', ')}`);
+        }
+        if (!matchesMagicBytes(mime, content)) {
+            throw badRequest(`File content doesn't look like a valid ${mime} file`);
+        }
     }
     const r = await query(
         `INSERT INTO patient_documents (tenant_id, patient_id, name, document_type, notes, mime_type, content, document_date, created_by)
@@ -94,8 +105,13 @@ recordsRouter.post('/Patient/uploadDocument', clinical, h(async (req, res) => {
     created(res, docOut(d));
 }));
 
+// SEC-18: soft delete — the row (and its content) stays, just hidden from reads, so a deletion is
+// recoverable and anything that already referenced this document by id doesn't dangle.
 recordsRouter.delete('/Patient/deleteDocumentById/:id', clinical, h(async (req, res) => {
-    const r = await query('DELETE FROM patient_documents WHERE id = $1 AND tenant_id = $2', [req.params.id, req.user.tenantId]);
+    const r = await query(
+        `UPDATE patient_documents SET deleted_at = now(), deleted_by = $1 WHERE id = $2 AND tenant_id = $3 AND deleted_at IS NULL`,
+        [req.user.id, req.params.id, req.user.tenantId],
+    );
     if (!r.rowCount) throw notFound('Document not found');
     res.json({ status: 'success', message: 'Document deleted' });
 }));
@@ -141,7 +157,8 @@ const allergyBody = z.object({
     reaction: optText(500),
     severity: z.enum(['Mild', 'Moderate', 'Severe', 'Life-threatening']).optional().nullable(),
     criticality: z.enum(['low', 'high', 'unable-to-assess']).optional().nullable(),
-    clinicalStatus: z.enum(['active', 'inactive', 'resolved']).default('active'),
+    // Optional on purpose: when omitted, the legacy `status` boolean decides (see allergyWriteValues).
+    clinicalStatus: z.enum(['active', 'inactive', 'resolved']).optional(),
     verificationStatus: z.enum(['unconfirmed', 'confirmed', 'refuted', 'entered-in-error']).default('unconfirmed'),
     onsetDate: optDate,
     lastOccurrenceDate: optDate,
@@ -175,7 +192,7 @@ function allergyWriteValues(b) {
     };
 }
 
-recordsRouter.get('/Patient/getAllAllergyList', h(async (req, res) => {
+recordsRouter.get('/Patient/getAllAllergyList', clinical, h(async (req, res) => {
     const { rcopiaID } = parse(z.object({ rcopiaID: z.string().min(1) }), req.query);
     const r = await query('SELECT * FROM patient_allergies WHERE tenant_id = $1 AND patient_id = $2 ORDER BY is_active DESC, created_at DESC', [req.user.tenantId, rcopiaID]);
     ok(res, r.rows.map(allergyOut));
@@ -262,18 +279,18 @@ const immBody = z.object({
     serviceLocation: optText(200),
 });
 
-recordsRouter.get('/Patient/getPatientImmunizationList/:patientId', h(async (req, res) => {
+recordsRouter.get('/Patient/getPatientImmunizationList/:patientId', clinical, h(async (req, res) => {
     const r = await query('SELECT * FROM patient_immunizations WHERE tenant_id = $1 AND patient_id = $2 ORDER BY ordered_date DESC NULLS LAST, created_at DESC', [req.user.tenantId, req.params.patientId]);
     ok(res, r.rows.map(immOut));
 }));
 
-recordsRouter.get('/Patient/getPatientImmunizationById/:id', h(async (req, res) => {
+recordsRouter.get('/Patient/getPatientImmunizationById/:id', clinical, h(async (req, res) => {
     const r = await query('SELECT * FROM patient_immunizations WHERE id = $1 AND tenant_id = $2', [req.params.id, req.user.tenantId]);
     if (!r.rowCount) throw notFound('Immunization not found');
     ok(res, immOut(r.rows[0]));
 }));
 
-recordsRouter.get('/Patient/downloadImmunization/:id', h(async (req, res) => {
+recordsRouter.get('/Patient/downloadImmunization/:id', clinical, h(async (req, res) => {
     const r = await query('SELECT * FROM patient_immunizations WHERE id = $1 AND tenant_id = $2', [req.params.id, req.user.tenantId]);
     if (!r.rowCount) throw notFound('Immunization not found');
     const i = immOut(r.rows[0]);
@@ -328,12 +345,12 @@ recordsRouter.get('/Patient/getAllHistoryCategories', h(async (req, res) => {
     ok(res, r.rows.map((c) => ({ id: c.id, _id: c.id, name: c.name })));
 }));
 
-recordsRouter.get('/Patient/getAllPatientHistory/:patientId', h(async (req, res) => {
+recordsRouter.get('/Patient/getAllPatientHistory/:patientId', clinical, h(async (req, res) => {
     const r = await query(`${HIST_SELECT} WHERE x.tenant_id = $1 AND x.patient_id = $2 ORDER BY x.diagnosis_date DESC NULLS LAST, x.created_at DESC`, [req.user.tenantId, req.params.patientId]);
     ok(res, r.rows.map(histOut));
 }));
 
-recordsRouter.get('/Patient/getPatientHistoryById/:id', h(async (req, res) => {
+recordsRouter.get('/Patient/getPatientHistoryById/:id', clinical, h(async (req, res) => {
     const r = await query(`${HIST_SELECT} WHERE x.id = $1 AND x.tenant_id = $2`, [req.params.id, req.user.tenantId]);
     if (!r.rowCount) throw notFound('History record not found');
     ok(res, histOut(r.rows[0]));
@@ -385,6 +402,7 @@ const labOrderOut = (o) => ({
     clinicalIndication: o.clinical_indication ?? '',
     accessionNumber: o.accession_number ?? '',
     specimenType: o.specimen_type ?? '',
+    specimens: o.specimens ?? [],
     collectedAt: o.collected_at ? o.collected_at.toISOString() : null,
     collectedBy: o.collected_by ?? null,
     resultedAt: o.resulted_at ? o.resulted_at.toISOString() : null,
@@ -409,7 +427,7 @@ const labBody = z.object({
 });
 const LAB_STATUSES = ['Ordered', 'Collected', 'In Progress', 'Resulted', 'Cancelled'];
 
-recordsRouter.get('/lab-orders/by-patient/:patientId', h(async (req, res) => {
+recordsRouter.get('/lab-orders/by-patient/:patientId', clinical, h(async (req, res) => {
     const q = parse(z.object({ page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(1000).default(20) }), req.query);
     const where = 'tenant_id = $1 AND patient_id = $2';
     const total = (await query(`SELECT count(*)::int AS n FROM lab_orders WHERE ${where}`, [req.user.tenantId, req.params.patientId])).rows[0].n;
@@ -417,7 +435,7 @@ recordsRouter.get('/lab-orders/by-patient/:patientId', h(async (req, res) => {
     ok(res, { orders: r.rows.map(labOrderOut), total, page: q.page, limit: q.limit, totalPages: Math.max(1, Math.ceil(total / q.limit)) });
 }));
 
-recordsRouter.get('/lab-orders/:id', h(async (req, res) => {
+recordsRouter.get('/lab-orders/:id', clinical, h(async (req, res) => {
     const r = await query(`${LAB_ORDER_SELECT} WHERE lo.id = $1 AND lo.tenant_id = $2`, [req.params.id, req.user.tenantId]);
     if (!r.rowCount) throw notFound('Lab order not found');
     ok(res, labOrderOut(r.rows[0]));
@@ -427,10 +445,11 @@ recordsRouter.post('/lab-orders', prescriber, h(async (req, res) => {
     const b = parse(labBody, req.body);
     await assertPatient(req, b.patientId);
     if (b.encounterId && !(await query('SELECT 1 FROM encounters WHERE id = $1 AND tenant_id = $2 AND patient_id = $3', [b.encounterId, req.user.tenantId, b.patientId])).rowCount) throw notFound('Encounter not found for this patient');
+    const labTests = await resolveLabTestCodes({ query }, b.labTests);
     const r = await query(
         `INSERT INTO lab_orders (tenant_id, patient_id, encounter_id, lab_tests, order_date, priority, ordering_provider_name, office_notes, patient_contact_notes, created_by, clinical_indication)
          VALUES ($1,$2,$3,$4,COALESCE($5::date, CURRENT_DATE),$6,$7,$8,$9,$10,$11) RETURNING *`,
-        [req.user.tenantId, b.patientId, b.encounterId || null, JSON.stringify(b.labTests), b.orderDate ?? null, b.priority, b.orderingProviderName || req.user.name || null, b.officeNotes || null, b.patientContactNotes || null, req.user.id, b.clinicalIndication || null],
+        [req.user.tenantId, b.patientId, b.encounterId || null, JSON.stringify(labTests), b.orderDate ?? null, b.priority, b.orderingProviderName || req.user.name || null, b.officeNotes || null, b.patientContactNotes || null, req.user.id, b.clinicalIndication || null],
     );
     // Same record as a CPOE lab order: file it in the unified orders ledger when it belongs to an encounter.
     if (b.encounterId) {
@@ -459,61 +478,6 @@ recordsRouter.put('/lab-orders/:id', prescriber, h(async (req, res) => {
     ok(res, labOrderOut(r.rows[0]));
 }));
 
-// ================================================================= lab results (documents)
-const labDocOut = (l) => ({
-    id: l.id,
-    _id: l.id,
-    patientId: l.patient_id,
-    name: l.name,
-    labName: l.lab_name ?? '',
-    value: l.value ?? '',
-    unit: l.unit ?? '',
-    referenceRange: l.reference_range ?? '',
-    notes: l.notes ?? '',
-    date: dateOf(l.lab_date),
-    status: l.is_active,
-});
-
-recordsRouter.get('/LabDetails/getAllLabDocuments/:patientId', h(async (req, res) => {
-    const r = await query('SELECT * FROM lab_documents WHERE tenant_id = $1 AND patient_id = $2 ORDER BY lab_date DESC, created_at DESC', [req.user.tenantId, req.params.patientId]);
-    ok(res, r.rows.map(labDocOut));
-}));
-
-recordsRouter.get('/LabDetails/getLabDocumentById/:id', h(async (req, res) => {
-    const r = await query('SELECT * FROM lab_documents WHERE id = $1 AND tenant_id = $2', [req.params.id, req.user.tenantId]);
-    if (!r.rowCount) throw notFound('Lab result not found');
-    ok(res, labDocOut(r.rows[0]));
-}));
-
-recordsRouter.get('/LabDetails/downloadLabDocument/:id', h(async (req, res) => {
-    const r = await query('SELECT * FROM lab_documents WHERE id = $1 AND tenant_id = $2', [req.params.id, req.user.tenantId]);
-    if (!r.rowCount) throw notFound('Lab result not found');
-    const l = labDocOut(r.rows[0]);
-    const text = [`Lab result`, `Test: ${l.name}`, `Lab: ${l.labName}`, `Date: ${l.date}`, `Result: ${l.value} ${l.unit}`.trim(), `Reference range: ${l.referenceRange}`, `Notes: ${l.notes}`].join('\n');
-    res.set({ 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': 'attachment; filename="lab-result.txt"' });
-    res.send(text);
-}));
-
-recordsRouter.post('/LabDetails/createLabDocument', prescriber, h(async (req, res) => {
-    const b = parse(
-        z.object({
-            patientId: z.string().min(1),
-            name: z.string().trim().min(1).max(200),
-            labName: optText(200),
-            value: optText(100),
-            unit: optText(30),
-            referenceRange: optText(100),
-            notes: optText(2000),
-            date: optDate,
-            status: z.boolean().default(true),
-        }),
-        req.body,
-    );
-    await assertPatient(req, b.patientId);
-    const r = await query(
-        `INSERT INTO lab_documents (tenant_id, patient_id, name, lab_name, value, unit, reference_range, notes, lab_date, is_active)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,COALESCE($9::date, CURRENT_DATE),$10) RETURNING *`,
-        [req.user.tenantId, b.patientId, b.name, b.labName || null, b.value || null, b.unit || null, b.referenceRange || null, b.notes || null, b.date ?? null, b.status],
-    );
-    created(res, labDocOut(r.rows[0]));
-}));
+// BUG-13: the free-text `lab_documents` store (and its /LabDetails/* routes) was retired here — it
+// duplicated the real structured `lab_results` pipeline with no UI ever creating new rows, and the
+// Labs tab showed both side by side with no real distinction. See migration 031.

@@ -156,6 +156,35 @@ export async function createConsent(payload: CreateConsentPayload): Promise<Serv
     }
 }
 
+/**
+ * Registration-time consent (e.g. HIPAA NPP, General Treatment) — no encounter exists yet, so this
+ * always hits the real endpoint directly rather than going through the encounter-keyed mock store
+ * above. Immediately 'Signed': the patient/guardian attests at the registration desk, no separate
+ * signature-pad step.
+ */
+export async function createRegistrationConsent(payload: {
+    patientId: string;
+    consentType: ConsentType;
+    signedByName: string;
+    signedByType?: 'Patient' | 'Legal Guardian' | 'Healthcare Proxy' | 'Power of Attorney';
+}): Promise<ServiceResult<ConsentRecord>> {
+    try {
+        const { data } = await api.post('/api/Consent/create', {
+            patientId: payload.patientId,
+            consentType: payload.consentType,
+            signedByType: payload.signedByType ?? 'Patient',
+            signedByName: payload.signedByName,
+            patientHasCapacity: true,
+            status: 'Signed',
+        });
+        const row = coerceConsent(data);
+        if (!row) return { ok: false, message: 'Invalid consent response' };
+        return { ok: true, data: row };
+    } catch (err) {
+        return { ok: false, message: getApiErrorMessage(err) };
+    }
+}
+
 export async function signConsent(
     consentId: string,
     payload: SignConsentPayload,

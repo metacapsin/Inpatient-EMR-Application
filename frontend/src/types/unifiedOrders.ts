@@ -7,6 +7,8 @@ export const UNIFIED_ORDER_TYPES = [
     'dietary',
     'therapy',
     'procedure',
+    'consult',
+    'nursing',
 ] as const;
 
 export type UnifiedOrderType = (typeof UNIFIED_ORDER_TYPES)[number];
@@ -15,11 +17,12 @@ export const UNIFIED_ORDER_PRIORITIES = ['stat', 'urgent', 'routine'] as const;
 
 export type UnifiedOrderPriority = (typeof UNIFIED_ORDER_PRIORITIES)[number];
 
-/** Normalized lifecycle across source modules (CPOE + radiology + lab). */
+/** Normalized lifecycle across source modules (CPOE + radiology + lab).
+ * 'in_progress' was removed — the real data path never produced it, only the mock store did. */
 export const UNIFIED_ORDER_STATUSES = [
     'pending',
     'accepted',
-    'in_progress',
+    'held',
     'completed',
     'cancelled',
 ] as const;
@@ -49,8 +52,16 @@ export type UnifiedOrderRow = {
     orderedByName?: string;
     acknowledgedAt?: string;
     acknowledgedBy?: string;
+    isVerbal?: boolean;
+    requiresCosign?: boolean;
+    cosignedBy?: string | null;
+    reason?: string | null;
     canAcknowledge: boolean;
     canCancel: boolean;
+    canHold?: boolean;
+    canResume?: boolean;
+    canRenew?: boolean;
+    canModify?: boolean;
     /** True when a live source module exists (medication, lab, radiology). */
     canOpenSource: boolean;
     /** Present only when {@link canOpenSource} is true. */

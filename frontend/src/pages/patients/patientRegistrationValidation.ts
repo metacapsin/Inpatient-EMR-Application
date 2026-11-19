@@ -62,14 +62,22 @@ export interface PersonalState {
     otherPhone: string;
     advancedHealthCareDirective: string;
     preferredLanguage: string;
+    /** USCDI/CDC Race & Ethnicity OMB code. */
     ethnicity: string;
-    race: string;
+    /** Multi-select OMB race codes. */
+    race: string[];
     noticeOfPrivacyPracticesDate: string;
     countryOfBirth: string;
     /** Primary care physician — used for CMS CoP ADT notifications (#65). */
     pcpName: string;
     pcpNpi: string;
     pcpRecipientId: string;
+    // USCDI v3 demographics — all optional, all coded (see constants/uscdiReference.ts).
+    genderIdentity: string;
+    sexAtBirth: string;
+    sexualOrientation: string;
+    interpreterNeeded: boolean;
+    communicationPreference: string[];
 }
 
 export type InsuranceState = Required<Omit<PatientInsuranceInput, 'coPayAmount' | 'insuranceStatus'>> & {
@@ -77,7 +85,7 @@ export type InsuranceState = Required<Omit<PatientInsuranceInput, 'coPayAmount' 
     insuranceStatus: '' | 'Active' | 'Inactive';
 };
 
-export type ContactState = Required<PatientEmergencyContactInput>;
+export type ContactState = Required<Omit<PatientEmergencyContactInput, 'legalRole'>> & { legalRole: string };
 
 export const EMPTY_PERSONAL: PersonalState = {
     prefix: '', firstName: '', middleName: '', lastName: '', suffix: '', dOB: '', sex: '', maritalStatus: '',
@@ -85,8 +93,9 @@ export const EMPTY_PERSONAL: PersonalState = {
     address1: '', address2: '', city: '', state: '', zipCode: '',
     mailingSameAsHome: false, mailingAddress1: '', mailingAddress2: '', mailingCity: '', mailingState: '', mailingZipCode: '',
     homePhone: '', mobilePhone: '', workPhone: '', otherPhone: '',
-    advancedHealthCareDirective: '', preferredLanguage: '', ethnicity: '', race: '', noticeOfPrivacyPracticesDate: '', countryOfBirth: '',
+    advancedHealthCareDirective: '', preferredLanguage: '', ethnicity: '', race: [], noticeOfPrivacyPracticesDate: '', countryOfBirth: '',
     pcpName: '', pcpNpi: '', pcpRecipientId: '',
+    genderIdentity: '', sexAtBirth: '', sexualOrientation: '', interpreterNeeded: false, communicationPreference: [],
 };
 
 export const EMPTY_INSURANCE: InsuranceState = {
@@ -97,6 +106,7 @@ export const EMPTY_INSURANCE: InsuranceState = {
 
 export const EMPTY_CONTACT: ContactState = {
     relationshipToPatient: '', contactName: '', contactPhone: '', street: '', emergencyCity: '', emergencyState: '', emergencyZipCode: '',
+    isGuardian: false, legalRole: '',
 };
 
 export type Errors = Record<string, string>;
@@ -120,7 +130,7 @@ export function validateInsurance(prefix: string, ins: InsuranceState, isMinor: 
 
 export function validateContact(index: number, c: ContactState, errors: Errors): void {
     const prefix = `contact${index}`;
-    const any = Object.values(c).some((v) => v.trim());
+    const any = Object.entries(c).some(([k, v]) => k !== 'isGuardian' && typeof v === 'string' && v.trim());
     if (!any) return;
     if (!c.contactName.trim()) errors[`${prefix}.contactName`] = 'Contact name is required when a contact is entered.';
     else if (!PERSON_NAME.test(c.contactName.trim())) errors[`${prefix}.contactName`] = 'Enter a valid name.';

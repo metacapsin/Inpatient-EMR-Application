@@ -1,7 +1,7 @@
 import type { DischargeFinalizeReadiness } from '../types/dischargeFinalizeReadiness';
 import type { DischargeReadinessView } from '../types/dischargeReadiness';
 import { deriveFinalizeReadinessFromClinicalView } from '../services/dischargeFinalizeReadiness.service';
-import type { ReadinessSnapshot } from './dischargeReadinessValidation';
+import { serverGateBlockingMessages } from './dischargeReadinessValidation';
 
 export function resolveFinalizeGates(
     view: DischargeReadinessView,
@@ -10,72 +10,45 @@ export function resolveFinalizeGates(
     return apiGates ?? deriveFinalizeReadinessFromClinicalView(view);
 }
 
-/** Progress for the discharge workspace strip: signed summary, clinical, and billing (all from clinical snapshot). */
-export function dischargeWorkspaceProgressPercent(
-    snapshot: ReadinessSnapshot,
-    dischargeSummarySigned: boolean,
-): number {
-    const parts = [dischargeSummarySigned, snapshot.isClinicalReady, snapshot.isBillingReady];
-    return Math.round((100 * parts.filter(Boolean).length) / parts.length);
+/** Progress for the command strip: resolved server gates over all server gates (signed summary, med rec, checklist, status). */
+export function dischargeWorkspaceProgressPercent(view: DischargeReadinessView): number {
+    const gates = view.gates;
+    if (!gates.length) return view.summary.status === 'signed' ? 50 : 0;
+    const resolved = gates.filter((g) => g.resolved).length;
+    return Math.round((100 * resolved) / gates.length);
 }
 
+export type DischargeTabState = 'done' | 'pending' | 'unavailable' | 'info';
+
 export type DischargeTabCompletion = {
-    summary: boolean;
-    checklist: boolean;
-    charges: boolean;
-    insurance: boolean;
-    billing: boolean;
+    summary: DischargeTabState;
+    checklist: DischargeTabState;
+    charges: DischargeTabState;
+    insurance: DischargeTabState;
+    billing: DischargeTabState;
 };
 
-export function computeDischargeTabCompletion(
-    view: DischargeReadinessView,
-    snapshot: ReadinessSnapshot,
-): DischargeTabCompletion {
-    const chargesCount = snapshot.gates.find((g) => g.id === 'gate-charges-count')?.resolved ?? false;
-    const chargesPending = snapshot.gates.find((g) => g.id === 'gate-charges-pending')?.resolved ?? false;
-    const nursing = snapshot.gates.find((g) => g.id === 'gate-nursing-checklist')?.resolved ?? false;
-    const insurance = snapshot.gates.find((g) => g.id === 'gate-eligibility')?.resolved ?? false;
+function gateResolved(view: DischargeReadinessView, id: string): boolean | undefined {
+    const g = view.gates.find((x) => x.id === id);
+    return g ? g.resolved : undefined;
+}
 
+export function computeDischargeTabCompletion(view: DischargeReadinessView): DischargeTabCompletion {
+    const nursing = gateResolved(view, 'gate-nursing-checklist');
+    const hasActiveEligibility = view.eligibilityHistory.some((r) => String(r.status || '').toLowerCase() === 'active');
     return {
-        summary: view.summary.status === 'signed',
-        checklist: nursing,
-        charges: chargesCount && chargesPending,
-        insurance,
-        billing: snapshot.isBillingReady,
+        summary: view.summary.status === 'signed' ? 'done' : 'pending',
+        checklist: nursing === undefined ? (view.checklist.every((t) => !t.blocksDischarge || t.completed) ? 'done' : 'pending') : nursing ? 'done' : 'pending',
+        charges: view.sections?.charges?.available ? 'pending' : 'unavailable',
+        // Eligibility is informational: the server does not gate discharge on it.
+        insurance: hasActiveEligibility ? 'done' : 'info',
+        billing: view.sections?.claimPrep?.available ? 'pending' : 'unavailable',
     };
 }
 
-/** Workspace tabs in strip order — used for discharge-blocked copy. */
 export type DischargeWorkspaceTabId = keyof DischargeTabCompletion;
 
-const DISCHARGE_BLOCKING_TAB_ORDER: DischargeWorkspaceTabId[] = [
-    'summary',
-    'checklist',
-    'charges',
-    'insurance',
-    'billing',
-];
-
-const DISCHARGE_BLOCKING_TAB_COPY: Record<DischargeWorkspaceTabId, string> = {
-    summary: 'Complete discharge summary',
-    checklist: 'Complete nursing checklist',
-    charges: 'Add and review charges',
-    insurance: 'Verify insurance / eligibility',
-    billing: 'Complete billing details',
-};
-
-/**
- * Short, actionable lines for the discharge-blocked alert — one per incomplete tab only.
- * Finalize eligibility still uses full gates via {@link getDischargeWorkspaceBlockingMessages}.
- */
-export function getDischargeBlockingFriendlyMessages(
-    view: DischargeReadinessView,
-    snapshot: ReadinessSnapshot,
-): string[] {
-    const done = computeDischargeTabCompletion(view, snapshot);
-    const out: string[] = [];
-    for (const tab of DISCHARGE_BLOCKING_TAB_ORDER) {
-        if (!done[tab]) out.push(DISCHARGE_BLOCKING_TAB_COPY[tab]);
-    }
-    return out;
+/** Short lines for the discharge-blocked alert: the server's unresolved gates, verbatim. */
+export function getDischargeBlockingFriendlyMessages(view: DischargeReadinessView): string[] {
+    return serverGateBlockingMessages(view.gates);
 }

@@ -5,6 +5,7 @@ export const QUEUES = {
     RCOPIA_PATIENT_SYNC: 'rcopia-patient-sync',
     ADT_NOTIFICATION: 'adt-notification',
     BED_RESERVATION_EXPIRY: 'bed-reservation-expiry',
+    CRITICAL_RESULT_ESCALATION: 'critical-result-escalation',
 };
 
 export const boss = new PgBoss(config.databaseUrl);

@@ -11,6 +11,7 @@ import type { CreateRadiologyOrderPayload } from '../types/radiologyOrder.types'
 import type { RadiologyOrderFormValues } from '../types/radiologyOrderForm.types';
 import {
     bodyRegionsForModality,
+    CONTRAST_ALLERGY_OPTIONS,
     CONTRAST_OPTIONS,
     LATERALITY_OPTIONS,
     MODALITY_OPTIONS,
@@ -225,7 +226,7 @@ export function ImagingOrderEntryForm({
                         placeholder="e.g. Creatinine 1.2 mg/dL"
                     />
                 </div>
-                <div className="col-span-12 md:col-span-4">
+                <div className="col-span-12 md:col-span-3">
                     <FlowsheetLabeledDropdown
                         fieldId="rad-pregnancy"
                         label="Pregnancy Status"
@@ -235,7 +236,17 @@ export function ImagingOrderEntryForm({
                         disabled={disabled || draftLoading}
                     />
                 </div>
-                <div className="col-span-12 md:col-span-4">
+                <div className="col-span-12 md:col-span-3">
+                    <FlowsheetLabeledDropdown
+                        fieldId="rad-contrast-allergy"
+                        label="Contrast Allergy"
+                        options={CONTRAST_ALLERGY_OPTIONS}
+                        value={form.contrastAllergy}
+                        onChange={(v) => patch({ contrastAllergy: String(v) })}
+                        disabled={disabled || draftLoading}
+                    />
+                </div>
+                <div className="col-span-12 md:col-span-3">
                     <FlowsheetLabeledDropdown
                         fieldId="rad-transport"
                         label="Transport Required"
@@ -245,7 +256,7 @@ export function ImagingOrderEntryForm({
                         disabled={disabled || draftLoading}
                     />
                 </div>
-                <div className="col-span-12 md:col-span-4">
+                <div className="col-span-12 md:col-span-3">
                     <FlowsheetOutlinedCalendar
                         fieldId="rad-schedule"
                         label="Schedule For"

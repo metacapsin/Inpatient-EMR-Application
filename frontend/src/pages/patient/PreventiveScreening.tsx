@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
-import { patientDataAPI, aiHealthInsightsAPI } from '../../services/api';
+import { patientDataAPI } from '../../services/api';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
@@ -184,30 +184,8 @@ const PreventiveScreening: React.FC = () => {
     setPreventiveSuggestions(null);
 
     try {
-      const response = await aiHealthInsightsAPI.getPreventiveSuggestions(patientId);
-      const data = response.data?.data || response.data;
-      
-      // Process suggestions array if it exists
-      if (data?.suggestions && Array.isArray(data.suggestions)) {
-        // Parse action field in each suggestion
-        data.suggestions = data.suggestions.map((suggestion: any) => {
-          if (suggestion?.action && typeof suggestion.action === 'string') {
-            const parsedActions = parseActionJSON(suggestion.action);
-            return {
-              ...suggestion,
-              parsedActions: parsedActions
-            };
-          }
-          return suggestion;
-        });
-      } else if (data?.action && typeof data.action === 'string') {
-        // Handle case where action is directly on the response
-        const parsedActions = parseActionJSON(data.action);
-        data.parsedActions = parsedActions;
-      }
-      
-      setPreventiveSuggestions(data || {});
-      toast.success('Preventive suggestions loaded successfully');
+      // Preventive-care suggestions have no server-side AI endpoint yet; keep the UI honest.
+      throw Object.assign(new Error('Preventive care suggestions are not available in this environment yet.'), { response: undefined });
     } catch (error: any) {
       console.error('Error fetching preventive suggestions:', error);
       setAiError(error.response?.data?.message || 'Failed to fetch preventive suggestions. Please try again.');

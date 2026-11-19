@@ -4,6 +4,7 @@
  *   - payers.us.stedi.com/2024-04-01     → payer directory (search, get)
  * Owns the API key, base URLs, timeouts, error normalization and PHI-redacted logging.
  */
+import crypto from 'node:crypto';
 import { config } from '../config.js';
 import { ApiError } from './http.js';
 
@@ -14,7 +15,9 @@ import { ApiError } from './http.js';
 export class StediError extends ApiError {
     constructor(message, { status = null, stediError = null, code = 'STEDI_ERROR' } = {}) {
         const httpStatus = code === 'STEDI_DISABLED' ? 503 : code === 'STEDI_TIMEOUT' ? 504 : 502;
-        super(httpStatus, message, stediError ?? undefined, code);
+        // Only code/message pairs reach API clients; the raw upstream body can carry 271 PHI and is
+        // retained on the instance (and in eligibility_checks.raw_response) for authorised review.
+        super(httpStatus, message, sanitizeStediErrors(stediError), code);
         this.upstreamStatus = status;
         this.stediError = stediError;
     }
@@ -22,7 +25,39 @@ export class StediError extends ApiError {
 
 export const isEnabled = () => config.stedi.enabled;
 
-const PHI_KEYS = new Set(['memberId', 'subscriberId', 'dateOfBirth', 'dob', 'ssn']);
+/** Reduce a Stedi error body to `[{code, message}]` so no PHI is echoed in API responses. */
+export function sanitizeStediErrors(body) {
+    if (!body || typeof body !== 'object') return undefined;
+    const list = Array.isArray(body.errors) ? body.errors : Array.isArray(body) ? body : [body];
+    const out = list
+        .map((e) => ({ code: String(e?.code ?? e?.errorCode ?? e?.status ?? ''), message: String(e?.message ?? e?.description ?? '').slice(0, 300) }))
+        .filter((e) => e.code || e.message);
+    return out.length ? { errors: out } : undefined;
+}
+
+/**
+ * Log-safe summary of a 270 request: no names, ids or dates. The correlation id lets one check be
+ * matched to its eligibility_checks row without revealing the member id.
+ */
+export function summarize270(payload) {
+    const p = payload ?? {};
+    const sub = p.subscriber ?? {};
+    const corr = crypto.createHash('sha256').update(`${sub.memberId ?? ''}|${sub.dateOfBirth ?? ''}`).digest('hex').slice(0, 12);
+    return {
+        tradingPartnerServiceId: p.tradingPartnerServiceId ?? null,
+        serviceTypeCodes: p.encounter?.serviceTypeCodes ?? null,
+        hasSubscriber: Boolean(sub.memberId || sub.firstName),
+        hasDependent: Boolean(p.dependents?.length),
+        providerNpi: p.provider?.npi ?? null,
+        correlationId: corr,
+    };
+}
+
+const PHI_KEYS = new Set([
+    'memberId', 'subscriberId', 'dateOfBirth', 'dob', 'ssn',
+    'firstName', 'lastName', 'middleName', 'name', 'address', 'address1', 'address2', 'city', 'postalCode', 'zip',
+    'phone', 'email', 'groupNumber', 'patientAccountNumber',
+]);
 export function redactPhi(obj) {
     if (!obj || typeof obj !== 'object') return obj;
     const clone = JSON.parse(JSON.stringify(obj));
@@ -67,13 +102,13 @@ async function request(baseUrl, path, { method = 'GET', body, params } = {}) {
 
 /** POST /change/medicalnetwork/eligibility/v3 — real-time 270/271 as JSON. */
 export async function realtimeEligibility(payload) {
-    console.info('[stedi] 270 →', JSON.stringify(redactPhi(payload)));
+    console.info('[stedi] 270 →', JSON.stringify(summarize270(payload)));
     const data = await request(config.stedi.healthcareBaseUrl, '/change/medicalnetwork/eligibility/v3', { method: 'POST', body: payload });
     console.info('[stedi] 271 ←', JSON.stringify({
         payer: data.payer?.name,
         planStatus: (data.planStatus ?? []).map((p) => ({ code: p.statusCode, status: p.status })),
         benefits: Array.isArray(data.benefitsInformation) ? data.benefitsInformation.length : 0,
-        errors: data.errors,
+        errors: Array.isArray(data.errors) ? data.errors.map((e) => e?.code ?? e?.errorCode ?? 'unknown') : undefined,
     }));
     return data;
 }

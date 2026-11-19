@@ -40,6 +40,13 @@ const ChatInput: React.FC<ChatInputProps> = ({
           placeholder={disabled ? 'Please wait...' : placeholder}
           disabled={disabled}
           rows={1}
+          aria-label="Message"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              if (value.trim() && !disabled) onSubmit();
+            }
+          }}
           onInput={(e) => {
             e.currentTarget.style.height = "auto";
             e.currentTarget.style.height = e.currentTarget.scrollHeight + "px";
@@ -63,9 +70,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   
       </form>
   
-      {/* Minimal Hint */}
       <p className="mt-1 text-[10px] text-gray-400 px-1">
-        Demo mode — connect a backend for live AI answers
+        Enter to send, Shift+Enter for a new line. Answers come only from this patient's documented record.
       </p>
   
     </div>

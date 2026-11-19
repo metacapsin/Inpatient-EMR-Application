@@ -84,7 +84,7 @@ revenueRouter.put('/api/CDI/query/:queryId/send', billing, h(async (req, res) =>
     ok(res, cdiOut(out));
 }));
 
-revenueRouter.get('/api/CDI/query/inbox/:physicianId', h(async (req, res) => {
+revenueRouter.get('/api/CDI/query/inbox/:physicianId', billing, h(async (req, res) => {
     const r = await query(`SELECT * FROM cdi_queries WHERE tenant_id = $1 AND sent_to_physician_id = $2 ORDER BY created_at DESC`, [req.user.tenantId, req.params.physicianId]);
     ok(res, r.rows.map(cdiOut));
 }));

@@ -4,6 +4,7 @@ import {
     closeCodeEvent,
     fetchCodeEventById,
     generateCodeEventNote,
+    saveCodeEventNote,
     updateCodeEventTeam,
     updateCodeEventTimeline,
 } from '../../../services/codeEventService';
@@ -101,6 +102,13 @@ export function useCodeEvent(eventId: string | undefined) {
         return noteText;
     }, [eventId]);
 
+    // SAF-26: actually files the note in the chart (a real clinical_notes row) instead of only
+    // generating text the page would otherwise discard on close.
+    const saveNote = useCallback(async () => {
+        if (!eventId) return null;
+        return saveCodeEventNote(eventId);
+    }, [eventId]);
+
     return {
         event: event ? { ...event, timeline } : null,
         loading: query.isLoading,
@@ -112,6 +120,7 @@ export function useCodeEvent(eventId: string | undefined) {
         saveTeam,
         closeEvent,
         generateNote,
+        saveNote,
     };
 }
 

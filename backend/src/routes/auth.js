@@ -4,11 +4,15 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
-import { config, isProd } from '../config.js';
+import { config, isProd, devTokensAllowed } from '../config.js';
 import { query, withTx } from '../db/pool.js';
 import { ApiError, conflict, forbidden, h, notFound, ok, parse, created } from '../lib/http.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { isValidNpi } from '../lib/npi.js';
+import { recordAuditEvent } from '../lib/audit.js';
+import { sendEmail } from '../lib/email.js';
+import { checkPasswordPolicy } from '../lib/passwordPolicy.js';
+import { generateTotpSecret, verifyTotpCode, buildOtpauthUri, generateBackupCodes, hashBackupCode } from '../lib/totp.js';
 
 export const publicAuthRouter = Router();
 export const authRouter = Router();
@@ -20,7 +24,44 @@ const ROLES = ['admin', 'physician', 'nurse', 'pharmacist', 'billing', 'staff'];
 /** Prescriber identity (e-prescribing): NPI with the real Luhn check digit; DEA = 2 letters + 7 digits. Blank clears. */
 const npiField = z.preprocess((v) => (v === null || v === undefined ? undefined : String(v).replace(/\D/g, '')), z.string().refine((s) => s === '' || isValidNpi(s), 'NPI check digit is invalid').optional());
 const deaField = z.preprocess((v) => (v === null || v === undefined ? undefined : String(v).trim().toUpperCase()), z.string().regex(/^$|^[A-Z]{2}\d{7}$/, 'DEA number must be 2 letters followed by 7 digits').optional());
-const password = z.string().min(8, 'Password must be at least 8 characters').max(128);
+/** NIST 800-63B: length + a common-password check, not forced composition rules. See lib/passwordPolicy.js. */
+const password = z
+    .string()
+    .max(128)
+    .superRefine((val, ctx) => {
+        const err = checkPasswordPolicy(val);
+        if (err) ctx.addIssue({ code: z.ZodIssueCode.custom, message: err });
+    });
+
+// --- lockout (SEC-07)
+const MAX_FAILED_LOGINS = 5;
+const LOCKOUT_MS = 15 * 60 * 1000;
+
+// --- refresh token now lives in an httpOnly cookie, not localStorage/JSON (SEC-09).
+const REFRESH_COOKIE = 'refreshToken';
+function setRefreshCookie(res, token) {
+    res.cookie(REFRESH_COOKIE, token, {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: ttlMs(config.refreshTokenTtl),
+    });
+}
+function clearRefreshCookie(res) {
+    res.clearCookie(REFRESH_COOKIE, { path: '/' });
+}
+/** Express 5 doesn't parse cookies by default; this avoids adding a dependency for one header. */
+function getCookie(req, name) {
+    const header = req.headers.cookie;
+    if (!header) return null;
+    for (const part of header.split(';')) {
+        const idx = part.indexOf('=');
+        if (idx === -1) continue;
+        if (part.slice(0, idx).trim() === name) return decodeURIComponent(part.slice(idx + 1).trim());
+    }
+    return null;
+}
 
 function ttlMs(ttl) {
     const m = /^(\d+)([smhd])$/.exec(ttl);
@@ -41,6 +82,7 @@ function publicUser(u, tenant) {
         npi: u.npi ?? '',
         deaNumber: u.dea_number ?? '',
         preferences: u.preferences || {},
+        mfaEnabled: Boolean(u.mfa_enabled),
         tenant: { id: u.tenant_id, name: tenant?.name ?? u.tenant_name ?? '' },
         tenantId: u.tenant_id,
     };
@@ -54,10 +96,25 @@ function signAccess(u) {
             role: u.role,
             name: [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email,
             email: u.email,
+            // Checked against the live DB value on every request (middleware/auth.js). A mismatch
+            // means this token predates a deactivation/role-change/logout-everywhere and must stop
+            // working now, not at its own natural expiry (SEC-07).
+            tv: u.token_version ?? 0,
         },
         config.jwtSecret,
         { subject: u.id, expiresIn: config.accessTokenTtl },
     );
+}
+
+/** Short-lived (5 min) token proving the password step passed; must still clear the MFA step. */
+function signMfaChallenge(u) {
+    return jwt.sign({ typ: 'mfa_challenge', tid: u.tenant_id }, config.jwtSecret, { subject: u.id, expiresIn: '5m' });
+}
+
+function verifyMfaChallenge(token) {
+    const payload = jwt.verify(token, config.jwtSecret);
+    if (payload.typ !== 'mfa_challenge') throw new Error('wrong token type');
+    return payload;
 }
 
 async function issueTokens(db, u) {
@@ -96,12 +153,125 @@ publicAuthRouter.post(
             req.body,
         );
         const u = await loadUser('lower(u.email) = lower($1) OR lower(u.username) = lower($1)', [username]);
+
+        if (u && u.locked_until && new Date(u.locked_until) > new Date()) {
+            const minutes = Math.ceil((new Date(u.locked_until) - new Date()) / 60000);
+            await recordAuditEvent({
+                tenantId: u.tenant_id,
+                actorType: 'anonymous',
+                action: 'login_failed',
+                resource: 'auth',
+                details: { reason: 'locked', usernameHash: sha256(username.toLowerCase()) },
+            });
+            throw new ApiError(423, `Account temporarily locked from repeated failed attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`, undefined, 'ACCOUNT_LOCKED');
+        }
+
         const valid = await bcrypt.compare(pw, u?.password_hash ?? DUMMY_HASH);
-        if (!u || !valid || !u.is_active) throw new ApiError(401, 'Invalid username or password');
+        if (!u || !valid || !u.is_active) {
+            let justLocked = false;
+            if (u && u.is_active) {
+                const nextCount = (u.failed_login_count ?? 0) + 1;
+                justLocked = nextCount >= MAX_FAILED_LOGINS;
+                await query('UPDATE users SET failed_login_count = $1, locked_until = $2 WHERE id = $3', [
+                    justLocked ? 0 : nextCount,
+                    justLocked ? new Date(Date.now() + LOCKOUT_MS) : null,
+                    u.id,
+                ]);
+            }
+            await recordAuditEvent({
+                tenantId: u?.tenant_id ?? null,
+                actorType: 'anonymous',
+                action: 'login_failed',
+                resource: 'auth',
+                details: { usernameHash: sha256(username.toLowerCase()), justLocked },
+            });
+            if (justLocked) {
+                const minutes = Math.ceil(LOCKOUT_MS / 60000);
+                throw new ApiError(423, `Too many failed attempts. Account locked for ${minutes} minutes.`, undefined, 'ACCOUNT_LOCKED');
+            }
+            throw new ApiError(401, 'Invalid username or password');
+        }
+        if (u.failed_login_count || u.locked_until) {
+            await query('UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE id = $1', [u.id]);
+        }
         if (u.tenant_status === 'suspended')
             throw new ApiError(403, "This organization's account is suspended. Contact your administrator.", undefined, 'TENANT_SUSPENDED');
+
+        if (u.mfa_enabled) {
+            return res.json({ status: 'mfa_required', mfaToken: signMfaChallenge(u) });
+        }
+
         const tokens = await issueTokens({ query }, u);
-        res.json({ status: 'success', ...tokens, role: u.role, user: publicUser(u) });
+        setRefreshCookie(res, tokens.refreshToken);
+        await recordAuditEvent({
+            tenantId: u.tenant_id,
+            actorType: 'staff',
+            actorId: u.id,
+            actorRole: u.role,
+            action: 'login',
+            resource: 'auth',
+        });
+        res.json({ status: 'success', token: tokens.token, role: u.role, user: publicUser(u) });
+    }),
+);
+
+publicAuthRouter.post(
+    '/auth/mfa/verify',
+    authLimiter,
+    h(async (req, res) => {
+        const b = parse(
+            z.object({ mfaToken: z.string().min(1), code: z.string().trim().optional(), backupCode: z.string().trim().optional() }),
+            req.body,
+        );
+        let payload;
+        try {
+            payload = verifyMfaChallenge(b.mfaToken);
+        } catch {
+            throw new ApiError(401, 'MFA challenge has expired. Log in again.');
+        }
+        const u = await loadUser('u.id = $1', [payload.sub]);
+        if (!u || !u.is_active || !u.mfa_enabled) throw new ApiError(401, 'MFA challenge has expired. Log in again.');
+
+        let verified = false;
+        let usedBackupCode = false;
+        if (b.code && verifyTotpCode(u.mfa_secret, b.code)) {
+            verified = true;
+        } else if (b.backupCode) {
+            const hash = hashBackupCode(b.backupCode);
+            const codes = Array.isArray(u.mfa_backup_codes) ? u.mfa_backup_codes : [];
+            if (codes.includes(hash)) {
+                verified = true;
+                usedBackupCode = true;
+                await query('UPDATE users SET mfa_backup_codes = $1::jsonb WHERE id = $2', [
+                    JSON.stringify(codes.filter((c) => c !== hash)),
+                    u.id,
+                ]);
+            }
+        }
+
+        if (!verified) {
+            await recordAuditEvent({
+                tenantId: u.tenant_id,
+                actorType: 'anonymous',
+                action: 'login_failed',
+                resource: 'auth',
+                details: { reason: 'mfa' },
+            });
+            throw new ApiError(401, 'Invalid code');
+        }
+
+        const tokens = await issueTokens({ query }, u);
+        setRefreshCookie(res, tokens.refreshToken);
+        await recordAuditEvent({
+            tenantId: u.tenant_id,
+            actorType: 'staff',
+            actorId: u.id,
+            actorRole: u.role,
+            action: 'login',
+            resource: 'auth',
+            details: { mfa: true, usedBackupCode },
+        });
+        res.json({ status: 'success', token: tokens.token, role: u.role, user: publicUser(u) });
     }),
 );
 
@@ -109,7 +279,8 @@ publicAuthRouter.post(
     '/auth/refresh',
     authLimiter,
     h(async (req, res) => {
-        const { refreshToken } = parse(z.object({ refreshToken: z.string().min(1) }), req.body);
+        const refreshToken = getCookie(req, REFRESH_COOKIE);
+        if (!refreshToken) throw new ApiError(401, 'Invalid or expired refresh token');
         const result = await withTx(async (db) => {
             const t = (
                 await db.query(
@@ -121,10 +292,22 @@ publicAuthRouter.post(
             ).rows[0];
             if (!t) return null;
             await db.query('UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1', [t.rt_id]);
-            return issueTokens(db, t);
+            return { tokens: await issueTokens(db, t), user: t };
         });
-        if (!result) throw new ApiError(401, 'Invalid or expired refresh token');
-        res.json({ status: 'success', ...result });
+        if (!result) {
+            clearRefreshCookie(res);
+            throw new ApiError(401, 'Invalid or expired refresh token');
+        }
+        setRefreshCookie(res, result.tokens.refreshToken);
+        await recordAuditEvent({
+            tenantId: result.user.tenant_id,
+            actorType: 'staff',
+            actorId: result.user.id,
+            actorRole: result.user.role,
+            action: 'refresh',
+            resource: 'auth',
+        });
+        res.json({ status: 'success', token: result.tokens.token });
     }),
 );
 
@@ -140,9 +323,29 @@ publicAuthRouter.post(
                 `UPDATE users SET reset_token_hash = $1, reset_expires_at = now() + interval '1 hour' WHERE id = $2`,
                 [sha256(raw), u.id],
             );
-            // No mail transport is configured. In development the reset link is printed to the server log;
-            // in production wire this up to an email service instead of logging.
-            if (!isProd) console.log(`[forgotPassword] reset token for ${u.email}: ${raw}`);
+            // SEC-08: this used to only console.log the token outside production and do nothing at
+            // all in production — a staff user had no way to actually receive the reset link. Now it
+            // emails it the same way the patient-portal and platform-admin flows already do (and
+            // lib/email.js falls back to a console stub itself when SMTP isn't configured).
+            // /set-password already exists and is wired to POST /auth/reset-password (see SetPasswordPage.tsx) —
+            // the same page the platform-admin invite link uses, so this reuses it rather than a dead route.
+            const link = `${config.frontendUrl}/set-password?token=${raw}`;
+            await sendEmail({
+                to: u.email,
+                subject: 'Reset your password',
+                text: `Reset your password:\n${link}\n\nThis link expires in 1 hour.`,
+                html: `<p>Reset your password:</p><p><a href="${link}">${link}</a></p><p>This link expires in 1 hour.</p>`,
+            });
+            if (devTokensAllowed()) console.log(`[forgotPassword] reset token for ${u.email}: ${raw}`);
+            await recordAuditEvent({
+                tenantId: u.tenant_id,
+                actorType: 'staff',
+                actorId: u.id,
+                actorRole: u.role,
+                action: 'password_reset',
+                resource: 'auth',
+                details: { stage: 'requested' },
+            });
         }
         // Same response whether or not the account exists (no user enumeration).
         res.json({ status: 'success', message: 'If that email is registered, a reset link has been sent.' });
@@ -159,21 +362,43 @@ publicAuthRouter.post(
         );
         if (body.newPassword !== body.confirmPassword) throw new ApiError(400, 'Passwords do not match');
         const r = await query(
-            `UPDATE users SET password_hash = $1, reset_token_hash = NULL, reset_expires_at = NULL, updated_at = now()
-             WHERE reset_token_hash = $2 AND reset_expires_at > now() RETURNING id`,
+            `UPDATE users SET password_hash = $1, reset_token_hash = NULL, reset_expires_at = NULL,
+                    token_version = token_version + 1, failed_login_count = 0, locked_until = NULL, updated_at = now()
+             WHERE reset_token_hash = $2 AND reset_expires_at > now() RETURNING id, tenant_id, role`,
             [await bcrypt.hash(body.newPassword, 10), sha256(body.token)],
         );
         if (!r.rowCount) throw new ApiError(400, 'Reset link is invalid or has expired');
+        // token_version above invalidates any access token already issued; revoking refresh tokens
+        // here stops a stolen one from minting a fresh access token after the password changes.
         await query('UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [r.rows[0].id]);
+        await recordAuditEvent({
+            tenantId: r.rows[0].tenant_id,
+            actorType: 'staff',
+            actorId: r.rows[0].id,
+            actorRole: r.rows[0].role,
+            action: 'password_reset',
+            resource: 'auth',
+            details: { stage: 'completed' },
+        });
         res.json({ status: 'success', message: 'Password updated' });
     }),
 );
 
-// Self-service signup: creates a new tenant and its first admin user.
+/** Self-service signup is disabled unless ALLOW_SELF_SERVICE_REGISTRATION=true (always on under test). */
+function registrationEnabled() {
+    if (process.env.ALLOW_SELF_SERVICE_REGISTRATION === 'true') return true;
+    if (process.env.ALLOW_SELF_SERVICE_REGISTRATION === 'false') return false;
+    return config.allowSelfServiceRegistration;
+}
+
+// Self-service signup: creates a new tenant and its first admin user. Gated — see registrationEnabled().
 publicAuthRouter.post(
     '/auth/register',
     authLimiter,
     h(async (req, res) => {
+        if (!registrationEnabled()) {
+            throw new ApiError(403, 'Self-service registration is disabled. Ask your platform administrator to provision your organization.', undefined, 'REGISTRATION_DISABLED');
+        }
         const b = parse(
             z.object({
                 username: z.string().trim().min(2).max(100),
@@ -197,7 +422,8 @@ publicAuthRouter.post(
         });
         const full = await loadUser('u.id = $1', [u.id]);
         const tokens = await issueTokens({ query }, full);
-        res.status(201).json({ status: 'success', ...tokens, role: full.role, user: publicUser(full) });
+        setRefreshCookie(res, tokens.refreshToken);
+        res.status(201).json({ status: 'success', token: tokens.token, role: full.role, user: publicUser(full) });
     }),
 );
 
@@ -207,11 +433,101 @@ authRouter.use(requireAuth);
 authRouter.post(
     '/auth/logout',
     h(async (req, res) => {
-        const { refreshToken } = req.body || {};
-        if (typeof refreshToken === 'string') {
+        const refreshToken = getCookie(req, REFRESH_COOKIE);
+        if (refreshToken) {
             await query('UPDATE refresh_tokens SET revoked_at = now() WHERE token_hash = $1 AND user_id = $2', [sha256(refreshToken), req.user.id]);
         }
+        clearRefreshCookie(res);
+        await recordAuditEvent({
+            tenantId: req.user.tenantId,
+            actorType: 'staff',
+            actorId: req.user.id,
+            actorRole: req.user.role,
+            action: 'logout',
+            resource: 'auth',
+        });
         res.json({ status: 'success' });
+    }),
+);
+
+// "Sign out of all devices" — bumps token_version (every currently-issued access token, anywhere,
+// stops working on its next request) and revokes every refresh token for this user.
+authRouter.post(
+    '/auth/logout-all',
+    h(async (req, res) => {
+        await query('UPDATE users SET token_version = token_version + 1 WHERE id = $1', [req.user.id]);
+        await query('UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [req.user.id]);
+        clearRefreshCookie(res);
+        await recordAuditEvent({
+            tenantId: req.user.tenantId,
+            actorType: 'staff',
+            actorId: req.user.id,
+            actorRole: req.user.role,
+            action: 'logout',
+            resource: 'auth',
+            details: { allDevices: true },
+        });
+        res.json({ status: 'success' });
+    }),
+);
+
+// --- MFA (TOTP, opt-in per user; see lib/totp.js)
+authRouter.post(
+    '/auth/mfa/enroll',
+    h(async (req, res) => {
+        const u = await loadUser('u.id = $1', [req.user.id]);
+        if (u.mfa_enabled) throw new ApiError(409, 'MFA is already enabled. Disable it before re-enrolling.');
+        const secret = generateTotpSecret();
+        await query('UPDATE users SET mfa_secret = $1 WHERE id = $2', [secret, req.user.id]);
+        ok(res, { secret, otpauthUri: buildOtpauthUri({ secret, accountName: u.email }) });
+    }),
+);
+
+authRouter.post(
+    '/auth/mfa/confirm',
+    h(async (req, res) => {
+        const { code } = parse(z.object({ code: z.string().trim().min(1) }), req.body);
+        const u = await loadUser('u.id = $1', [req.user.id]);
+        if (!u.mfa_secret) throw new ApiError(400, 'Start enrollment first');
+        if (!verifyTotpCode(u.mfa_secret, code)) throw new ApiError(401, 'Invalid code');
+        const backupCodes = generateBackupCodes();
+        await query('UPDATE users SET mfa_enabled = TRUE, mfa_backup_codes = $1::jsonb WHERE id = $2', [
+            JSON.stringify(backupCodes.map(hashBackupCode)),
+            req.user.id,
+        ]);
+        await recordAuditEvent({
+            tenantId: req.user.tenantId,
+            actorType: 'staff',
+            actorId: req.user.id,
+            actorRole: req.user.role,
+            action: 'update',
+            resource: 'user',
+            resourceId: req.user.id,
+            details: { mfaEnabled: true },
+        });
+        // Shown once — these are the only recovery path if the authenticator app is lost.
+        ok(res, { backupCodes });
+    }),
+);
+
+authRouter.post(
+    '/auth/mfa/disable',
+    h(async (req, res) => {
+        const { password: pw } = parse(z.object({ password: z.string().min(1) }), req.body);
+        const u = await loadUser('u.id = $1', [req.user.id]);
+        if (!(await bcrypt.compare(pw, u.password_hash))) throw new ApiError(401, 'Incorrect password');
+        await query(`UPDATE users SET mfa_enabled = FALSE, mfa_secret = NULL, mfa_backup_codes = '[]'::jsonb WHERE id = $1`, [req.user.id]);
+        await recordAuditEvent({
+            tenantId: req.user.tenantId,
+            actorType: 'staff',
+            actorId: req.user.id,
+            actorRole: req.user.role,
+            action: 'update',
+            resource: 'user',
+            resourceId: req.user.id,
+            details: { mfaEnabled: false },
+        });
+        ok(res, { message: 'MFA disabled' });
     }),
 );
 
@@ -227,21 +543,22 @@ authRouter.get(
 authRouter.put(
     '/auth/profile',
     h(async (req, res) => {
+        // SEC-16: npi/deaNumber are deliberately NOT accepted here — this endpoint lets any
+        // authenticated user edit their own profile with no role check, so a self-asserted
+        // prescriber credential was previously possible for any role (nurse, billing, staff). Those
+        // fields are admin-only now, set via PUT /auth/users/:id (already admin-gated, below).
         const b = parse(
             z.object({
                 firstName: z.string().trim().max(100).optional(),
                 lastName: z.string().trim().max(100).optional(),
                 preferences: z.record(z.string(), z.unknown()).optional(),
-                npi: npiField,
-                deaNumber: deaField,
             }),
             req.body,
         );
         await query(
             `UPDATE users SET first_name = COALESCE($1, first_name), last_name = COALESCE($2, last_name),
-                    preferences = COALESCE($3::jsonb, preferences), npi = CASE WHEN $5::text IS NULL THEN npi ELSE NULLIF($5, '') END,
-                    dea_number = CASE WHEN $6::text IS NULL THEN dea_number ELSE NULLIF($6, '') END, updated_at = now() WHERE id = $4`,
-            [b.firstName ?? null, b.lastName ?? null, b.preferences ? JSON.stringify(b.preferences) : null, req.user.id, b.npi ?? null, b.deaNumber ?? null],
+                    preferences = COALESCE($3::jsonb, preferences), updated_at = now() WHERE id = $4`,
+            [b.firstName ?? null, b.lastName ?? null, b.preferences ? JSON.stringify(b.preferences) : null, req.user.id],
         );
         ok(res, publicUser(await loadUser('u.id = $1', [req.user.id])));
     }),
@@ -326,25 +643,74 @@ authRouter.post(
                 [req.user.tenantId, b.email, b.username ?? null, await bcrypt.hash(b.password, 10), b.firstName, b.lastName, b.role, b.npi || null, b.deaNumber || null],
             )
         ).rows[0];
+        await recordAuditEvent({
+            tenantId: req.user.tenantId,
+            actorType: 'staff',
+            actorId: req.user.id,
+            actorRole: req.user.role,
+            action: 'create',
+            resource: 'user',
+            resourceId: u.id,
+            details: { email: u.email, role: u.role },
+        });
         created(res, publicUser(u));
     }),
 );
 
+// Deliberately NOT `userBody.partial()`: zod's `.default()` on `firstName`/`lastName`/`role` still
+// substitutes the default for an *omitted* key even after `.partial()` makes the key optional (the
+// default short-circuits before the optional check runs). A caller updating just `isActive` or
+// `npi` — exactly what this route is for — would silently have `role` reset to 'nurse' and
+// `firstName`/`lastName` blanked out. Found while testing SEC-16 (an npi-only PUT here reset the
+// target physician's role, which bumped their token_version and started 401ing their own token).
+const updateUserBody = z.object({
+    email: z.string().trim().email().optional(),
+    username: z.string().trim().min(2).max(100).optional(),
+    password: password.optional(),
+    firstName: z.string().trim().max(100).optional(),
+    lastName: z.string().trim().max(100).optional(),
+    role: z.enum(ROLES).optional(),
+    npi: npiField,
+    deaNumber: deaField,
+    isActive: z.boolean().optional(),
+});
+
 const updateUser = h(async (req, res) => {
-    const b = parse(
-        userBody.partial().extend({ isActive: z.boolean().optional() }),
-        req.body,
-    );
+    const b = parse(updateUserBody, req.body);
     const hash = b.password ? await bcrypt.hash(b.password, 10) : null;
+    // A still-valid access token must stop working immediately on deactivation or a role change
+    // (SEC-07), not at its own expiry — bumping token_version here does that (checked every request
+    // in requireAuth). Password changes bump it too, for the same reason /auth/reset-password does.
+    const bumpTokenVersion = b.role !== undefined || b.isActive === false || Boolean(b.password);
     const r = await query(
         `UPDATE users SET email = COALESCE($1,email), username = COALESCE($2,username), password_hash = COALESCE($3,password_hash),
                 first_name = COALESCE($4,first_name), last_name = COALESCE($5,last_name), role = COALESCE($6,role),
                 is_active = COALESCE($7,is_active), npi = CASE WHEN $10::text IS NULL THEN npi ELSE NULLIF($10, '') END,
-                dea_number = CASE WHEN $11::text IS NULL THEN dea_number ELSE NULLIF($11, '') END, updated_at = now()
+                dea_number = CASE WHEN $11::text IS NULL THEN dea_number ELSE NULLIF($11, '') END,
+                token_version = CASE WHEN $12 THEN token_version + 1 ELSE token_version END, updated_at = now()
          WHERE id = $8 AND tenant_id = $9 RETURNING *`,
-        [b.email ?? null, b.username ?? null, hash, b.firstName ?? null, b.lastName ?? null, b.role ?? null, b.isActive ?? null, req.params.id, req.user.tenantId, b.npi ?? null, b.deaNumber ?? null],
+        [b.email ?? null, b.username ?? null, hash, b.firstName ?? null, b.lastName ?? null, b.role ?? null, b.isActive ?? null, req.params.id, req.user.tenantId, b.npi ?? null, b.deaNumber ?? null, bumpTokenVersion],
     );
     if (!r.rowCount) throw notFound('User not found');
+    if (b.isActive === false) {
+        // Deactivation also revokes refresh tokens, so a stolen one can't mint a fresh access token
+        // with the bumped token_version — the bump alone only catches tokens already issued.
+        await query('UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [req.params.id]);
+    }
+    await recordAuditEvent({
+        tenantId: req.user.tenantId,
+        actorType: 'staff',
+        actorId: req.user.id,
+        actorRole: req.user.role,
+        action: 'update',
+        resource: 'user',
+        resourceId: req.params.id,
+        details: {
+            fields: Object.keys(b).filter((k) => b[k] !== undefined),
+            roleChanged: b.role !== undefined,
+            deactivated: b.isActive === false,
+        },
+    });
     ok(res, publicUser(r.rows[0]));
 });
 authRouter.put('/auth/users/:id', requireRole(), updateUser);
@@ -357,6 +723,15 @@ authRouter.delete(
         if (req.params.id === req.user.id) throw forbidden('You cannot delete your own account');
         const r = await query('DELETE FROM users WHERE id = $1 AND tenant_id = $2', [req.params.id, req.user.tenantId]);
         if (!r.rowCount) throw notFound('User not found');
+        await recordAuditEvent({
+            tenantId: req.user.tenantId,
+            actorType: 'staff',
+            actorId: req.user.id,
+            actorRole: req.user.role,
+            action: 'delete',
+            resource: 'user',
+            resourceId: req.params.id,
+        });
         res.json({ status: 'success' });
     }),
 );

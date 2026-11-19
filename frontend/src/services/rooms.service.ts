@@ -15,32 +15,6 @@ function mockDelay<T>(value: T): Promise<T> {
     });
 }
 
-const PLACEMENT_LS_KEY = 'emr_patient_placement_v1';
-
-interface StoredPlacement {
-    wardId: string;
-    roomId: string;
-    bedId: string;
-    wardName?: string;
-    roomName?: string;
-    bedName?: string;
-}
-
-function readPlacements(): Record<string, StoredPlacement> {
-    try {
-        const raw = localStorage.getItem(PLACEMENT_LS_KEY);
-        if (!raw) return {};
-        const o = JSON.parse(raw) as unknown;
-        return typeof o === 'object' && o !== null ? (o as Record<string, StoredPlacement>) : {};
-    } catch {
-        return {};
-    }
-}
-
-function writePlacements(m: Record<string, StoredPlacement>) {
-    localStorage.setItem(PLACEMENT_LS_KEY, JSON.stringify(m));
-}
-
 // --- In-memory cache (API mode): refreshed by list fetches for label resolution ---
 
 let cachedWards: FacilityWard[] = [];
@@ -193,24 +167,10 @@ async function httpGetBedList(): Promise<FacilityBed[]> {
             if (b) out.push(b);
         }
         mergeListIntoCacheBeds(out);
-        return applyClientOccupancy(cachedBeds.slice());
+        return cachedBeds.slice();
     } catch (e) {
         throw new Error(getApiErrorMessage(e, 'Failed to load beds'));
     }
-}
-
-function applyClientOccupancy(beds: FacilityBed[]): FacilityBed[] {
-    const byBed = new Map<string, string>();
-    for (const [pid, bid] of patientBedAssignments) {
-        byBed.set(String(bid), pid);
-    }
-    return beds.map((b) => {
-        const holder = byBed.get(String(b.id));
-        if (holder) {
-            return { ...b, occupied: true, occupiedByPatientId: holder };
-        }
-        return { ...b };
-    });
 }
 
 // --- Mock seed (string IDs) ---
@@ -243,23 +203,6 @@ let MOCK_BEDS: FacilityBed[] = [
     { id: '7', roomId: '5', name: '210-A', occupied: false, occupiedByPatientId: null },
 ];
 
-const patientBedAssignments = new Map<string, string>();
-
-function syncBedOccupiedFlagsMock() {
-    const byBed = new Map<string, string>();
-    for (const [pid, bid] of patientBedAssignments) {
-        byBed.set(String(bid), pid);
-    }
-    MOCK_BEDS = MOCK_BEDS.map((b) => {
-        const holder = byBed.get(String(b.id));
-        return {
-            ...b,
-            occupied: holder !== undefined,
-            occupiedByPatientId: holder ?? null,
-        };
-    });
-}
-
 function wardById(id: string): FacilityWard | undefined {
     const list = USE_MOCK_FACILITY ? MOCK_WARDS : cachedWards;
     return list.find((w) => String(w.id) === String(id));
@@ -273,26 +216,6 @@ function roomById(id: string): FacilityRoom | undefined {
 function bedById(id: string): FacilityBed | undefined {
     const list = USE_MOCK_FACILITY ? MOCK_BEDS : cachedBeds;
     return list.find((b) => String(b.id) === String(id));
-}
-
-function assertBedInHierarchy(wardId: string, roomId: string, bedId: string): void {
-    const w = wardById(wardId);
-    const r = roomById(roomId);
-    const b = bedById(bedId);
-    if (!w || !r || !b) throw new Error('Invalid ward, room, or bed.');
-    if (String(r.wardId) !== String(w.id)) throw new Error('Room does not belong to the selected ward.');
-    if (String(b.roomId) !== String(r.id)) throw new Error('Bed does not belong to the selected room.');
-}
-
-export interface AssignBedPayload {
-    patientId: string;
-    wardId: string;
-    roomId: string;
-    bedId: string;
-}
-
-export interface TransferBedPayload extends AssignBedPayload {
-    fromBedId?: string | null;
 }
 
 export async function getWards(): Promise<FacilityWard[]> {
@@ -334,7 +257,6 @@ export async function getAllRooms(): Promise<FacilityRoom[]> {
 
 export async function getAllBeds(): Promise<FacilityBed[]> {
     if (USE_MOCK_FACILITY) {
-        syncBedOccupiedFlagsMock();
         const list = MOCK_BEDS.slice().map((b) => ({ ...b })).sort((a, b) => {
             const ra = roomById(a.roomId)?.name ?? '';
             const rb = roomById(b.roomId)?.name ?? '';
@@ -350,156 +272,16 @@ export async function getBeds(roomId: string | number): Promise<FacilityBed[]> {
     const rid = String(roomId).trim();
     if (!rid) return USE_MOCK_FACILITY ? mockDelay([]) : Promise.resolve([]);
     if (USE_MOCK_FACILITY) {
-        syncBedOccupiedFlagsMock();
         const list = MOCK_BEDS.filter((b) => String(b.roomId) === rid).sort((a, b) =>
             a.name.localeCompare(b.name, undefined, { numeric: true })
         );
         return mockDelay(list.map((b) => ({ ...b })));
     }
-    const all = applyClientOccupancy(cachedBeds.length ? cachedBeds.slice() : await httpGetBedList());
+    const all = cachedBeds.length ? cachedBeds.slice() : await httpGetBedList();
     const list = all.filter((b) => String(b.roomId) === rid).sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { numeric: true })
     );
     return list.map((b) => ({ ...b }));
-}
-
-function releasePatientBeds(patientId: string) {
-    const pid = patientId.trim();
-    if (!pid) return;
-    for (const [p] of [...patientBedAssignments.entries()]) {
-        if (p === pid) patientBedAssignments.delete(p);
-    }
-}
-
-export async function assignBed(payload: AssignBedPayload): Promise<void> {
-    const patientId = payload.patientId.trim();
-    if (!patientId) throw new Error('Patient is required.');
-    assertBedInHierarchy(payload.wardId, payload.roomId, payload.bedId);
-    if (USE_MOCK_FACILITY) {
-        syncBedOccupiedFlagsMock();
-        const bed = bedById(payload.bedId);
-        if (!bed) throw new Error('Bed not found.');
-        if (bed.occupied && bed.occupiedByPatientId !== patientId) {
-            throw new Error('That bed is already assigned to another patient.');
-        }
-        await mockDelay(undefined);
-        releasePatientBeds(patientId);
-        patientBedAssignments.set(patientId, String(payload.bedId));
-        syncBedOccupiedFlagsMock();
-        return;
-    }
-    const beds = applyClientOccupancy(cachedBeds.length ? cachedBeds.slice() : await httpGetBedList());
-    const bed = beds.find((b) => String(b.id) === String(payload.bedId));
-    if (!bed) throw new Error('Bed not found.');
-    if (bed.occupied && bed.occupiedByPatientId && bed.occupiedByPatientId !== patientId) {
-        throw new Error('That bed is already assigned to another patient.');
-    }
-    releasePatientBeds(patientId);
-    patientBedAssignments.set(patientId, String(payload.bedId));
-}
-
-export async function transferBed(payload: TransferBedPayload): Promise<void> {
-    const patientId = payload.patientId.trim();
-    if (!patientId) throw new Error('Patient is required.');
-    if (USE_MOCK_FACILITY) {
-        if (payload.fromBedId != null && String(payload.fromBedId).trim() !== '') {
-            const current = patientBedAssignments.get(patientId);
-            if (current !== undefined && String(current) !== String(payload.fromBedId)) {
-                throw new Error('Current bed does not match the selected transfer source.');
-            }
-        }
-        await assignBed(payload);
-        placementByPatient.set(patientId, {
-            wardId: payload.wardId,
-            roomId: payload.roomId,
-            bedId: payload.bedId,
-        });
-        return;
-    }
-    if (payload.fromBedId != null && String(payload.fromBedId).trim() !== '') {
-        const current = patientBedAssignments.get(patientId);
-        if (current !== undefined && String(current) !== String(payload.fromBedId)) {
-            throw new Error('Current bed does not match the selected transfer source.');
-        }
-    }
-    await assignBed(payload);
-    const labels = getPlacementDisplay({
-        wardId: payload.wardId,
-        roomId: payload.roomId,
-        bedId: payload.bedId,
-    });
-    const all = readPlacements();
-    all[patientId] = {
-        wardId: payload.wardId,
-        roomId: payload.roomId,
-        bedId: payload.bedId,
-        wardName: labels?.wardName,
-        roomName: labels?.roomName,
-        bedName: labels?.bedName,
-    };
-    writePlacements(all);
-}
-
-export interface PatientPlacementSnapshot {
-    wardId: string;
-    roomId: string;
-    bedId: string;
-}
-
-const placementByPatient = new Map<string, PatientPlacementSnapshot>();
-
-export async function getPatientPlacement(patientId: string): Promise<PatientPlacementSnapshot | null> {
-    const pid = patientId.trim();
-    if (!pid) return null;
-    if (USE_MOCK_FACILITY) {
-        const stored = placementByPatient.get(pid) ?? null;
-        return mockDelay(stored);
-    }
-    const all = readPlacements();
-    const s = all[pid];
-    if (!s) return null;
-    return { wardId: s.wardId, roomId: s.roomId, bedId: s.bedId };
-}
-
-export function getPlacementDisplay(
-    placement: PatientPlacementSnapshot
-): { wardName: string; roomName: string; bedName: string } | null {
-    if (USE_MOCK_FACILITY) {
-        syncBedOccupiedFlagsMock();
-    }
-    const w = wardById(placement.wardId);
-    const r = roomById(placement.roomId);
-    const b = bedById(placement.bedId);
-    if (!w || !r || !b) return null;
-    return { wardName: w.name, roomName: r.name, bedName: b.name };
-}
-
-export async function savePatientPlacement(patientId: string, placement: PatientPlacementSnapshot): Promise<void> {
-    const pid = patientId.trim();
-    if (!pid) throw new Error('Patient is required.');
-    assertBedInHierarchy(placement.wardId, placement.roomId, placement.bedId);
-    await assignBed({
-        patientId: pid,
-        wardId: placement.wardId,
-        roomId: placement.roomId,
-        bedId: placement.bedId,
-    });
-    if (USE_MOCK_FACILITY) {
-        placementByPatient.set(pid, { ...placement });
-        await mockDelay(undefined);
-        return;
-    }
-    const labels = getPlacementDisplay(placement);
-    const all = readPlacements();
-    all[pid] = {
-        wardId: placement.wardId,
-        roomId: placement.roomId,
-        bedId: placement.bedId,
-        wardName: labels?.wardName,
-        roomName: labels?.roomName,
-        bedName: labels?.bedName,
-    };
-    writePlacements(all);
 }
 
 // --- CRUD: real API ---
@@ -590,11 +372,6 @@ export async function deleteWard(id: string): Promise<void> {
         MOCK_BEDS = MOCK_BEDS.filter((b) => !roomIds.map(String).includes(String(b.roomId)));
         MOCK_ROOMS = MOCK_ROOMS.filter((r) => String(r.wardId) !== String(id));
         MOCK_WARDS = MOCK_WARDS.filter((w) => String(w.id) !== String(id));
-        for (const [pid, bid] of [...patientBedAssignments.entries()]) {
-            const b = bedById(bid);
-            if (!b || roomIds.map(String).includes(String(b.roomId))) patientBedAssignments.delete(pid);
-        }
-        syncBedOccupiedFlagsMock();
         return mockDelay(undefined);
     }
     try {
@@ -604,10 +381,6 @@ export async function deleteWard(id: string): Promise<void> {
     }
     const roomIds = cachedRooms.filter((r) => String(r.wardId) === String(id)).map((r) => r.id);
     const roomIdSet = new Set(roomIds.map(String));
-    for (const [pid, bid] of [...patientBedAssignments.entries()]) {
-        const b = cachedBeds.find((x) => String(x.id) === String(bid));
-        if (b && roomIdSet.has(String(b.roomId))) patientBedAssignments.delete(pid);
-    }
     cachedBeds = cachedBeds.filter((b) => !roomIdSet.has(String(b.roomId)));
     cachedRooms = cachedRooms.filter((r) => String(r.wardId) !== String(id));
     cachedWards = cachedWards.filter((w) => String(w.id) !== String(id));
@@ -689,11 +462,6 @@ export async function deleteRoom(id: string): Promise<void> {
     if (USE_MOCK_FACILITY) {
         MOCK_BEDS = MOCK_BEDS.filter((b) => String(b.roomId) !== String(id));
         MOCK_ROOMS = MOCK_ROOMS.filter((r) => String(r.id) !== String(id));
-        for (const [pid, bid] of [...patientBedAssignments.entries()]) {
-            const b = bedById(bid);
-            if (!b || String(b.roomId) === String(id)) patientBedAssignments.delete(pid);
-        }
-        syncBedOccupiedFlagsMock();
         return mockDelay(undefined);
     }
     try {
@@ -747,7 +515,6 @@ export async function updateBed(id: string, input: Partial<{ bedName: string; ro
         const idx = MOCK_BEDS.findIndex((b) => String(b.id) === String(id));
         if (idx < 0) throw new Error('Bed not found.');
         if (input.roomId !== undefined && !roomById(input.roomId)) throw new Error('Room not found.');
-        syncBedOccupiedFlagsMock();
         const cur = MOCK_BEDS[idx];
         const next: FacilityBed = {
             ...cur,
@@ -757,7 +524,6 @@ export async function updateBed(id: string, input: Partial<{ bedName: string; ro
         };
         if (!next.name.trim()) throw new Error('Bed name is required.');
         MOCK_BEDS = MOCK_BEDS.map((b, i) => (i === idx ? next : b));
-        syncBedOccupiedFlagsMock();
         return mockDelay(next);
     }
     const cur = bedById(id);
@@ -790,11 +556,7 @@ export async function updateBed(id: string, input: Partial<{ bedName: string; ro
 
 export async function deleteBed(id: string): Promise<void> {
     if (USE_MOCK_FACILITY) {
-        for (const [pid, bid] of [...patientBedAssignments.entries()]) {
-            if (String(bid) === String(id)) patientBedAssignments.delete(pid);
-        }
         MOCK_BEDS = MOCK_BEDS.filter((b) => String(b.id) !== String(id));
-        syncBedOccupiedFlagsMock();
         return mockDelay(undefined);
     }
     try {
@@ -803,9 +565,6 @@ export async function deleteBed(id: string): Promise<void> {
         throw new Error(getApiErrorMessage(e, 'Failed to delete bed'));
     }
     cachedBeds = cachedBeds.filter((b) => String(b.id) !== String(id));
-    for (const [pid, bid] of [...patientBedAssignments.entries()]) {
-        if (String(bid) === String(id)) patientBedAssignments.delete(pid);
-    }
 }
 
 /** @deprecated Use createWard / createRoom / createBed */
@@ -837,12 +596,11 @@ export function listRoomsForWardSync(wardId: string | number): FacilityRoom[] {
 export function listBedsForRoomSync(roomId: string | number): FacilityBed[] {
     const rid = String(roomId);
     if (USE_MOCK_FACILITY) {
-        syncBedOccupiedFlagsMock();
         return MOCK_BEDS.filter((b) => String(b.roomId) === rid).sort((a, b) =>
             a.name.localeCompare(b.name, undefined, { numeric: true })
         );
     }
-    return applyClientOccupancy(cachedBeds.filter((b) => String(b.roomId) === rid)).sort((a, b) =>
+    return cachedBeds.filter((b) => String(b.roomId) === rid).sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { numeric: true })
     );
 }
@@ -872,10 +630,7 @@ export function __resetRoomsMockForTests(): void {
         { id: '6', roomId: '4', name: '302-A', occupied: false, occupiedByPatientId: null },
         { id: '7', roomId: '5', name: '210-A', occupied: false, occupiedByPatientId: null },
     ];
-    patientBedAssignments.clear();
-    placementByPatient.clear();
     cachedWards = [];
     cachedRooms = [];
     cachedBeds = [];
-    syncBedOccupiedFlagsMock();
 }

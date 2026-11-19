@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { DialogShell } from '../../components/shared/DialogShell';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI } from '../../services/api';
+import { ModuleErrorState } from '../../components/facesheet/ModuleErrorState';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
 import { FaEye, FaTimes } from 'react-icons/fa';
 import IconSearch from '../../components/Icon/IconSearch';
 import MedicationAIExplanationSidebar from '../../components/MedicationAIExplanationSidebar';
-import { generateMedicationExplanation } from '../../services/geminiApi';
+import { explainMedication } from '../../services/ai.service';
 import { parseMedicationData } from '../../utils/medicationParser';
 import { MedicationExplanation } from '../../types/medication';
 import IconX from '@/components/Icon/IconX';
@@ -35,6 +37,7 @@ const Medications: React.FC = () => {
   const [paginatedCardList, setPaginatedCardList] = useState<MedicationRecord[]>([]);
   const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage] = useState(2);
   const [viewMedication, setViewMedication] = useState<MedicationRecord | null>(null);
@@ -63,6 +66,7 @@ const Medications: React.FC = () => {
       return;
     }
     setLoading(true);
+    setLoadError(null);
     try {
       const response = await patientDataAPI.getAllMedicationList(rcopiaID);
       if (response.data?.data || Array.isArray(response.data)) {
@@ -194,7 +198,7 @@ const Medications: React.FC = () => {
         updatePaginatedList(formattedData, 1);
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to fetch medications');
+      setLoadError(error.response?.data?.message || 'Failed to fetch medications');
     } finally {
       setLoading(false);
     }
@@ -277,7 +281,7 @@ const Medications: React.FC = () => {
       const parsedData = parseMedicationData(medication);
       
       // Generate AI explanation
-      const explanation = await generateMedicationExplanation(parsedData, medication);
+      const explanation = await explainMedication(parsedData, patientId ?? undefined);
       setAiExplanation(explanation);
     } catch (error: any) {
       console.error('Error generating medication explanation:', error);
@@ -322,7 +326,7 @@ const Medications: React.FC = () => {
         <input
           type="text"
           className="form-input pl-10 w-full"
-          placeholder="Search here"
+          aria-label="Search medications" placeholder="Search here"
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
         />
@@ -339,7 +343,9 @@ const Medications: React.FC = () => {
         {/* Card View */}
         <div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {loading ? (
+            {loadError ? (
+              <ModuleErrorState message={loadError} onRetry={() => void getPatientMedications()} retrying={loading} />
+            ) : loading ? (
               <div className="col-span-full text-center py-4">Loading...</div>
             ) : filteredCardList.length === 0 ? (
               <div className="col-span-full text-center mt-2">
@@ -485,17 +491,16 @@ const Medications: React.FC = () => {
         </div>
 
       {/* View Medication modal */}
-      {viewMedication && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
-          onClick={() => setViewMedication(null)}
-        >
-          <div
-            className="bg-white dark:bg-[#0e1726] rounded-lg shadow-xl max-w-2xl w-full flex flex-col max-h-[90vh]"
-            onClick={(e) => e.stopPropagation()}
-          >
+      <DialogShell
+        open={Boolean(viewMedication)}
+        onClose={() => setViewMedication(null)}
+        title="View Medication"
+        panelClassName="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-lg bg-white shadow-xl dark:bg-[#0e1726]"
+      >
+        {({ titleId }) => viewMedication && (
+          <>
             <div className="flex items-center justify-between p-4 bg-primary text-white rounded-t-lg shrink-0">
-              <h5 className="text-lg font-semibold">View Medication</h5>
+              <h5 id={titleId} className="text-lg font-semibold">View Medication</h5>
               <button
                 type="button"
                 onClick={() => setViewMedication(null)}
@@ -653,9 +658,9 @@ const Medications: React.FC = () => {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </DialogShell>
 
       {/* AI Explanation Sidebar */}
       <MedicationAIExplanationSidebar
@@ -667,18 +672,16 @@ const Medications: React.FC = () => {
       />
 
       {/* Text Modal (Documents-style) */}
-      {showTextModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
-          onClick={() => setShowTextModal(false)}
-        >
-          <div
-            className="bg-white dark:bg-[#0e1726] rounded-lg shadow-xl max-w-2xl w-full"
-            style={{ maxHeight: '90vh' }}
-            onClick={(e) => e.stopPropagation()}
-          >
+      <DialogShell
+        open={showTextModal}
+        onClose={() => setShowTextModal(false)}
+        title={textModalTitle || 'Details'}
+        panelClassName="w-full max-w-2xl max-h-[90vh] rounded-lg bg-white shadow-xl dark:bg-[#0e1726]"
+      >
+        {({ titleId }) => (
+          <>
             <div className="flex items-center justify-between p-4 border-b border-white-light dark:border-[#191e3a]">
-              <h5 className="text-lg font-semibold text-gray-900 dark:text-white">{textModalTitle}</h5>
+              <h5 id={titleId} className="text-lg font-semibold text-gray-900 dark:text-white">{textModalTitle}</h5>
               <button
                 type="button"
                 onClick={() => setShowTextModal(false)}
@@ -692,9 +695,9 @@ const Medications: React.FC = () => {
                 {textModalValue || '---'}
               </p>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </DialogShell>
     </div>
   );
 };

@@ -7,7 +7,7 @@ import {
 import type { HAIEncounterTimelineResponse, HAIEvent, HAIUnitSummary } from '../types/haiEvent';
 
 /** Set `VITE_HAI_EVENT_MOCK=false` when backend routes are live. */
-export const USE_HAI_EVENT_MOCK = import.meta.env.VITE_HAI_EVENT_MOCK !== 'false';
+export const USE_HAI_EVENT_MOCK = import.meta.env.VITE_HAI_EVENT_MOCK === 'true';
 
 const API_TIMEOUT_MS = 5_000;
 

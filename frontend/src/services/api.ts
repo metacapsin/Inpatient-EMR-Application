@@ -6,7 +6,6 @@ import {
   accessTokenNeedsRefresh,
   clearSessionAfterAuthFailure,
   getStoredAccessToken,
-  getStoredRefreshToken,
   refreshAccessToken,
   shouldBypassRefreshForUrl,
 } from './auth-tokens';
@@ -14,19 +13,14 @@ import {
 export const BASE_URL = API_BASE_URL;
 // http://101.53.133.39:4000
 
-/** Backend audit (`applicationArea`) reads `x-client-route` — same as EMR-ng / patient portals. */
-function clientRouteHeader(): string | undefined {
-  if (typeof window === 'undefined') return undefined;
-  const cr = `${window.location.pathname || ''}${window.location.search || ''}`.trim().slice(0, 512);
-  return cr || undefined;
-}
-
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: false,
+  // Required so the browser attaches the httpOnly refresh-token cookie on /auth/logout* calls
+  // (SEC-09); harmless for every other request, which still authenticates via the Bearer header.
+  withCredentials: true,
 });
 
 // Request interceptor: proactive refresh (same backend contract as provider Angular app)
@@ -38,9 +32,11 @@ api.interceptors.request.use(
 
     const url = config.url || '';
     if (!shouldBypassRefreshForUrl(url)) {
-      const refreshTok = getStoredRefreshToken();
+      // There's no stored refresh token to check for anymore (it's httpOnly) — just attempt the
+      // refresh when the access token is missing/expiring; the server 401s if there's no valid
+      // session cookie, same as any other failed refresh (SEC-09).
       let access = getStoredAccessToken();
-      if (refreshTok && accessTokenNeedsRefresh(access)) {
+      if (accessTokenNeedsRefresh(access)) {
         const newToken = await refreshAccessToken();
         if (!newToken) {
           clearSessionAfterAuthFailure();
@@ -65,11 +61,6 @@ api.interceptors.request.use(
       } catch (error) {
         console.warn('Failed to parse user data for tenant ID:', error);
       }
-    }
-
-    const clientRoute = clientRouteHeader();
-    if (clientRoute) {
-      config.headers.set('X-Client-Route', clientRoute);
     }
 
     return config;
@@ -138,16 +129,9 @@ export const authAPI = {
   resetPassword: (data: { token: string; newPassword: string; confirmPassword: string }) =>
     api.post('/auth/reset-password', data),
   
-  /** Uses stored refresh token; prefer automatic refresh via interceptors. */
-  refreshToken: () => {
-    const rt = getStoredRefreshToken();
-    if (!rt) return Promise.reject(new Error('No refresh token'));
-    return axios.post<{ token?: string; refreshToken?: string }>(
-      `${API_BASE_URL}/auth/refresh`,
-      { refreshToken: rt },
-      { headers: { 'Content-Type': 'application/json' } }
-    );
-  },
+  /** The refresh token is an httpOnly cookie now (SEC-09) — this just delegates to the same silent
+   *  refresh the request interceptor uses; prefer that automatic path over calling this directly. */
+  refreshToken: () => refreshAccessToken(),
 };
 
 // User API
@@ -711,15 +695,7 @@ export const patientDataAPI = {
     api.get(`/Patient/getDocumentById/${id}`),
   downloadDocument: (id: string) =>
     api.get(`/Patient/downloadDocument/${id}`, { responseType: 'blob' }),
-  
-  // Labs
-  getAllLabDocuments: (labId: string) =>
-    api.get(`/LabDetails/getAllLabDocuments/${labId}`),
-  getLabDocumentById: (id: string) =>
-    api.get(`/LabDetails/getLabDocumentById/${id}`),
-  downloadLabDocument: (id: string) =>
-    api.get(`/LabDetails/downloadLabDocument/${id}`, { responseType: 'blob' }),
-  
+
   // History
   getAllHistoryCategories: () =>
     api.get('/Patient/getAllHistoryCategories'),
@@ -811,51 +787,6 @@ export const notificationsAPI = {
   
   deleteNotification: (notificationId: string) =>
     api.delete(`/notifications/${notificationId}`),
-};
-
-// AI Health Insights API
-export const aiHealthInsightsAPI = {
-  getLabAbnormalHighlights: (labOrderId: string) =>
-    api.get(`/ai/health-insights/lab-abnormal-highlights/${labOrderId}`),
-  explainLabReport: (data: { labId: string; labData?: any }) =>
-    api.post('/ai/health-insights/explain-lab-report', data),
-  explainVisitSummary: (data: { noteId: string; language?: string }) =>
-    api.post('/ai/health-insights/explain-visit-summary', data),
-  askAboutVisit: (data: { noteId: string; question: string }) =>
-    api.post('/ai/health-insights/ask-about-visit', data),
-  getPreventiveSuggestions: (patientId: string) =>
-    api.get(`/ai/health-insights/preventive-suggestions/${patientId}`),
-  getNextVisitPrep: (patientId: string) =>
-    api.get(`/ai/health-insights/next-visit-prep/${patientId}`),
-  getCareGaps: (patientId: string) =>
-    api.get(`/ai/health-insights/care-gaps/${patientId}`),
-  getHealthScore: (patientId: string) =>
-    api.get(`/ai/health-insights/health-score/${patientId}`),
-  getLabComparison: (patientId: string) =>
-    api.get(`/ai/health-insights/lab-comparison/${patientId}`),
-  explainPatientDocument: (documentId: string) =>
-    api.post('/ai/health-insights/explain-patient-document', { documentId }),
-};
-
-// AI Chatbot API – structured payload (same as Provider chatbot)
-export interface AiChatbotStructuredPayload {
-  systemContent: string;
-  query: string;
-  maxTokens?: number;
-  temperature?: number;
-}
-
-export const aiChatbotAPI = {
-  /** Send structured AI payload (patient context embedded in query). Same format as Provider chatbot. */
-  sendStructuredMessage: (payload: AiChatbotStructuredPayload) =>
-    api.post<{ status?: string; message?: { role: string; content: string } }>('/api/ai/chatbot', payload),
-
-  /** Legacy: send only patientId + message (backend may build context). */
-  sendMessage: (patientId: string, message: string) =>
-    api.post<{ data?: { response?: string; message?: string }; response?: string; message?: string }>('/api/ai/chatbot', {
-      patientId,
-      message,
-    }),
 };
 
 // AI Triage – symptom assessment and routing

@@ -43,18 +43,69 @@ export const ADVANCE_DIRECTIVE_STATUSES: ReferenceOption[] = opts([
     'Declined to Provide',
 ]);
 
-/** OMB race categories (as used on CMS / CDC demographic captures). */
-export const RACES: ReferenceOption[] = opts([
-    'American Indian or Alaska Native',
-    'Asian',
-    'Black or African American',
-    'Native Hawaiian or Other Pacific Islander',
-    'White',
-    'Other Race',
-    'Declined to Specify',
-]);
+// USCDI v3 demographics — coded (CDC Race & Ethnicity / HL7 Birth Sex / SNOMED CT), matching
+// backend/src/lib/uscdiCodes.js exactly so a value saved here round-trips through FHIR Patient
+// extensions without a separate label-to-code mapping step.
 
-export const ETHNICITIES: ReferenceOption[] = opts(['Hispanic or Latino', 'Not Hispanic or Latino', 'Declined to Specify']);
+/** OMB race categories — multi-select (a person may select more than one). */
+export const RACES: ReferenceOption[] = [
+    { value: '1002-5', label: 'American Indian or Alaska Native' },
+    { value: '2028-9', label: 'Asian' },
+    { value: '2054-5', label: 'Black or African American' },
+    { value: '2076-8', label: 'Native Hawaiian or Other Pacific Islander' },
+    { value: '2106-3', label: 'White' },
+    { value: 'ASKU', label: 'Asked but unknown' },
+    { value: 'UNK', label: 'Unknown' },
+];
+
+export const ETHNICITIES: ReferenceOption[] = [
+    { value: '2135-2', label: 'Hispanic or Latino' },
+    { value: '2186-5', label: 'Not Hispanic or Latino' },
+    { value: 'ASKU', label: 'Asked but unknown' },
+    { value: 'UNK', label: 'Unknown' },
+];
+
+export const SEX_AT_BIRTH_OPTIONS: ReferenceOption[] = [
+    { value: 'M', label: 'Male' },
+    { value: 'F', label: 'Female' },
+    { value: 'UNK', label: 'Unknown' },
+];
+
+export const GENDER_IDENTITIES: ReferenceOption[] = [
+    { value: '446151000124109', label: 'Identifies as male gender' },
+    { value: '446141000124107', label: 'Identifies as female gender' },
+    { value: '33791000087105', label: 'Identifies as non-binary gender' },
+    { value: '407377005', label: 'Female-to-male transgender' },
+    { value: '407376001', label: 'Male-to-female transgender' },
+    { value: 'OTH', label: 'Other' },
+    { value: 'ASKU', label: 'Asked but unknown' },
+    { value: 'UNK', label: 'Unknown' },
+];
+
+export const SEXUAL_ORIENTATIONS: ReferenceOption[] = [
+    { value: '20430005', label: 'Heterosexual' },
+    { value: '38628009', label: 'Lesbian, gay or homosexual' },
+    { value: '42035005', label: 'Bisexual' },
+    { value: 'OTH', label: 'Other' },
+    { value: 'ASKU', label: 'Asked but unknown' },
+    { value: 'UNK', label: 'Unknown' },
+];
+
+export const COMMUNICATION_PREFERENCES: ReferenceOption[] = [
+    { value: 'phone', label: 'Phone' },
+    { value: 'email', label: 'Email' },
+    { value: 'mail', label: 'Mail' },
+    { value: 'portal', label: 'Patient portal' },
+    { value: 'text', label: 'Text message' },
+];
+
+export const GUARDIAN_ROLES: ReferenceOption[] = [
+    { value: '', label: 'None' },
+    { value: 'next_of_kin', label: 'Next of kin' },
+    { value: 'legal_guardian', label: 'Legal guardian' },
+    { value: 'power_of_attorney', label: 'Power of attorney' },
+    { value: 'healthcare_proxy', label: 'Healthcare proxy' },
+];
 
 export const PREFERRED_LANGUAGES: ReferenceOption[] = opts([
     'English',

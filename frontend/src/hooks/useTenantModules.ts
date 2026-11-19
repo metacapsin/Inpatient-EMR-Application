@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux';
 import api from '../services/api';
 import type { IRootState } from '../store';
 
-export type ModuleKey = 'adt' | 'patients' | 'medication' | 'billing' | 'staffing';
+export type ModuleKey = 'adt' | 'patients' | 'medication' | 'billing' | 'staffing' | 'ai';
 
 /**
  * The tenant's enabled modules (see Super Admin's Tenant Directory). This only drives which nav

@@ -43,6 +43,24 @@ export function NewOrderForm({ patientId, encounterId, orderType: type, onPlaced
     const [radIndication, setRadIndication] = useState('');
     const [radPriority, setRadPriority] = useState<'Routine' | 'Urgent' | 'STAT'>('Routine');
 
+    const [medPriority, setMedPriority] = useState<'routine' | 'urgent' | 'stat'>('routine');
+    const [dietType, setDietType] = useState('');
+    const [dietRestrictions, setDietRestrictions] = useState('');
+    const [dietPriority, setDietPriority] = useState<'routine' | 'urgent' | 'stat'>('routine');
+    const [therapyType, setTherapyType] = useState('');
+    const [therapyFrequency, setTherapyFrequency] = useState('');
+    const [procedureName, setProcedureName] = useState('');
+    const [procedureLaterality, setProcedureLaterality] = useState('');
+    const [consultService, setConsultService] = useState('');
+    const [consultReason, setConsultReason] = useState('');
+    const [nursingType, setNursingType] = useState('');
+    const [nursingDetails, setNursingDetails] = useState('');
+
+    // Verbal/telephone order: any type, not just medication — read-back must be confirmed now,
+    // physician co-sign happens later.
+    const [isVerbal, setIsVerbal] = useState(false);
+    const [readBackConfirmed, setReadBackConfirmed] = useState(false);
+
     const [cdsState, setCdsState] = useState<CdsCheckState>({ status: 'idle' });
     const [blockingAlerts, setBlockingAlerts] = useState<CdsAlert[] | null>(null);
     const pendingBody = useRef<PlaceOrderBody | null>(null);
@@ -62,6 +80,20 @@ export function NewOrderForm({ patientId, encounterId, orderType: type, onPlaced
         setRadModality('');
         setRadBodyRegion('');
         setRadIndication('');
+        setMedPriority('routine');
+        setDietType('');
+        setDietRestrictions('');
+        setDietPriority('routine');
+        setTherapyType('');
+        setTherapyFrequency('');
+        setProcedureName('');
+        setProcedureLaterality('');
+        setConsultService('');
+        setConsultReason('');
+        setNursingType('');
+        setNursingDetails('');
+        setIsVerbal(false);
+        setReadBackConfirmed(false);
         setCdsState({ status: 'idle' });
         setBlockingAlerts(null);
         pendingBody.current = null;
@@ -107,6 +139,11 @@ export function NewOrderForm({ patientId, encounterId, orderType: type, onPlaced
             toast.error('No active encounter for this patient — admit the patient first');
             return null;
         }
+        if (isVerbal && !readBackConfirmed) {
+            toast.error('Confirm the read-back before placing a verbal/telephone order');
+            return null;
+        }
+        const verbal = { isVerbal, readBackConfirmed: isVerbal ? readBackConfirmed : false };
         if (type === 'medication') {
             if (!medDrug.name.trim()) {
                 toast.error('Medication name is required');
@@ -122,6 +159,8 @@ export function NewOrderForm({ patientId, encounterId, orderType: type, onPlaced
                 frequency: medFrequency.trim() || undefined,
                 nextScheduledTime: medScheduledFor ? new Date(medScheduledFor).toISOString() : undefined,
                 rxnormCode: medDrug.rxnormCode,
+                priority: medPriority,
+                ...verbal,
             };
         }
         if (type === 'prn_stat') {
@@ -139,6 +178,7 @@ export function NewOrderForm({ patientId, encounterId, orderType: type, onPlaced
                 orderedTime: new Date().toISOString(),
                 givenBy: prnGivenBy.trim(),
                 rxnormCode: prnDrug.rxnormCode,
+                ...verbal,
             };
         }
         if (type === 'lab') {
@@ -162,21 +202,58 @@ export function NewOrderForm({ patientId, encounterId, orderType: type, onPlaced
                 labTests: tests,
                 priority: labPriority,
                 clinicalIndication: labIndication.trim(),
+                ...verbal,
             };
         }
-        if (!radModality.trim() || !radBodyRegion.trim() || !radIndication.trim()) {
-            toast.error('Modality, body region and clinical indication are required');
+        if (type === 'radiology') {
+            if (!radModality.trim() || !radBodyRegion.trim() || !radIndication.trim()) {
+                toast.error('Modality, body region and clinical indication are required');
+                return null;
+            }
+            return {
+                orderType: 'radiology',
+                patientId,
+                encounterId,
+                modality: radModality.trim(),
+                bodyRegion: radBodyRegion.trim(),
+                clinicalIndication: radIndication.trim(),
+                priority: radPriority,
+                ...verbal,
+            };
+        }
+        if (type === 'dietary') {
+            if (!dietType.trim()) {
+                toast.error('Diet type is required');
+                return null;
+            }
+            return { orderType: 'dietary', patientId, encounterId, dietType: dietType.trim(), restrictions: dietRestrictions.trim() || undefined, priority: dietPriority, ...verbal };
+        }
+        if (type === 'therapy') {
+            if (!therapyType.trim()) {
+                toast.error('Therapy type is required');
+                return null;
+            }
+            return { orderType: 'therapy', patientId, encounterId, therapyType: therapyType.trim(), frequency: therapyFrequency.trim() || undefined, ...verbal };
+        }
+        if (type === 'procedure') {
+            if (!procedureName.trim()) {
+                toast.error('Procedure name is required');
+                return null;
+            }
+            return { orderType: 'procedure', patientId, encounterId, procedureName: procedureName.trim(), laterality: procedureLaterality.trim() || undefined, ...verbal };
+        }
+        if (type === 'consult') {
+            if (!consultService.trim() || !consultReason.trim()) {
+                toast.error('Consulting service and reason are required');
+                return null;
+            }
+            return { orderType: 'consult', patientId, encounterId, consultingService: consultService.trim(), reason: consultReason.trim(), ...verbal };
+        }
+        if (!nursingType.trim()) {
+            toast.error('Nursing order type is required');
             return null;
         }
-        return {
-            orderType: 'radiology',
-            patientId,
-            encounterId,
-            modality: radModality.trim(),
-            bodyRegion: radBodyRegion.trim(),
-            clinicalIndication: radIndication.trim(),
-            priority: radPriority,
-        };
+        return { orderType: 'nursing', patientId, encounterId, nursingOrderType: nursingType.trim(), details: nursingDetails.trim() || undefined, ...verbal };
     }
 
     async function submitBody(body: PlaceOrderBody) {
@@ -238,6 +315,87 @@ export function NewOrderForm({ patientId, encounterId, orderType: type, onPlaced
                         <div>
                             <label className={LABEL_CLASS}>Scheduled time</label>
                             <input type="datetime-local" className={INPUT_CLASS} value={medScheduledFor} onChange={(e) => setMedScheduledFor(e.target.value)} />
+                        </div>
+                        <div>
+                            <label className={LABEL_CLASS}>Priority</label>
+                            <select className={INPUT_CLASS} value={medPriority} onChange={(e) => setMedPriority(e.target.value as typeof medPriority)}>
+                                <option value="routine">Routine</option>
+                                <option value="urgent">Urgent</option>
+                                <option value="stat">STAT</option>
+                            </select>
+                        </div>
+                    </>
+                )}
+
+                {type === 'dietary' && (
+                    <>
+                        <div>
+                            <label className={LABEL_CLASS}>Diet type *</label>
+                            <input className={INPUT_CLASS} value={dietType} onChange={(e) => setDietType(e.target.value)} placeholder="Cardiac, Diabetic, NPO…" />
+                        </div>
+                        <div>
+                            <label className={LABEL_CLASS}>Priority</label>
+                            <select className={INPUT_CLASS} value={dietPriority} onChange={(e) => setDietPriority(e.target.value as typeof dietPriority)}>
+                                <option value="routine">Routine</option>
+                                <option value="urgent">Urgent</option>
+                                <option value="stat">STAT</option>
+                            </select>
+                        </div>
+                        <div className="sm:col-span-2">
+                            <label className={LABEL_CLASS}>Restrictions</label>
+                            <input className={INPUT_CLASS} value={dietRestrictions} onChange={(e) => setDietRestrictions(e.target.value)} placeholder="Low sodium" />
+                        </div>
+                    </>
+                )}
+
+                {type === 'therapy' && (
+                    <>
+                        <div>
+                            <label className={LABEL_CLASS}>Therapy type *</label>
+                            <input className={INPUT_CLASS} value={therapyType} onChange={(e) => setTherapyType(e.target.value)} placeholder="Physical Therapy" />
+                        </div>
+                        <div>
+                            <label className={LABEL_CLASS}>Frequency</label>
+                            <input className={INPUT_CLASS} value={therapyFrequency} onChange={(e) => setTherapyFrequency(e.target.value)} placeholder="Daily" />
+                        </div>
+                    </>
+                )}
+
+                {type === 'procedure' && (
+                    <>
+                        <div>
+                            <label className={LABEL_CLASS}>Procedure *</label>
+                            <input className={INPUT_CLASS} value={procedureName} onChange={(e) => setProcedureName(e.target.value)} placeholder="Central line placement" />
+                        </div>
+                        <div>
+                            <label className={LABEL_CLASS}>Laterality</label>
+                            <input className={INPUT_CLASS} value={procedureLaterality} onChange={(e) => setProcedureLaterality(e.target.value)} placeholder="Right" />
+                        </div>
+                    </>
+                )}
+
+                {type === 'consult' && (
+                    <>
+                        <div>
+                            <label className={LABEL_CLASS}>Consulting service *</label>
+                            <input className={INPUT_CLASS} value={consultService} onChange={(e) => setConsultService(e.target.value)} placeholder="Cardiology" />
+                        </div>
+                        <div className="sm:col-span-2">
+                            <label className={LABEL_CLASS}>Reason *</label>
+                            <input className={INPUT_CLASS} value={consultReason} onChange={(e) => setConsultReason(e.target.value)} placeholder="New onset AFib" />
+                        </div>
+                    </>
+                )}
+
+                {type === 'nursing' && (
+                    <>
+                        <div>
+                            <label className={LABEL_CLASS}>Nursing order type *</label>
+                            <input className={INPUT_CLASS} value={nursingType} onChange={(e) => setNursingType(e.target.value)} placeholder="Fall precautions" />
+                        </div>
+                        <div className="sm:col-span-2">
+                            <label className={LABEL_CLASS}>Details</label>
+                            <input className={INPUT_CLASS} value={nursingDetails} onChange={(e) => setNursingDetails(e.target.value)} placeholder="Bed alarm on, 1:1 observation" />
                         </div>
                     </>
                 )}
@@ -314,6 +472,19 @@ export function NewOrderForm({ patientId, encounterId, orderType: type, onPlaced
                         </p>
                     </>
                 )}
+            </div>
+
+            <div className="mt-3 flex flex-col gap-1.5 rounded-md border border-dashed border-gray-200 p-2.5 text-xs dark:border-white/10">
+                <label className="inline-flex items-center gap-1.5 text-gray-800 dark:text-gray-200">
+                    <input type="checkbox" className="accent-primary" checked={isVerbal} onChange={(e) => { setIsVerbal(e.target.checked); if (!e.target.checked) setReadBackConfirmed(false); }} />
+                    Verbal / telephone order
+                </label>
+                {isVerbal ? (
+                    <label className="ml-5 inline-flex items-center gap-1.5 text-gray-800 dark:text-gray-200">
+                        <input type="checkbox" className="accent-primary" checked={readBackConfirmed} onChange={(e) => setReadBackConfirmed(e.target.checked)} />
+                        I read this order back to the ordering physician and confirmed it (required). A physician co-sign will be requested afterward.
+                    </label>
+                ) : null}
             </div>
 
             {(type === 'medication' || type === 'prn_stat') && cdsState.status === 'checking' ? (

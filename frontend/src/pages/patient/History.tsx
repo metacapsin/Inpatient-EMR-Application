@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI } from '../../services/api';
+import { ModuleErrorState } from '../../components/facesheet/ModuleErrorState';
+import { DialogShell } from '../../components/shared/DialogShell';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
@@ -31,6 +33,7 @@ const History: React.FC = () => {
   const [paginatedCardList, setPaginatedCardList] = useState<HistoryRecord[]>([]);
   const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage] = useState(2);
   const [viewHistoryDialog, setViewHistoryDialog] = useState(false);
@@ -53,6 +56,7 @@ const History: React.FC = () => {
     }
 
     setLoading(true);
+    setLoadError(null);
     try {
       const response = await patientDataAPI.getAllPatientHistory(patientId);
       if (response.data?.data || Array.isArray(response.data)) {
@@ -78,7 +82,7 @@ const History: React.FC = () => {
         updatePaginatedList(formattedData, 1);
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to fetch patient history.');
+      setLoadError(error.response?.data?.message || 'Failed to fetch patient history.');
     } finally {
       setLoading(false);
     }
@@ -174,7 +178,7 @@ const History: React.FC = () => {
         <input
           type="text"
           className="form-input pl-10 w-full"
-          placeholder="Search here"
+          aria-label="Search history" placeholder="Search here"
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
         />
@@ -191,7 +195,9 @@ const History: React.FC = () => {
         {/* Card View */}
         <div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {loading ? (
+            {loadError ? (
+              <ModuleErrorState message={loadError} onRetry={() => void fetchHistory()} retrying={loading} />
+            ) : loading ? (
               <div className="col-span-full text-center py-4">Loading...</div>
             ) : filteredCardList.length === 0 ? (
               <div className="col-span-full text-center mt-2">
@@ -281,11 +287,16 @@ const History: React.FC = () => {
         </div>
 
       {/* View History Details Modal */}
-      {viewHistoryDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-<div className="max-w-3xl w-full bg-white dark:bg-[#0e1726] rounded-lg shadow-xl flex flex-col max-h-[90vh]">       
+      <DialogShell
+        open={viewHistoryDialog}
+        onClose={() => setViewHistoryDialog(false)}
+        title="History Details"
+        panelClassName="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-lg bg-white shadow-xl dark:bg-[#0e1726]"
+      >
+        {({ titleId }) => (
+          <>
      <div className="flex items-center justify-between p-4 bg-primary text-white rounded-t-lg shrink-0">
-  <h5 className="text-lg font-semibold">History Details</h5>
+  <h5 id={titleId} className="text-lg font-semibold">History Details</h5>
   <button
     type="button"
     onClick={() => setViewHistoryDialog(false)}
@@ -347,9 +358,9 @@ const History: React.FC = () => {
            
            </div>
             )}
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </DialogShell>
     </div>
   );
 };

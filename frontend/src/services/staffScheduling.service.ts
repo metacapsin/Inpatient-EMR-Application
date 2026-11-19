@@ -30,7 +30,7 @@ import type {
 } from '../types/staffScheduling.types';
 
 function useMock(): boolean {
-    return import.meta.env.VITE_STAFF_SCHEDULING_MOCK !== 'false';
+    return import.meta.env.VITE_STAFF_SCHEDULING_MOCK === 'true';
 }
 
 const BASE = '/api/inpatient/staff-scheduling';

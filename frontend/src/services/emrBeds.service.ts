@@ -109,7 +109,9 @@ export function formatBedHeaderLine(bed: EmrBedListItem): string {
 export function filterAvailableBeds(beds: EmrBedListItem[]): EmrBedListItem[] {
     return beds.filter((b) => {
         const s = b.bedStatus;
-        if (s === 'occupied' || s === 'assigned' || s === 'held' || s === 'busy' || s === 'taken') return false;
+        // SAF-14: the real backend enum is 'hold', not 'held' — keeping both so a bed on hold is
+        // correctly excluded here instead of falling through to the "unknown status" branch below.
+        if (s === 'occupied' || s === 'assigned' || s === 'held' || s === 'hold' || s === 'busy' || s === 'taken') return false;
         if (s === 'maintenance' || s === 'blocked' || s === 'unavailable' || s === 'inactive' || s === 'dirty')
             return false;
         if (b.raw.isOccupied === true || b.raw.occupied === true) return false;

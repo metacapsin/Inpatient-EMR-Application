@@ -2,7 +2,8 @@ import { PropsWithChildren, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { IRootState, AppDispatch } from './store';
 import { toggleRTL, toggleTheme, toggleLocale, toggleMenu, toggleLayout, toggleAnimation, toggleNavbar, toggleSemidark } from './store/themeConfigSlice';
-import { fetchCloudSubscriptions, checkTokenExpiration, hydrateStaffSession } from './store/authSlice';
+import { fetchCloudSubscriptions, checkTokenExpiration, hydrateStaffSession, bootstrapAuth } from './store/authSlice';
+import { useIdleTimeout } from './hooks/useIdleTimeout';
 import store from './store';
 
 function App({ children }: PropsWithChildren) {
@@ -12,6 +13,21 @@ function App({ children }: PropsWithChildren) {
     const user = useSelector((state: IRootState) => state.auth.user);
     const dispatch = useDispatch<AppDispatch>();
     const staffHydrateStarted = useRef(false);
+    const bootstrapStarted = useRef(false);
+
+    useIdleTimeout();
+
+    // SEC-09: the access token is in-memory only, so a fresh page load always starts with
+    // state.auth.token === null even for someone who's genuinely still logged in — this silently
+    // tries to restore the session from the httpOnly refresh cookie once, on mount. On success,
+    // bootstrapAuth.fulfilled sets state.token, which the effects below pick up via their own
+    // `token` dependency (hydrateStaffSession, checkTokenExpiration, fetchCloudSubscriptions).
+    useEffect(() => {
+        if (token || bootstrapStarted.current) return;
+        bootstrapStarted.current = true;
+        void dispatch(bootstrapAuth());
+    }, [dispatch, token]);
+
     useEffect(() => {
         dispatch(toggleTheme(localStorage.getItem('theme') || themeConfig.theme || 'light'));
         dispatch(toggleMenu(localStorage.getItem('menu') || themeConfig.menu));

@@ -10,6 +10,7 @@ export interface RadiologyOrderFormValues {
     priority: string;
     relevantLabValues: string;
     pregnancyStatus: string;
+    contrastAllergy: string;
     transportRequired: string;
     scheduledForIso: string | null;
     specialInstructions: string;

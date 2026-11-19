@@ -451,7 +451,7 @@ const Allergies: React.FC = () => {
                     <input
                         type="text"
                         className="form-input h-9 w-full py-2 pl-10 text-sm"
-                        placeholder="Search allergen, reaction, class..."
+                        aria-label="Search allergies" placeholder="Search allergen, reaction, class..."
                         value={searchText}
                         onChange={(e) => setSearchText(e.target.value)}
                     />

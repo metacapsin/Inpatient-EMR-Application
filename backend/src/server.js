@@ -5,6 +5,7 @@ import { boss, startQueue } from './db/queue.js';
 import { registerRcopiaSyncWorker } from './jobs/rcopiaSync.js';
 import { registerAdtNotificationWorker } from './jobs/adtNotification.js';
 import { registerBedReservationExpiryWorker } from './jobs/bedReservationExpiry.js';
+import { registerCriticalResultEscalationWorker } from './jobs/criticalResultEscalation.js';
 
 const app = createApp();
 const server = app.listen(config.port, () => {
@@ -20,7 +21,8 @@ startQueue()
         await registerRcopiaSyncWorker();
         await registerAdtNotificationWorker();
         await registerBedReservationExpiryWorker();
-        console.log('[server] job queue started (rcopia-patient-sync, adt-notification, bed-reservation-expiry)');
+        await registerCriticalResultEscalationWorker();
+        console.log('[server] job queue started (rcopia-patient-sync, adt-notification, bed-reservation-expiry, critical-result-escalation)');
     })
     .catch((e) => console.error(`[server] job queue failed to start: ${e.message}`));
 

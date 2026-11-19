@@ -45,7 +45,7 @@ import type {
 } from '../types/unifiedOrders';
 
 function useMock(): boolean {
-    return import.meta.env.VITE_UNIFIED_ORDERS_MOCK !== 'false';
+    return import.meta.env.VITE_UNIFIED_ORDERS_MOCK === 'true';
 }
 
 function mockDelay<T>(value: T, ms = 140): Promise<T> {
@@ -149,7 +149,7 @@ function buildSeedOrders(): UnifiedOrderRow[] {
             unitId: '2',
             unitName: 'Med/Surg 4B',
             summary: 'Vancomycin 1 g IV q12h',
-            status: 'in_progress',
+            status: 'accepted',
             priority: 'urgent',
             orderedAt: hoursAgo(4),
             orderedByName: 'Dr. Casey Nguyen',
@@ -269,7 +269,7 @@ function buildSeedOrders(): UnifiedOrderRow[] {
             unitId: '1',
             unitName: 'ICU West',
             summary: 'Central line dressing change',
-            status: 'in_progress',
+            status: 'accepted',
             priority: 'urgent',
             orderedAt: hoursAgo(2),
             orderedByName: 'Dr. Riley Hart',
@@ -478,15 +478,89 @@ export async function cancelUnifiedOrder(
     if (useMock()) return mockDelay(mockCancel(aggregatedOrderId, body?.cancelReason));
 
     try {
+        // The backend's cancel route reads `reason`, not `cancelReason`/`cancelledBy` — this call
+        // used to send a body the route silently ignored entirely (no reason was ever captured).
         const { data } = await api.post<UnifiedOrdersApiEnvelope<UnifiedOrderRow>>(
             `/api/inpatient/orders/${encodeURIComponent(aggregatedOrderId)}/cancel`,
-            body ?? {}
+            { reason: body?.cancelReason }
         );
         const order = unwrapOrder(data);
         return order ? { ok: true, order } : { ok: false, message: 'Unexpected response' };
     } catch (e) {
         return { ok: false, message: e instanceof Error ? e.message : 'Cancel failed' };
     }
+}
+
+/**
+ * Hold / resume / cosign / renew / modify: real-API only (no mock-store branch). The mock dashboard
+ * exists for demoing the list/filter/acknowledge/cancel surface, not for simulating every CPOE
+ * lifecycle transition — adding full mock semantics for all five would be a lot of mock-only code
+ * for little real value. These throw a clear "not available in demo mode" message instead of
+ * pretending to work under VITE_UNIFIED_ORDERS_MOCK=true.
+ */
+async function requireLiveOrders<T>(fn: () => Promise<T>): Promise<T | UnifiedOrderActionResult> {
+    if (useMock()) return { ok: false, message: 'Not available in demo mode' };
+    return fn();
+}
+
+export async function holdUnifiedOrder(orderId: string, reason: string): Promise<UnifiedOrderActionResult> {
+    return requireLiveOrders(async () => {
+        try {
+            const { data } = await api.put<UnifiedOrdersApiEnvelope<UnifiedOrderRow>>(`/api/orders/${encodeURIComponent(orderId)}/status`, { status: 'held', reason });
+            const order = unwrapOrder(data);
+            return order ? { ok: true, order } : { ok: false, message: 'Unexpected response' };
+        } catch (e) {
+            return { ok: false, message: e instanceof Error ? e.message : 'Hold failed' };
+        }
+    });
+}
+
+export async function resumeUnifiedOrder(orderId: string): Promise<UnifiedOrderActionResult> {
+    return requireLiveOrders(async () => {
+        try {
+            const { data } = await api.put<UnifiedOrdersApiEnvelope<UnifiedOrderRow>>(`/api/orders/${encodeURIComponent(orderId)}/status`, { status: 'active' });
+            const order = unwrapOrder(data);
+            return order ? { ok: true, order } : { ok: false, message: 'Unexpected response' };
+        } catch (e) {
+            return { ok: false, message: e instanceof Error ? e.message : 'Resume failed' };
+        }
+    });
+}
+
+export async function cosignUnifiedOrder(orderId: string): Promise<UnifiedOrderActionResult> {
+    return requireLiveOrders(async () => {
+        try {
+            const { data } = await api.post<UnifiedOrdersApiEnvelope<UnifiedOrderRow>>(`/api/orders/${encodeURIComponent(orderId)}/cosign`, {});
+            const order = unwrapOrder(data);
+            return order ? { ok: true, order } : { ok: false, message: 'Unexpected response' };
+        } catch (e) {
+            return { ok: false, message: e instanceof Error ? e.message : 'Co-sign failed' };
+        }
+    });
+}
+
+export async function renewUnifiedOrder(orderId: string): Promise<UnifiedOrderActionResult> {
+    return requireLiveOrders(async () => {
+        try {
+            const { data } = await api.post<UnifiedOrdersApiEnvelope<UnifiedOrderRow>>(`/api/orders/${encodeURIComponent(orderId)}/renew`, {});
+            const order = unwrapOrder(data);
+            return order ? { ok: true, order } : { ok: false, message: 'Unexpected response' };
+        } catch (e) {
+            return { ok: false, message: e instanceof Error ? e.message : 'Renew failed' };
+        }
+    });
+}
+
+export async function modifyUnifiedOrder(orderId: string, detail: Record<string, unknown>): Promise<UnifiedOrderActionResult> {
+    return requireLiveOrders(async () => {
+        try {
+            const { data } = await api.post<UnifiedOrdersApiEnvelope<UnifiedOrderRow>>(`/api/orders/${encodeURIComponent(orderId)}/modify`, detail);
+            const order = unwrapOrder(data);
+            return order ? { ok: true, order } : { ok: false, message: 'Unexpected response' };
+        } catch (e) {
+            return { ok: false, message: e instanceof Error ? e.message : 'Modify failed' };
+        }
+    });
 }
 
 export async function fetchOrderDashboardWards(): Promise<Array<{ id: string; name: string; code?: string }>> {

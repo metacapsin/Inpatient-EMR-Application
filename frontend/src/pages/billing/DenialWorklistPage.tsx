@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { MockFlagBanner } from '../../components/shared/MockFlagBanner';
 import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { Loader2, Receipt } from 'lucide-react';
@@ -103,6 +104,7 @@ export default function DenialWorklistPage() {
 
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-3 sm:gap-4 p-2 sm:p-0">
+            <MockFlagBanner flag="cdiDenial" feature="Denial management" />
             <div className="shrink-0 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex items-start gap-3">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">

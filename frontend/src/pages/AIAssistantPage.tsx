@@ -1,44 +1,40 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { aiChatbotAPI, patientDataAPI } from '../services/api';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { QuickQuestions, ChatMessages, ChatInput } from '../components/AIChatAssistant';
 import IconSparkles from '../components/Icon/IconSparkles';
-import { usePatientPortalId } from '../hooks/usePatientPortalId';
+import { askAboutPatient, getAiStatus, type AiChatTurn } from '../services/ai.service';
+import { getPatientById } from '../services/patient.service';
 
-const SYSTEM_CONTENT = `You are an AI medical assistant analyzing patient data. Provide concise, structured medical responses based on the patient context provided. Use clear language and only use information from the given patient data.`;
+const WELCOME_MESSAGE =
+    'I can summarise what is documented in this chart (problems, allergies, medications, latest vitals and labs) and answer questions about it. I only use the record; I do not give dosing or treatment advice.';
 
-function buildStructuredQuery(patientData: Record<string, unknown>, message: string): string {
-    return `You are an AI medical assistant analyzing patient data.
+type ChatMessage = { content: string; isUser: boolean; createdAt?: string };
 
-Patient Context:
-${JSON.stringify(patientData)}
-
-Question: ${message}
-
-Provide a concise, structured medical response based on the available patient information.`;
+function initialMessages(): ChatMessage[] {
+    return [{ content: WELCOME_MESSAGE, isUser: false, createdAt: new Date().toISOString() }];
 }
 
-const WELCOME_MESSAGE = `Hello! I'm your AI medical assistant. I can help you analyze your health data, answer questions about your medical history, medications, vitals, and provide insights based on your health records. What would you like to know?`;
-
-function getInitialMessages(): Array<{ content: string; isUser: boolean; createdAt?: string }> {
-    return [
-        {
-            content: WELCOME_MESSAGE,
-            isUser: false,
-            createdAt: new Date().toISOString(),
-        },
-    ];
-}
-
+/**
+ * Staff-facing chart assistant. The patient context is built server-side from `patientId`
+ * (`POST /api/ai/chatbot`); the browser never holds a provider key or serialises the chart.
+ */
 const AIAssistantPage: React.FC = () => {
-    const patientPortalId = usePatientPortalId();
-    const [messages, setMessages] = useState<Array<{ content: string; isUser: boolean; createdAt?: string }>>(
-        getInitialMessages
-    );
+    const [params] = useSearchParams();
+    const patientId = params.get('patientId')?.trim() || '';
+
+    const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
     const [inputValue, setInputValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [patientContext, setPatientContext] = useState<Record<string, unknown> | null>(null);
     const [quickQuestionsOpen, setQuickQuestionsOpen] = useState(false);
+
+    const statusQuery = useQuery({ queryKey: ['ai', 'status'], queryFn: getAiStatus, staleTime: 60_000, retry: false });
+    const patientQuery = useQuery({
+        queryKey: ['ai', 'patient', patientId],
+        queryFn: () => getPatientById(patientId),
+        enabled: Boolean(patientId),
+        staleTime: 60_000,
+    });
 
     useEffect(() => {
         const prev = document.body.style.overflow;
@@ -49,96 +45,50 @@ const AIAssistantPage: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        if (!patientPortalId) return;
-        let cancelled = false;
-        (async () => {
-            try {
-                const response = await patientDataAPI.getFaceSheet(patientPortalId);
-                if (cancelled) return;
-                if (response.data?.status === 'success' && response.data?.data) {
-                    const data = response.data.data;
-                    setPatientContext({
-                        vitals: data.vitals ?? [],
-                        diagnoses: data.diagnoses ?? [],
-                        History: data.History ?? [],
-                        medications: data.medications ?? [],
-                        prescriptions: data.prescriptions ?? [],
-                        allergies: data.allergies ?? [],
-                        immunizations: data.immunizations ?? [],
-                        notes: data.notes ?? [],
-                    });
-                } else {
-                    setPatientContext({});
-                }
-            } catch {
-                if (!cancelled) setPatientContext({});
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [patientPortalId]);
+        setMessages(initialMessages());
+    }, [patientId]);
+
+    const history = useMemo<AiChatTurn[]>(
+        () =>
+            messages
+                .slice(1)
+                .map((m) => ({ role: m.isUser ? ('user' as const) : ('assistant' as const), content: m.content })),
+        [messages]
+    );
+
+    const aiDisabled = statusQuery.isSuccess && !statusQuery.data.enabled;
+    const aiUnavailable = statusQuery.isError;
 
     const handleSendQuestion = async (question: string) => {
         const trimmed = question.trim();
-        if (!trimmed) return;
-
-        if (!patientPortalId) {
-            setMessages((prev) => [
-                ...prev,
-                { content: trimmed, isUser: true, createdAt: new Date().toISOString() },
-                {
-                    content: 'Patient ID not found. Please log in as a patient.',
-                    isUser: false,
-                    createdAt: new Date().toISOString(),
-                },
-            ]);
-            setInputValue('');
-            return;
-        }
-
-        setMessages((prev) => [...prev, { content: trimmed, isUser: true, createdAt: new Date().toISOString() }]);
+        if (!trimmed || !patientId || isLoading) return;
+        const now = new Date().toISOString();
+        setMessages((prev) => [...prev, { content: trimmed, isUser: true, createdAt: now }]);
         setInputValue('');
         setIsLoading(true);
-
         try {
-            const patientData = patientContext ?? {};
-            const query = buildStructuredQuery(patientData, trimmed);
-            const response = await aiChatbotAPI.sendStructuredMessage({
-                systemContent: SYSTEM_CONTENT,
-                query,
-                maxTokens: 1024,
-                temperature: 0.3,
-            });
-            const data = response.data as Record<string, unknown>;
-            const message = data?.message as Record<string, unknown> | string | undefined;
-            const content =
-                (typeof message === 'object' && message && typeof message.content === 'string' && message.content) ||
-                (data?.data as Record<string, unknown> | undefined)?.response ||
-                (data?.data as Record<string, unknown> | undefined)?.message ||
-                data?.response ||
-                (typeof message === 'string' ? message : null) ||
-                (typeof data === 'string' ? data : null);
-            const answer =
-                typeof content === 'string' ? content : 'Sorry, I could not generate a response. Please try again.';
-            setMessages((prev) => [...prev, { content: answer, isUser: false, createdAt: new Date().toISOString() }]);
+            const res = await askAboutPatient({ patientId, query: trimmed, history });
+            setMessages((prev) => [...prev, { content: res.content, isUser: false, createdAt: new Date().toISOString() }]);
         } catch (err: unknown) {
-            const ax = err as { response?: { data?: { message?: string; error?: string } } };
-            const errorMessage =
-                ax?.response?.data?.message ?? ax?.response?.data?.error ?? 'Failed to get a response. Please try again.';
-            setMessages((prev) => [
-                ...prev,
-                { content: errorMessage, isUser: false, createdAt: new Date().toISOString() },
-            ]);
+            const msg = err instanceof Error ? err.message : 'Failed to get a response. Please try again.';
+            setMessages((prev) => [...prev, { content: msg, isUser: false, createdAt: new Date().toISOString() }]);
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleQuickQuestion = (question: string) => {
-        handleSendQuestion(question);
+        void handleSendQuestion(question);
         setQuickQuestionsOpen(false);
     };
+
+    const patientLabel = patientQuery.data
+        ? `${patientQuery.data.fullName}${patientQuery.data.mrn ? ` · MRN ${patientQuery.data.mrn}` : ''}`
+        : patientId
+          ? 'Loading patient…'
+          : 'No patient selected';
+
+    const inputDisabled = isLoading || !patientId || aiDisabled || aiUnavailable;
 
     return (
         <div className="flex h-[100dvh] min-h-0 flex-1 flex-col overflow-hidden">
@@ -152,16 +102,45 @@ const AIAssistantPage: React.FC = () => {
                     <li className="text-gray-400 dark:text-gray-500">/</li>
                     <li className="font-semibold text-gray-900 dark:text-white">AI Assistant</li>
                 </ul>
-                <div className="mt-2 flex items-center gap-2">
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#97704f]">
                         <IconSparkles className="h-5 w-5 text-white" />
                     </div>
-                    <div className="min-w-0">
-                        <h1 className="text-lg font-bold text-gray-900 dark:text-white md:text-xl">AI Chat Assistant</h1>
-                        <p className="truncate text-sm text-gray-500 dark:text-gray-400">Ask questions about your health records</p>
+                    <div className="min-w-0 flex-1">
+                        <h1 className="text-lg font-bold text-gray-900 dark:text-white md:text-xl">Chart assistant</h1>
+                        <p className="truncate text-sm text-gray-500 dark:text-gray-400">{patientLabel}</p>
                     </div>
+                    {patientId ? (
+                        <Link
+                            to={`/app/facesheet/${encodeURIComponent(patientId)}/demographic`}
+                            className="text-sm font-semibold text-primary hover:underline"
+                        >
+                            Open chart
+                        </Link>
+                    ) : null}
                 </div>
+                <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">
+                    {statusQuery.data?.disclaimer ?? 'AI-generated content. Verify against the medical record before clinical use.'}
+                </p>
             </div>
+
+            {!patientId ? (
+                <div className="mx-2 mb-2 rounded-xl border border-gray-200 bg-white px-4 py-4 text-sm text-gray-700 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-200 md:mx-0">
+                    <p>Open a patient chart and use the sparkle button in the header, or pick a patient from the list.</p>
+                    <Link to="/app/patients/list" className="mt-3 inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-95">
+                        Go to patient list
+                    </Link>
+                </div>
+            ) : aiDisabled || aiUnavailable ? (
+                <div
+                    role="alert"
+                    className="mx-2 mb-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100 md:mx-0"
+                >
+                    {aiUnavailable
+                        ? 'The AI assistant is not available for your account or organisation.'
+                        : 'The AI assistant is not configured for this environment. Ask your administrator to set the AI provider key.'}
+                </div>
+            ) : null}
 
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border border-white-light bg-white shadow-sm dark:border-dark dark:bg-black md:flex-row md:rounded-xl">
                 <div className="order-1 flex min-h-0 flex-1 flex-col overflow-hidden px-2 md:order-2 md:px-0">
@@ -172,16 +151,16 @@ const AIAssistantPage: React.FC = () => {
                         <ChatInput
                             value={inputValue}
                             onChange={setInputValue}
-                            onSubmit={() => handleSendQuestion(inputValue)}
-                            disabled={isLoading}
-                            placeholder="Ask me anything about this patient..."
+                            onSubmit={() => void handleSendQuestion(inputValue)}
+                            disabled={inputDisabled}
+                            placeholder={patientId ? 'Ask about what is documented for this patient…' : 'Select a patient first'}
                         />
                     </div>
                 </div>
 
                 <aside className="order-2 flex w-full shrink-0 flex-col overflow-hidden border-t border-white-light bg-gray-50/50 dark:border-dark dark:bg-dark/20 md:order-1 md:h-full md:w-64 md:min-h-0 md:border-r md:border-t-0">
                     <div className="hidden min-h-0 w-full flex-col overflow-hidden md:flex md:h-full">
-                        <QuickQuestions onSelectQuestion={handleSendQuestion} disabled={isLoading} />
+                        <QuickQuestions onSelectQuestion={(q) => void handleSendQuestion(q)} disabled={inputDisabled} />
                     </div>
 
                     <div className="md:hidden">
@@ -207,6 +186,7 @@ const AIAssistantPage: React.FC = () => {
                                     onClick={(e) => e.stopPropagation()}
                                     role="dialog"
                                     aria-modal="true"
+                                    aria-label="Quick questions"
                                 >
                                     <div className="flex shrink-0 items-center justify-between border-b p-3">
                                         <span className="text-sm font-semibold">Quick Questions</span>
@@ -215,7 +195,7 @@ const AIAssistantPage: React.FC = () => {
                                         </button>
                                     </div>
                                     <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-4">
-                                        <QuickQuestions onSelectQuestion={handleQuickQuestion} disabled={isLoading} hideHeader />
+                                        <QuickQuestions onSelectQuestion={handleQuickQuestion} disabled={inputDisabled} hideHeader />
                                     </div>
                                 </div>
                             </div>

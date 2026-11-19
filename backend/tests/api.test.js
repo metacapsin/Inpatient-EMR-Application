@@ -4,6 +4,7 @@ import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
 import { createApp } from '../src/app.js';
+import { config } from '../src/config.js';
 import { pool } from '../src/db/pool.js';
 import { boss, startQueue, QUEUES } from '../src/db/queue.js';
 import { seedCdsRules } from '../src/db/seedCds.js';
@@ -41,12 +42,23 @@ async function newPlatformAdmin(label) {
     return { email, password };
 }
 
-async function call(method, path, { body, token } = {}) {
+// `jar` is a mutable { cookie } object a caller can thread across calls to carry the httpOnly
+// refresh-token cookie the way a browser would (plain fetch has no automatic cookie store).
+async function call(method, path, { body, token, jar } = {}) {
     const res = await fetch(base + path, {
         method,
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(jar?.cookie ? { Cookie: jar.cookie } : {}),
+        },
         body: body === undefined ? undefined : JSON.stringify(body),
     });
+    if (jar) {
+        const setCookie = res.headers.getSetCookie ? res.headers.getSetCookie() : [res.headers.get('set-cookie')].filter(Boolean);
+        const refreshCookie = setCookie.find((c) => c.startsWith('refreshToken='));
+        if (refreshCookie) jar.cookie = /refreshToken=;/.test(refreshCookie) ? null : refreshCookie.split(';')[0];
+    }
     let json = null;
     try { json = await res.json(); } catch { /* empty body */ }
     return { status: res.status, body: json };
@@ -70,20 +82,37 @@ test('health endpoints and auth gate', async () => {
     assert.equal((await call('GET', '/Wards/getWardList', { token: 'garbage' })).status, 401);
 });
 
+test('auth: self-service registration is gated by ALLOW_SELF_SERVICE_REGISTRATION', async () => {
+    process.env.ALLOW_SELF_SERVICE_REGISTRATION = 'false';
+    try {
+        const r = await call('POST', '/auth/register', { body: { username: `gated${suffix}`, email: `gated-${suffix}@test.example`, password: 'Test-passw0rd!' } });
+        assert.equal(r.status, 403);
+        assert.equal(r.body.code, 'REGISTRATION_DISABLED');
+    } finally {
+        delete process.env.ALLOW_SELF_SERVICE_REGISTRATION;
+    }
+});
+
 test('auth: login, refresh rotation, bad credentials, password reset validation', async () => {
     const a = await newTenant('auth');
     assert.equal(a.role, 'admin');
     const bad = await call('POST', '/login', { body: { username: a.email, password: 'wrong-password' } });
     assert.equal(bad.status, 401);
-    const login = await call('POST', '/login', { body: { username: a.email, password: a.password } });
+    // The refresh token now travels as an httpOnly cookie, not in the JSON body (SEC-09) — the jar
+    // carries it across calls the way a browser's cookie store would.
+    const jar = {};
+    const login = await call('POST', '/login', { body: { username: a.email, password: a.password }, jar });
     assert.equal(login.status, 200);
-    assert.ok(login.body.token && login.body.refreshToken && login.body.user.tenant.id);
+    assert.ok(login.body.token && login.body.user.tenant.id);
+    assert.equal(login.body.refreshToken, undefined);
+    const loginCookie = jar.cookie;
+    assert.ok(loginCookie, 'expected a refresh-token cookie from /login');
 
-    const r1 = await call('POST', '/auth/refresh', { body: { refreshToken: login.body.refreshToken } });
+    const r1 = await call('POST', '/auth/refresh', { jar });
     assert.equal(r1.status, 200);
-    assert.notEqual(r1.body.refreshToken, login.body.refreshToken);
-    // Rotated token cannot be reused.
-    assert.equal((await call('POST', '/auth/refresh', { body: { refreshToken: login.body.refreshToken } })).status, 401);
+    assert.notEqual(jar.cookie, loginCookie);
+    // Rotated cookie cannot be reused.
+    assert.equal((await call('POST', '/auth/refresh', { jar: { cookie: loginCookie } })).status, 401);
 
     assert.equal((await call('POST', '/forgotPassword', { body: { email: 'nobody@nowhere.example' } })).status, 200);
     assert.equal((await call('POST', '/auth/reset-password', { body: { token: 'x', newPassword: 'short', confirmPassword: 'short' } })).status, 400);
@@ -164,17 +193,21 @@ test('facility CRUD, patients, ADT flow and bed board', async () => {
     // A vacated bed is not free yet — it goes to 'dirty' and into the EVS queue until housekeeping approves it.
     assert.equal(board2.rows.find((r) => r.bed.id === bed1.id).bed.bedStatus, 'dirty');
 
-    // discharge: confirm before initiate is rejected
-    assert.equal((await call('POST', '/api/discharges/confirm', { token: tk, body: { encounterId: encId } })).status, 409);
-    assert.equal((await call('POST', '/api/discharges', { token: tk, body: { phase: 'initiate', encounterId: encId, disposition: 'Home' } })).status, 200);
+    // discharge: confirm before initiate is rejected. SAF-12: confirming is physician-only now, so an
+    // admin gets 403 regardless of encounter state — exercise the "not yet initiated" 409 with an
+    // actual physician instead.
+    assert.equal((await call('POST', '/api/discharges/confirm', { token: tk, body: { encounterId: encId } })).status, 403, 'admin cannot confirm at all');
+    const earlyMd = await addUser(t, 'mdearlyconfirm', 'physician');
+    assert.equal((await call('POST', '/api/discharges/confirm', { token: earlyMd.token, body: { encounterId: encId } })).status, 409, 'not yet initiated');
+    assert.equal((await call('POST', '/api/discharges', { token: tk, body: { phase: 'initiate', encounterId: encId, disposition: '01' } })).status, 200);
     // Hard gates: nothing is documented yet, so confirm is refused with the structured gate list.
-    const blocked = await call('POST', '/api/discharges', { token: tk, body: { phase: 'confirm', encounterId: encId } });
+    const blocked = await call('POST', '/api/discharges', { token: earlyMd.token, body: { phase: 'confirm', encounterId: encId } });
     assert.equal(blocked.status, 409);
     assert.equal(blocked.body.code, 'DISCHARGE_BLOCKED');
     assert.ok(blocked.body.details.blocking.some((g) => g.id === 'gate-summary-signed'));
     assert.ok(blocked.body.details.blocking.some((g) => g.id === 'gate-med-reconciliation'));
-    await satisfyDischargeGates(tk, encId);
-    const conf = await call('POST', '/api/discharges', { token: tk, body: { phase: 'confirm', encounterId: encId } });
+    const mdTokenA = await satisfyDischargeGates(tk, encId);
+    const conf = await call('POST', '/api/discharges', { token: mdTokenA, body: { phase: 'confirm', encounterId: encId } });
     assert.equal(conf.status, 200, JSON.stringify(conf.body));
     assert.equal(conf.body.data.patientId, p1.id);
     assert.equal((await call('GET', '/api/admissions/active', { token: tk })).body.data.length, 0);
@@ -191,7 +224,7 @@ test('facility CRUD, patients, ADT flow and bed board', async () => {
 test('visitors, family contacts and vitals', async () => {
     const t = await newTenant('vis');
     const tk = t.token;
-    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Vi', lastName: 'Sitor' } })).body.data;
+    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Vi', lastName: 'Sitor', dOB: '1960-01-01', sex: 'F' } })).body.data;
 
     const v = (await call('POST', '/Visitors/CreateVisitor', { token: tk, body: { patientId: p.id, firstName: 'Eleanor', checkInAt: new Date().toISOString(), checkOutAt: '', restrictions: '', status: 'checked-in' } })).body.data;
     assert.equal(v.checkOutAt, null);
@@ -229,7 +262,7 @@ test('care plan, I/O, consents, flowsheet, HAI', async () => {
     const ward = (await call('POST', '/Wards/CreateWard', { token: tk, body: { name: 'W' } })).body.data;
     const room = (await call('POST', '/Rooms/CreateRoom', { token: tk, body: { wardId: ward.id, roomNumber: '1' } })).body.data;
     const bed = (await call('POST', '/Beds/CreateBed', { token: tk, body: { roomId: room.id, bedLabel: 'B' } })).body.data;
-    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Cli', lastName: 'Nical' } })).body.data;
+    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Cli', lastName: 'Nical', dOB: '1960-01-01', sex: 'F' } })).body.data;
     const enc = (await call('POST', '/api/admissions', { token: tk, body: { patientId: p.id, bedId: bed.id } })).body.data.encounter.id;
 
     // care plan
@@ -313,7 +346,7 @@ test('care plan, I/O, consents, flowsheet, HAI', async () => {
 test('medication management, CDI and denials', async () => {
     const t = await newTenant('med');
     const tk = t.token;
-    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Med', lastName: 'Patient' } })).body.data;
+    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Med', lastName: 'Patient', dOB: '1960-01-01', sex: 'F' } })).body.data;
     const ward = (await call('POST', '/Wards/CreateWard', { token: tk, body: { name: 'W' } })).body.data;
     const room = (await call('POST', '/Rooms/CreateRoom', { token: tk, body: { wardId: ward.id, roomNumber: '1' } })).body.data;
     const bed = (await call('POST', '/Beds/CreateBed', { token: tk, body: { roomId: room.id, bedLabel: 'B' } })).body.data;
@@ -333,11 +366,13 @@ test('medication management, CDI and denials', async () => {
     assert.equal((await call('GET', `/api/prn-stat/${p.id}`, { token: tk })).body.data[0].type, 'STAT');
 
     const rx = (await call('POST', '/api/prescriptions', { token: tk, body: { patientId: p.id, medicines: [{ medicineId: 'm1', name: 'Amox', quantityOrdered: 10, unitPrice: 2.5 }] } })).body.data;
+    // Dispensing is a clinical attestation (#SEC-17) — an admin token can no longer do it.
+    const pharmacist = await addUser(t, 'pharmMed', 'pharmacist');
     const line = { medicineId: 'm1', quantityDispensed: 10, batchNumber: 'B1', expiryDate: '2099-01-01', unitPrice: 2.5 };
-    assert.equal((await call('POST', '/api/dispense', { token: tk, body: { prescriptionId: rx.prescriptionId, medicines: [{ ...line, quantityDispensed: 11 }], dispensedBy: 'Pharm', totalCost: 27.5 } })).status, 400, 'over-dispense');
-    assert.equal((await call('POST', '/api/dispense', { token: tk, body: { prescriptionId: rx.prescriptionId, medicines: [line], dispensedBy: 'Pharm', totalCost: 1 } })).status, 400, 'total mismatch');
-    assert.equal((await call('POST', '/api/dispense', { token: tk, body: { prescriptionId: rx.prescriptionId, medicines: [line], dispensedBy: 'Pharm', totalCost: 25 } })).body.data.ok, true);
-    assert.equal((await call('POST', '/api/dispense', { token: tk, body: { prescriptionId: rx.prescriptionId, medicines: [line], dispensedBy: 'Pharm', totalCost: 25 } })).status, 409, 'double dispense');
+    assert.equal((await call('POST', '/api/dispense', { token: pharmacist.token, body: { prescriptionId: rx.prescriptionId, medicines: [{ ...line, quantityDispensed: 11 }], dispensedBy: 'Pharm', totalCost: 27.5 } })).status, 400, 'over-dispense');
+    assert.equal((await call('POST', '/api/dispense', { token: pharmacist.token, body: { prescriptionId: rx.prescriptionId, medicines: [line], dispensedBy: 'Pharm', totalCost: 1 } })).status, 400, 'total mismatch');
+    assert.equal((await call('POST', '/api/dispense', { token: pharmacist.token, body: { prescriptionId: rx.prescriptionId, medicines: [line], dispensedBy: 'Pharm', totalCost: 25 } })).body.data.ok, true);
+    assert.equal((await call('POST', '/api/dispense', { token: pharmacist.token, body: { prescriptionId: rx.prescriptionId, medicines: [line], dispensedBy: 'Pharm', totalCost: 25 } })).status, 409, 'double dispense');
     assert.equal((await call('GET', `/api/prescriptions/${p.id}`, { token: tk })).body.data.length, 0);
 
     const dm = { medications: [{ name: 'Aspirin', dose: '81 mg', frequency: 'Daily', duration: '30d', instructions: 'with food' }], preparedBy: 'RN', reviewedBy: 'MD', counsellingDone: true };
@@ -380,7 +415,7 @@ test('medication management, CDI and denials', async () => {
 test('tenant isolation: another tenant cannot see or touch the data', async () => {
     const a = await newTenant('isoA');
     const b = await newTenant('isoB');
-    const p = (await call('POST', '/Patient/createPatient', { token: a.token, body: { firstName: 'Secret', lastName: 'Patient' } })).body.data;
+    const p = (await call('POST', '/Patient/createPatient', { token: a.token, body: { firstName: 'Secret', lastName: 'Patient', dOB: '1960-01-01', sex: 'F' } })).body.data;
     assert.equal((await call('GET', `/Patient/getPatientById/${p.id}`, { token: b.token })).status, 404);
     assert.equal((await call('GET', '/Patient/getAllPatientListPaginated', { token: b.token })).body.data.total, 0);
     assert.equal((await call('POST', '/Visitors/CreateVisitor', { token: b.token, body: { patientId: p.id, firstName: 'Spy' } })).status, 404);
@@ -399,7 +434,7 @@ test('IPD dashboard and notifications', async () => {
     const room = (await call('POST', '/Rooms/CreateRoom', { token: tk, body: { wardId: ward.id, roomNumber: '7' } })).body.data;
     const b1 = (await call('POST', '/Beds/CreateBed', { token: tk, body: { roomId: room.id, bedLabel: 'A' } })).body.data;
     await call('POST', '/Beds/CreateBed', { token: tk, body: { roomId: room.id, bedLabel: 'B' } });
-    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Dash', lastName: 'Board' } })).body.data;
+    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Dash', lastName: 'Board', dOB: '1960-01-01', sex: 'F' } })).body.data;
     const enc = (await call('POST', '/api/admissions', { token: tk, body: { patientId: p.id, bedId: b1.id } })).body.data.encounter.id;
 
     const d = (await call('GET', '/dashboard/ipd', { token: tk })).body.data;
@@ -417,8 +452,8 @@ test('IPD dashboard and notifications', async () => {
     assert.equal((await call('GET', '/notifications', { token: nurse.body.token })).body.data.length, 0);
 
     await call('POST', '/api/discharges', { token: tk, body: { phase: 'initiate', encounterId: enc } });
-    await satisfyDischargeGates(tk, enc);
-    await call('POST', '/api/discharges', { token: tk, body: { phase: 'confirm', encounterId: enc } });
+    const mdTokenB = await satisfyDischargeGates(tk, enc);
+    await call('POST', '/api/discharges', { token: mdTokenB, body: { phase: 'confirm', encounterId: enc } });
     assert.equal((await call('GET', '/dashboard/ipd', { token: tk })).body.data.kpis.dischargedToday, 1);
 });
 
@@ -432,13 +467,25 @@ async function satisfyDischargeGates(tk, encounterId) {
     for (const t of view.body.data.checklist.filter((x) => x.blocksDischarge && !x.completed)) {
         assert.equal((await call('PATCH', `/api/encounters/${encounterId}/discharge-checklist/tasks/${t.id}`, { token: tk, body: { completed: true } })).status, 200);
     }
+    // Completing med reconciliation and signing the discharge summary are clinical attestations
+    // (#SEC-17) — an admin token (what callers of this helper pass) can no longer do either, so a
+    // physician is registered here to perform just those two steps.
+    const physicianEmail = `dc-md-${crypto.randomUUID().slice(0, 8)}@test.example`;
+    const mkPhysician = await call('POST', '/auth/register-user', { token: tk, body: { email: physicianEmail, password: 'Physician-passw0rd', role: 'physician', firstName: 'Discharge', lastName: 'MD' } });
+    assert.equal(mkPhysician.status, 201, JSON.stringify(mkPhysician.body));
+    const physicianLogin = await call('POST', '/login', { body: { username: physicianEmail, password: 'Physician-passw0rd' } });
+    assert.equal(physicianLogin.status, 200);
+    const mdToken = physicianLogin.body.token;
+
     const rec = (await call('GET', `/api/encounters/${encounterId}/med-reconciliation/discharge`, { token: tk })).body.data;
     const lines = rec.lines.map((l) => ({ ...l, action: 'continue' }));
-    assert.equal((await call('POST', `/api/encounters/${encounterId}/med-reconciliation/discharge/complete`, { token: tk, body: { lines } })).status, 200);
-    const summary = { admissionDiagnosis: 'Pneumonia', hospitalCourse: 'Treated with IV antibiotics; improved.', finalDiagnoses: 'J18.9 Pneumonia, unspecified organism', dischargeMedications: 'Per reconciliation', followUpInstructions: 'PCP in 7 days', disposition: 'Home' };
+    assert.equal((await call('POST', `/api/encounters/${encounterId}/med-reconciliation/discharge/complete`, { token: mdToken, body: { lines } })).status, 200);
+    const summary = { admissionDiagnosis: 'Pneumonia', hospitalCourse: 'Treated with IV antibiotics; improved.', finalDiagnoses: 'J18.9 Pneumonia, unspecified organism', dischargeMedications: 'Per reconciliation', followUpInstructions: 'PCP in 7 days', disposition: '01' };
     assert.equal((await call('PUT', `/api/encounters/${encounterId}/discharge-summary`, { token: tk, body: summary })).status, 200);
-    const sign = await call('POST', `/api/encounters/${encounterId}/discharge-summary/sign`, { token: tk, body: {} });
+    const sign = await call('POST', `/api/encounters/${encounterId}/discharge-summary/sign`, { token: mdToken, body: {} });
     assert.equal(sign.status, 200, JSON.stringify(sign.body));
+    // SAF-12: confirming a discharge is now physician-only — callers need this token for that step.
+    return mdToken;
 }
 
 async function addUser(admin, label, role) {
@@ -455,7 +502,7 @@ test('appointments: dropdowns, slots, conflicts, CRUD, filters, tenant isolation
     const doc = await addUser(a, 'docappt', 'physician');
     const nurse = await addUser(a, 'nurseappt', 'nurse');
     const tk = a.token;
-    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Ann', lastName: 'Booker' } })).body.data;
+    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Ann', lastName: 'Booker', dOB: '1960-01-01', sex: 'F' } })).body.data;
 
     // Admin-only setup data.
     assert.equal((await call('POST', '/ServiceLocation/createServiceLocation', { token: nurse.token, body: { name: 'X' } })).status, 403);
@@ -544,7 +591,7 @@ test('patient records: documents, allergies, immunizations, history, lab orders 
     const nurse = await addUser(a, 'nurserec', 'nurse');
     const pharm = await addUser(a, 'pharmrec', 'pharmacist');
     const tk = a.token;
-    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Rec', lastName: 'Ords' } })).body.data;
+    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Rec', lastName: 'Ords', dOB: '1960-01-01', sex: 'F' } })).body.data;
 
     // documents (binary round-trip)
     const bytes = Buffer.from('%PDF-1.4 hello');
@@ -605,9 +652,8 @@ test('patient records: documents, allergies, immunizations, history, lab orders 
     assert.equal((await call('PUT', `/lab-orders/${one.id}`, { token: tk, body: { orderStatus: 'Resulted' } })).body.data.orderStatus, 'Resulted');
     assert.equal((await call('PUT', `/lab-orders/${one.id}`, { token: tk, body: { orderStatus: 'Cancelled' } })).status, 409, 'cancel only before Resulted');
     assert.equal((await call('PUT', `/lab-orders/${one.id}`, { token: tk, body: { orderStatus: 'Done' } })).status, 400);
-    const lr = (await call('POST', '/LabDetails/createLabDocument', { token: tk, body: { patientId: p.id, name: 'Glucose', labName: 'Quest', value: '98', unit: 'mg/dL', date: '2026-01-02' } })).body.data;
-    assert.equal((await call('GET', `/LabDetails/getAllLabDocuments/${p.id}`, { token: tk })).body.data[0].value, '98');
-    assert.equal((await call('GET', `/LabDetails/getLabDocumentById/${lr.id}`, { token: tk })).body.data.name, 'Glucose');
+    // BUG-13: the /LabDetails/* lab_documents store was retired — lab_results (above) is the only lab store now.
+    assert.equal((await call('POST', '/LabDetails/createLabDocument', { token: tk, body: { patientId: p.id, name: 'Glucose' } })).status, 404, 'retired endpoint');
 
     // tenant isolation on every list
     const b = await newTenant('recsB');
@@ -683,7 +729,7 @@ test('live staffing assignments: board, drag updates, ratios, float pool', async
     const beds = [];
     for (const l of ['A', 'B', 'C']) beds.push((await call('POST', '/Beds/CreateBed', { token: tk, body: { roomId: room.id, bedLabel: l } })).body.data);
     for (const [i, bed] of beds.entries()) {
-        const pt = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: `Pat${i}`, lastName: 'Staffed' } })).body.data;
+        const pt = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: `Pat${i}`, lastName: 'Staffed', dOB: '1960-01-01', sex: 'F' } })).body.data;
         assert.equal((await call('POST', '/api/admissions', { token: tk, body: { patientId: pt.id, bedId: bed.id } })).status, 201);
     }
     const day = '2099-04-05';
@@ -749,7 +795,7 @@ test('radiology orders and code events', async () => {
     const ward = (await call('POST', '/Wards/CreateWard', { token: tk, body: { name: 'W' } })).body.data;
     const room = (await call('POST', '/Rooms/CreateRoom', { token: tk, body: { wardId: ward.id, roomNumber: '9' } })).body.data;
     const bed = (await call('POST', '/Beds/CreateBed', { token: tk, body: { roomId: room.id, bedLabel: 'A' } })).body.data;
-    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Rad', lastName: 'Code' } })).body.data;
+    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Rad', lastName: 'Code', dOB: '1960-01-01', sex: 'F' } })).body.data;
     const enc = (await call('POST', '/api/admissions', { token: tk, body: { patientId: p.id, bedId: bed.id } })).body.data.encounter.id;
 
     // radiology
@@ -784,7 +830,8 @@ test('radiology orders and code events', async () => {
     assert.equal(ev.unitId, ward.id);
     assert.equal((await call('POST', '/api/CodeEvent/activate', { token: nurse.token, body: act })).status, 409, 'one active code per patient');
     assert.equal((await call('GET', `/api/CodeEvent/active/${ward.id}`, { token: tk })).body.data.length, 1);
-    assert.equal((await call('GET', '/api/CodeEvent/active/unit-1', { token: tk })).body.data.length, 1, 'default placeholder = whole tenant');
+    assert.equal((await call('GET', '/api/CodeEvent/active/all', { token: tk })).body.data.length, 1, 'the "all" sentinel = whole tenant');
+    assert.equal((await call('GET', '/api/CodeEvent/active/unit-1', { token: tk })).body.data.length, 0, 'SAF-26: unit-1 is a real unit id now, not a magic default');
     assert.equal((await call('GET', '/api/CodeEvent/active/other-ward', { token: tk })).body.data.length, 0);
     assert.equal((await call('GET', `/api/CodeEvent/patient/${p.id}`, { token: tk })).body.data.id, ev.id);
 
@@ -912,7 +959,7 @@ test('tenant governance: disabled modules are blocked, unrelated routes still wo
 
     const t = await newTenant('gov');
     const tenantId = t.user.tenant.id;
-    const p = (await call('POST', '/Patient/createPatient', { token: t.token, body: { firstName: 'Gov', lastName: 'Erned' } })).body.data;
+    const p = (await call('POST', '/Patient/createPatient', { token: t.token, body: { firstName: 'Gov', lastName: 'Erned', dOB: '1960-01-01', sex: 'F' } })).body.data;
 
     // Restrict this tenant to patients-only (no adt/medication/billing/staffing).
     const restrict = await call('PATCH', `/api/platform/tenants/${tenantId}`, { token: platformToken, body: { enabledModules: ['patients'] } });
@@ -953,8 +1000,8 @@ test('platform admin: delete tenant shows accurate impact counts and requires ex
 
     const t = await newTenant('del');
     const tenantId = t.user.tenant.id;
-    await call('POST', '/Patient/createPatient', { token: t.token, body: { firstName: 'Del', lastName: 'One' } });
-    await call('POST', '/Patient/createPatient', { token: t.token, body: { firstName: 'Del', lastName: 'Two' } });
+    await call('POST', '/Patient/createPatient', { token: t.token, body: { firstName: 'Del', lastName: 'One', dOB: '1960-01-01', sex: 'F' } });
+    await call('POST', '/Patient/createPatient', { token: t.token, body: { firstName: 'Del', lastName: 'Two', dOB: '1960-01-01', sex: 'F' } });
 
     const impact = await call('GET', `/api/platform/tenants/${tenantId}/deletion-impact`, { token: platformToken });
     assert.equal(impact.status, 200);
@@ -983,7 +1030,7 @@ test('CPOE: unified order-entry writes the ledger + detail row, encounter timeli
     const ward = (await call('POST', '/Wards/CreateWard', { token: tk, body: { name: 'W' } })).body.data;
     const room = (await call('POST', '/Rooms/CreateRoom', { token: tk, body: { wardId: ward.id, roomNumber: '1' } })).body.data;
     const bed = (await call('POST', '/Beds/CreateBed', { token: tk, body: { roomId: room.id, bedLabel: 'A' } })).body.data;
-    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Cpoe', lastName: 'Patient' } })).body.data;
+    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Cpoe', lastName: 'Patient', dOB: '1960-01-01', sex: 'F' } })).body.data;
     const enc = (await call('POST', '/api/admissions', { token: tk, body: { patientId: p.id, bedId: bed.id } })).body.data.encounter.id;
 
     // Radiology stays physician-only even though the router-level gate admits nurses too — this is
@@ -1016,11 +1063,13 @@ test('CPOE: unified order-entry writes the ledger + detail row, encounter timeli
     const single = (await call('GET', `/api/orders/${medOrder.id}`, { token: tk })).body.data;
     assert.equal(single.detail.name, 'Lisinopril');
 
-    // Basic status flip: discontinue/cancel the ledger row, no detail-table changes.
-    const disc = await call('PUT', `/api/orders/${medOrder.id}/status`, { token: nurse.token, body: { status: 'discontinued' } });
+    // Basic status flip: discontinue/cancel the ledger row, no detail-table changes. A reason is
+    // required for any transition away from 'active' other than resuming from 'held'.
+    assert.equal((await call('PUT', `/api/orders/${medOrder.id}/status`, { token: nurse.token, body: { status: 'discontinued' } })).status, 400, 'a reason is required');
+    const disc = await call('PUT', `/api/orders/${medOrder.id}/status`, { token: nurse.token, body: { status: 'discontinued', reason: 'No longer indicated' } });
     assert.equal(disc.body.data.status, 'discontinued');
-    assert.equal((await call('PUT', `/api/orders/${medOrder.id}/status`, { token: nurse.token, body: { status: 'cancelled' } })).status, 409, 'already-terminal order cannot flip again');
-    assert.equal((await call('PUT', `/api/orders/${labOrder.id}/status`, { token: doc.token, body: { status: 'cancelled' } })).body.data.status, 'cancelled');
+    assert.equal((await call('PUT', `/api/orders/${medOrder.id}/status`, { token: nurse.token, body: { status: 'cancelled', reason: 'x' } })).status, 409, 'already-terminal order cannot flip again');
+    assert.equal((await call('PUT', `/api/orders/${labOrder.id}/status`, { token: doc.token, body: { status: 'cancelled', reason: 'Duplicate order' } })).body.data.status, 'cancelled');
 
     // Orders dashboard: cross-patient aggregate, independent of the per-encounter timeline above.
     const dash = (await call('GET', '/api/inpatient/orders', { token: tk })).body.data;
@@ -1077,7 +1126,7 @@ test('bed management: timed holds, dirty-on-discharge, EVS turnaround, expiry sw
     const bedB = await mkBed(room.id, 'B');
     const bedC = await mkBed(isoRoom.id, 'C');
     const bedD = await mkBed(room.id, 'D');
-    const mkPatient = async (firstName, lastName, sex) => (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName, lastName, sex } })).body.data;
+    const mkPatient = async (firstName, lastName, sex) => (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName, lastName, sex, dOB: '1960-01-01' } })).body.data;
     const p1 = await mkPatient('Ann', 'Hold', 'F');
     const p2 = await mkPatient('Bob', 'Other', 'M');
     const p3 = await mkPatient('Cat', 'Iso', 'F');
@@ -1165,8 +1214,8 @@ test('bed management: timed holds, dirty-on-discharge, EVS turnaround, expiry sw
 
     // --- discharge sets 'dirty' (not 'available') and queues a Discharge clean
     await call('POST', '/api/discharges', { token: tk, body: { phase: 'initiate', encounterId: enc1 } });
-    await satisfyDischargeGates(tk, enc1);
-    const conf = await call('POST', '/api/discharges', { token: tk, body: { phase: 'confirm', encounterId: enc1 } });
+    const mdTokenC = await satisfyDischargeGates(tk, enc1);
+    const conf = await call('POST', '/api/discharges', { token: mdTokenC, body: { phase: 'confirm', encounterId: enc1 } });
     assert.equal(conf.status, 200, JSON.stringify(conf.body));
     assert.ok(conf.body.data.evsQueueId);
     assert.equal((await boardRow(bedA.id)).bed.bedStatus, 'dirty');
@@ -1225,7 +1274,9 @@ test('bed management: timed holds, dirty-on-discharge, EVS turnaround, expiry sw
     assert.match(manual.body.message, /manual hold/);
     assert.equal((await call('PUT', '/Beds/updateBedById', { token: tk, body: { id: bedA.id, status: 'dirty' } })).status, 200);
     assert.ok((await call('GET', '/api/evs/queue', { token: tk })).body.data.some((q) => q.bedId === bedA.id && q.evsStatus === 'dirty' && q.cleaningType === 'Routine'));
-    assert.equal((await call('PUT', '/Beds/updateBedById', { token: tk, body: { id: bedA.id, status: 'available' } })).status, 200);
+    // SAF-20: bypassing the open EVS job via a direct 'available' override requires a reason.
+    assert.equal((await call('PUT', '/Beds/updateBedById', { token: tk, body: { id: bedA.id, status: 'available' } })).status, 400, 'overrideReason required while an EVS job is open');
+    assert.equal((await call('PUT', '/Beds/updateBedById', { token: tk, body: { id: bedA.id, status: 'available', overrideReason: 'Unit supervisor visually inspected, EVS queue backlog' } })).status, 200);
     assert.equal((await call('GET', '/api/evs/queue?status=dirty', { token: tk })).body.data.filter((q) => q.bedId === bedA.id).length, 0, 'admin sign-off closes the job');
     assert.equal((await call('POST', '/api/admissions', { token: tk, body: { patientId: p3.id, bedId: bedA.id } })).status, 201);
 
@@ -1254,8 +1305,10 @@ test('patient registration: full demographics, both insurances and emergency con
         pregnant: false, breastfeeding: false,
         address1: '1 Main St', address2: 'Apt 2', city: 'Springfield', state: 'IL', zipCode: '62701',
         mailingAddress1: 'PO Box 9', mailingCity: 'Springfield', mailingState: 'IL', mailingZipCode: '62702',
-        preferredLanguage: 'English', ethnicity: 'Not Hispanic or Latino', race: 'White', countryOfBirth: 'United States',
+        preferredLanguage: 'English', ethnicity: '2186-5', race: ['2106-3'], countryOfBirth: 'United States',
         advancedHealthCareDirective: 'No Advance Directive', noticeOfPrivacyPracticesDate: '2026-01-15',
+        genderIdentity: '446141000124107', sexAtBirth: 'F', sexualOrientation: '20430005',
+        interpreterNeeded: true, communicationPreference: ['phone', 'portal'],
         insurance: {
             insuranceType: 'Employer-Provided', insuranceCompany: 'Blue Shield', subscriberId: 'BS123', insurancePlan: 'PPO (Preferred Provider Organization)',
             groupNumber: 'G-77', phoneNumber: '(800) 111-1111', coverageStartDate: '2025-01-01', terminationDate: '', insuranceStatus: 'Active',
@@ -1266,7 +1319,7 @@ test('patient registration: full demographics, both insurances and emergency con
             guarantor: 'Spouse', guarantorName: 'Pat Istration', guarantorDOB: '1988-02-02', guarantorAddress: '1 Main St', guarantorSubscriberId: 'MD998',
         },
         emergencyContacts: [
-            { relationshipToPatient: 'Spouse', contactName: 'Pat Istration', contactPhone: '(555) 777-8888', street: '1 Main St', emergencyCity: 'Springfield', emergencyState: 'IL', emergencyZipCode: '62701' },
+            { relationshipToPatient: 'Spouse', contactName: 'Pat Istration', contactPhone: '(555) 777-8888', street: '1 Main St', emergencyCity: 'Springfield', emergencyState: 'IL', emergencyZipCode: '62701', isGuardian: true, legalRole: 'healthcare_proxy' },
             { relationshipToPatient: 'Sibling', contactName: 'Sam Istration', contactPhone: '(555) 999-0000' },
         ],
     };
@@ -1284,11 +1337,18 @@ test('patient registration: full demographics, both insurances and emergency con
         assert.equal(x.suffix, 'Jr.');
         assert.equal(x.maritalStatus, 'Married');
         assert.equal(x.preferredLanguage, 'English');
-        assert.equal(x.race, 'White');
+        assert.deepEqual(x.race, ['2106-3']);
+        assert.equal(x.ethnicity, '2186-5');
         assert.equal(x.workPhone, '(555) 555-6666');
         assert.equal(x.otherPhone, '');
         assert.equal(x.pregnant, false);
         assert.equal(x.noticeOfPrivacyPracticesDate, '2026-01-15');
+        assert.equal(x.genderIdentity, '446141000124107');
+        assert.equal(x.sexAtBirth, 'F');
+        assert.equal(x.sexualOrientation, '20430005');
+        assert.equal(x.interpreterNeeded, true);
+        assert.deepEqual(x.communicationPreference, ['phone', 'portal']);
+        assert.equal(x.isUnknownPatient, false);
         assert.deepEqual(x.mailingAddress, { address1: 'PO Box 9', address2: '', city: 'Springfield', state: 'IL', zipCode: '62702' });
         assert.equal(x.insurance.rank, 'primary');
         assert.equal(x.insurance.insuranceCompany, 'Blue Shield');
@@ -1302,7 +1362,10 @@ test('patient registration: full demographics, both insurances and emergency con
         assert.equal(x.secondaryInsurance.guarantorDOB, '1988-02-02');
         assert.equal(x.emergencyContacts.length, 2);
         assert.equal(x.emergencyContacts[0].contactName, 'Pat Istration');
+        assert.equal(x.emergencyContacts[0].isGuardian, true);
+        assert.equal(x.emergencyContacts[0].legalRole, 'healthcare_proxy');
         assert.equal(x.emergencyContacts[1].relationshipToPatient, 'Sibling');
+        assert.equal(x.emergencyContacts[1].isGuardian, false);
         assert.equal(x.emergencyContact.contactPhone, '(555) 777-8888');
     };
     expectEnriched(p);
@@ -1347,7 +1410,7 @@ test('patient registration: full demographics, both insurances and emergency con
     // Validation: bad nested date / status rejected; blank nested blocks are not persisted; atomicity on failure.
     assert.equal((await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Bad', lastName: 'Ins', insurance: { coverageStartDate: 'yesterday' } } })).status, 400);
     assert.equal((await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Bad', lastName: 'Status', insurance: { insuranceStatus: 'maybe' } } })).status, 400);
-    const blank = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Blank', lastName: 'Blocks', insurance: {}, secondaryInsurance: { insuranceCompany: '' }, emergencyContacts: [{}, {}] } })).body.data;
+    const blank = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Blank', lastName: 'Blocks', dOB: '1960-01-01', sex: 'F', insurance: {}, secondaryInsurance: { insuranceCompany: '' }, emergencyContacts: [{}, {}] } })).body.data;
     assert.equal(blank.insurance, null);
     assert.equal(blank.secondaryInsurance, null);
     assert.deepEqual(blank.emergencyContacts, []);
@@ -1444,20 +1507,20 @@ test('patient registration follow-ups: race-safe MRNs, duplicate check, profile 
     const tk = t.token;
     // 8 concurrent creates must all succeed with distinct MRNs (counter, not count(*)+1).
     const results = await Promise.all(Array.from({ length: 8 }, (_, i) =>
-        call('POST', '/Patient/createPatient', { token: tk, body: { firstName: `Race${i}`, lastName: 'Condition' } })));
+        call('POST', '/Patient/createPatient', { token: tk, body: { firstName: `Race${i}`, lastName: 'Condition', dOB: '1960-01-01', sex: 'F' } })));
     for (const r of results) assert.equal(r.status, 201, JSON.stringify(r.body));
     const mrns = results.map((r) => r.body.data.mrn);
     assert.equal(new Set(mrns).size, 8, `duplicate MRNs: ${mrns}`);
     // Caller-supplied MRN that collides with the next counter value: auto-numbering skips past it.
-    const taken = await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Manual', lastName: 'Mrn', mrn: 'MRN000009' } });
+    const taken = await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Manual', lastName: 'Mrn', dOB: '1960-01-01', sex: 'F', mrn: 'MRN000009' } });
     assert.equal(taken.status, 201);
-    const next = await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Auto', lastName: 'After' } });
+    const next = await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Auto', lastName: 'After', dOB: '1960-01-01', sex: 'F' } });
     assert.equal(next.status, 201, JSON.stringify(next.body));
     assert.notEqual(next.body.data.mrn, 'MRN000009');
-    assert.equal((await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Dup', lastName: 'Mrn', mrn: 'MRN000009' } })).status, 409);
+    assert.equal((await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Dup', lastName: 'Mrn', dOB: '1960-01-01', sex: 'F', mrn: 'MRN000009' } })).status, 409);
 
     // Duplicate check: last name + DOB, or first + last; excludeId; tenant-scoped.
-    const jane = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Jane', lastName: 'Dupe', dOB: '1980-01-02' } })).body.data;
+    const jane = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Jane', lastName: 'Dupe', dOB: '1980-01-02', sex: 'F' } })).body.data;
     const byDob = await call('GET', '/Patient/findDuplicates?lastName=dupe&dOB=1980-01-02&firstName=Someone', { token: tk });
     assert.deepEqual(byDob.body.data.map((p) => p.id), [jane.id]);
     const byName = await call('GET', '/Patient/findDuplicates?lastName=DUPE&firstName=jane', { token: tk });
@@ -1481,7 +1544,7 @@ test('patient registration follow-ups: race-safe MRNs, duplicate check, profile 
     assert.equal(cleared.body.data.profilePicture, '');
 
     // Search now matches home / work phone.
-    await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Phone', lastName: 'Search', homePhone: '(217) 555-9876', workPhone: '(217) 555-1234' } });
+    await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Phone', lastName: 'Search', dOB: '1960-01-01', sex: 'F', homePhone: '(217) 555-9876', workPhone: '(217) 555-1234' } });
     assert.equal((await call('GET', '/Patient/getAllPatientListPaginated?query=555-9876', { token: tk })).body.data.items.length, 1);
     assert.equal((await call('GET', '/Patient/getAllPatientListPaginated?query=555-1234', { token: tk })).body.data.items.length, 1);
 });
@@ -1570,9 +1633,9 @@ test('problem list / ICD-10: search, CRUD, status lifecycle, roles, tenant isola
     const codeSearch = await call('GET', '/api/icd10/search?q=I10', { token: tk });
     assert.ok(codeSearch.body.data.some((r) => r.code === 'I10'));
 
-    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Pat', lastName: 'Problem' } })).body.data;
+    const p = (await call('POST', '/Patient/createPatient', { token: tk, body: { firstName: 'Pat', lastName: 'Problem', dOB: '1960-01-01', sex: 'F' } })).body.data;
     const otherTenant = await newTenant('probB');
-    const foreignPatient = (await call('POST', '/Patient/createPatient', { token: otherTenant.token, body: { firstName: 'X', lastName: 'Y' } })).body.data;
+    const foreignPatient = (await call('POST', '/Patient/createPatient', { token: otherTenant.token, body: { firstName: 'X', lastName: 'Y', dOB: '1960-01-01', sex: 'F' } })).body.data;
 
     assert.equal((await call('POST', `/api/patients/${p.id}/problems`, { token: billing.token, body: { icd10Code: 'E11.9' } })).status, 403);
 
@@ -1661,7 +1724,7 @@ test('physician notes / H&P: create → update → sign → immutable → addend
     assert.equal((await call('POST', `${BASE}/notes/create`, { token: rn.token, body: { patientId: patient.id, encounterId, type: 'hp', content } })).status, 403, 'nurse cannot author H&P');
     assert.equal((await call('POST', `${BASE}/notes/create`, { token: md.token, body: { patientId: patient.id, encounterId, type: 'bogus', content } })).status, 400);
     const created = await call('POST', `${BASE}/notes/create`, { token: md.token, body: { patientId: patient.id, encounterId, type: 'hp', content } });
-    assert.equal(created.status, 200, JSON.stringify(created.body));
+    assert.equal(created.status, 201, JSON.stringify(created.body));
     assert.equal(created.body.status, 'success');
     const note = created.body.data;
     assert.equal(note.status, 'draft');
@@ -1700,7 +1763,7 @@ test('physician notes / H&P: create → update → sign → immutable → addend
     assert.match(lateSign.body.message, /24-hour/);
 
     // Progress note by a nurse is allowed; list by encounter shows all three, newest first.
-    assert.equal((await call('POST', `${BASE}/notes/create`, { token: rn.token, body: { patientId: patient.id, encounterId, type: 'progress', content: { assessment: 'stable', plan: 'continue' } } })).status, 200);
+    assert.equal((await call('POST', `${BASE}/notes/create`, { token: rn.token, body: { patientId: patient.id, encounterId, type: 'progress', content: { assessment: 'stable', plan: 'continue' } } })).status, 201);
     const list = await call('GET', `${BASE}/notes/patient/${patient.id}?encounterId=${encounterId}`, { token: tk });
     assert.equal(list.status, 200);
     assert.equal(list.body.data.length, 3);
@@ -1783,7 +1846,7 @@ test('discharge summary + readiness: gates unresolved → summary → sign block
 
     assert.equal((await call('PUT', `/api/encounters/${encounterId}/discharge-summary`, { token: rn.token, body: { hospitalCourse: 'x' } })).status, 403, 'nurse cannot write the summary');
     assert.equal((await call('POST', `/api/encounters/${encounterId}/discharge-summary/sign`, { token: md.token, body: {} })).status, 400, 'nothing saved yet');
-    const draft = await call('PUT', `/api/encounters/${encounterId}/discharge-summary`, { token: md.token, body: { admissionDiagnosis: 'Chest pain', hospitalCourse: 'Ruled out ACS. Observed on telemetry.', finalDiagnoses: 'R07.9 Chest pain, unspecified', followUpInstructions: 'Cardiology clinic in 2 weeks', disposition: 'Home', conditionAtDischarge: 'Improved' } });
+    const draft = await call('PUT', `/api/encounters/${encounterId}/discharge-summary`, { token: md.token, body: { admissionDiagnosis: 'Chest pain', hospitalCourse: 'Ruled out ACS. Observed on telemetry.', finalDiagnoses: 'R07.9 Chest pain, unspecified', followUpInstructions: 'Cardiology clinic in 2 weeks', disposition: '01', conditionAtDischarge: 'Improved' } });
     assert.equal(draft.status, 200, JSON.stringify(draft.body));
     assert.equal(draft.body.data.summary.hospitalCourse, 'Ruled out ACS. Observed on telemetry.');
     const partial = await call('PUT', `/api/encounters/${encounterId}/discharge-summary`, { token: md.token, body: { procedures: 'None' } });
@@ -1811,7 +1874,7 @@ test('discharge summary + readiness: gates unresolved → summary → sign block
 
     // Checklist: blocking tasks still open → confirm refused; complete them → confirm succeeds; everything survives reload.
     assert.equal((await call('POST', '/api/discharges', { token: tk, body: { phase: 'initiate', encounterId } })).status, 200);
-    const blocked = await call('POST', '/api/discharges/confirm', { token: tk, body: { encounterId } });
+    const blocked = await call('POST', '/api/discharges/confirm', { token: md.token, body: { encounterId } });
     assert.equal(blocked.status, 409);
     assert.equal(blocked.body.code, 'DISCHARGE_BLOCKED');
     assert.deepEqual(blocked.body.details.blocking.map((g) => g.id), ['gate-nursing-checklist']);
@@ -1827,7 +1890,7 @@ test('discharge summary + readiness: gates unresolved → summary → sign block
     const view2 = (await call('GET', `/api/encounters/${encounterId}/discharge-readiness`, { token: tk })).body.data;
     assert.equal(view2.clinicalReady, true);
     assert.equal(view2.checklist.find((x) => x.notes === 'done').completedBy, rn.id);
-    const conf = await call('POST', '/api/discharges/confirm', { token: tk, body: { encounterId } });
+    const conf = await call('POST', '/api/discharges/confirm', { token: md.token, body: { encounterId } });
     assert.equal(conf.status, 200, JSON.stringify(conf.body));
     assert.equal((await call('GET', `/api/encounters/${encounterId}/discharge-readiness`, { token: tk })).body.data.context.encounterStatus, 'discharged');
     assert.equal((await call('GET', `/api/encounters/${encounterId}/discharge-readiness`, { token: (await newTenant('dsumB')).token })).status, 404, 'tenant isolation');
@@ -1838,6 +1901,7 @@ test('e-prescribing Phase A: pharmacy directory, draft → sign (NPI copied) →
     const tk = t.token;
     const md = await addUser(t, 'mderx', 'physician');
     const rn = await addUser(t, 'rnerx', 'nurse');
+    const pharm = await addUser(t, 'pherx', 'pharmacist');
     const { patient, encounterId } = await admitPatient(tk, 'Erx');
 
     assert.equal((await call('POST', '/api/pharmacies', { token: md.token, body: { name: 'x' } })).status, 403, 'admin only');
@@ -1866,8 +1930,10 @@ test('e-prescribing Phase A: pharmacy directory, draft → sign (NPI copied) →
     const noNpi = await call('POST', `/api/prescriptions/${rx.id}/sign`, { token: md.token });
     assert.equal(noNpi.status, 409);
     assert.equal(noNpi.body.code, 'PRESCRIBER_NPI_MISSING');
-    assert.equal((await call('PUT', '/auth/profile', { token: md.token, body: { npi: '1234567890' } })).status, 400, 'bad check digit');
-    assert.equal((await call('PUT', '/auth/profile', { token: md.token, body: { npi: '1234567895', deaNumber: 'ab1234567' } })).body.data.deaNumber, 'AB1234567');
+    // NPI/DEA are admin-only now (#SEC-16) — a physician can no longer self-assert them via
+    // /auth/profile, so the tenant admin sets them here instead.
+    assert.equal((await call('PUT', `/auth/users/${md.id}`, { token: tk, body: { npi: '1234567890' } })).status, 400, 'bad check digit');
+    assert.equal((await call('PUT', `/auth/users/${md.id}`, { token: tk, body: { npi: '1234567895', deaNumber: 'ab1234567' } })).body.data.deaNumber, 'AB1234567');
     const signed = await call('POST', `/api/prescriptions/${rx.id}/sign`, { token: md.token });
     assert.equal(signed.status, 200, JSON.stringify(signed.body));
     assert.equal(signed.body.data.status, 'signed');
@@ -1889,7 +1955,7 @@ test('e-prescribing Phase A: pharmacy directory, draft → sign (NPI copied) →
     assert.equal((await call('POST', `/api/prescriptions/${rx2.id}/print`, { token: rn.token })).body.data.status, 'printed');
     const cancelled = await call('POST', `/api/prescriptions/${rx2.id}/cancel`, { token: md.token, body: { reason: 'duplicate' } });
     assert.equal(cancelled.body.data.status, 'cancelled');
-    assert.equal((await call('POST', '/api/dispense', { token: tk, body: { prescriptionId: rx2.id, medicines: [{ medicineId: rx2.medicines[0].medicineId, quantityDispensed: 1, batchNumber: 'B', expiryDate: '2099-01-01', unitPrice: 0 }], dispensedBy: 'x', totalCost: 0 } })).status, 409, 'cancelled cannot be dispensed');
+    assert.equal((await call('POST', '/api/dispense', { token: pharm.token, body: { prescriptionId: rx2.id, medicines: [{ medicineId: rx2.medicines[0].medicineId, quantityDispensed: 1, batchNumber: 'B', expiryDate: '2099-01-01', unitPrice: 0 }], dispensedBy: 'x', totalCost: 0 } })).status, 409, 'cancelled cannot be dispensed');
 
     // Controlled substance: hard stop until EPCS (Phase B).
     const ctrl = (await call('POST', '/api/prescriptions', { token: md.token, body: { patientId: patient.id, medicines: [{ name: 'Oxycodone', dose: '5 mg', frequency: 'q6h PRN', quantity: 10, controlledSchedule: 'II' }] } })).body.data;
@@ -1900,7 +1966,7 @@ test('e-prescribing Phase A: pharmacy directory, draft → sign (NPI copied) →
 
     // Dispense flow still works on a transmitted Rx and the list filters by status.
     const line = { medicineId: rx.medicines[0].medicineId, quantityDispensed: 21, batchNumber: 'LOT1', expiryDate: '2099-01-01', unitPrice: 0.45 };
-    assert.equal((await call('POST', '/api/dispense', { token: tk, body: { prescriptionId: rx.id, medicines: [line], dispensedBy: 'Pharm', totalCost: 9.45 } })).body.data.ok, true);
+    assert.equal((await call('POST', '/api/dispense', { token: pharm.token, body: { prescriptionId: rx.id, medicines: [line], dispensedBy: 'Pharm', totalCost: 9.45 } })).body.data.ok, true);
     assert.deepEqual((await call('GET', `/api/prescriptions/${patient.id}`, { token: tk })).body.data.map((r) => r.status), ['draft'], 'open list excludes dispensed/cancelled');
     assert.equal((await call('GET', `/api/prescriptions/${patient.id}?status=all`, { token: tk })).body.data.length, 3);
     assert.equal((await call('GET', `/api/prescriptions/${patient.id}?status=dispensed`, { token: tk })).body.data[0].id, rx.id);
@@ -1930,7 +1996,7 @@ test('lab orders: collect → results (abnormal + critical flags, notification) 
     assert.equal(col.body.data.specimenType, 'Blood');
     assert.equal((await call('POST', `/lab-orders/${order.id}/collect`, { token: rn.token })).status, 409, 'cannot collect twice');
 
-    // Partial results → In Progress; the critical potassium notifies physicians + nurses.
+    // Partial results → In Progress; the critical potassium notifies the ordering physician.
     const r1 = await call('POST', `/lab-orders/${order.id}/results`, { token: rn.token, body: { results: [
         { testName: 'BMP', testCode: 'K', loincCode: '2823-3', valueNum: 2.4, unit: 'mmol/L', refLow: 3.5, refHigh: 5.1 },
         { testName: 'Sodium', valueNum: 138, unit: 'mmol/L', refLow: 135, refHigh: 145 },
@@ -1948,10 +2014,13 @@ test('lab orders: collect → results (abnormal + critical flags, notification) 
     assert.equal(worklist[0].patientName, 'Lab Patient');
     assert.equal((await call('GET', '/dashboard/ipd', { token: tk })).body.data.kpis.unacknowledgedCriticalResults, 1);
 
-    const ack = await call('POST', `/lab-results/${k.id}/acknowledge`, { token: md.token });
-    assert.equal(ack.status, 200);
+    const mismatch = await call('POST', `/lab-results/${k.id}/acknowledge`, { token: md.token, body: { readBackValue: '9.9' } });
+    assert.equal(mismatch.status, 400, JSON.stringify(mismatch.body));
+    const ack = await call('POST', `/lab-results/${k.id}/acknowledge`, { token: md.token, body: { readBackValue: '2.4' } });
+    assert.equal(ack.status, 200, JSON.stringify(ack.body));
     assert.equal(ack.body.data.acknowledgedBy, md.id);
-    assert.equal((await call('POST', `/lab-results/${k.id}/acknowledge`, { token: md.token })).status, 409);
+    assert.equal(ack.body.data.readBackValue, '2.4');
+    assert.equal((await call('POST', `/lab-results/${k.id}/acknowledge`, { token: md.token, body: { readBackValue: '2.4' } })).status, 409);
     assert.equal((await call('GET', '/lab-results/critical', { token: md.token })).body.data.length, 0);
 
     // Remaining ordered test resulted → order Resulted; ledger row completed.
@@ -1991,11 +2060,13 @@ test('ADT notifications: recipient directory, A01/A02/A03 log rows with HL7 payl
     assert.equal((await call('POST', '/api/notification-recipients', { token: rn.token, body: { name: 'x', kind: 'hie', transport: 'stub' } })).status, 403, 'admin only');
     assert.equal((await call('POST', '/api/notification-recipients', { token: tk, body: { name: 'Bad', kind: 'hie', transport: 'https_webhook', endpoint: 'not-a-url' } })).status, 400);
     const hie = (await call('POST', '/api/notification-recipients', { token: tk, body: { name: 'State HIE', kind: 'hie', transport: 'stub' } })).body.data;
-    const snf = (await call('POST', '/api/notification-recipients', { token: tk, body: { name: 'Sunrise SNF', kind: 'post_acute', transport: 'https_webhook', endpoint: 'http://127.0.0.1:1/adt', authHeaderSecret: 'Bearer secret' } })).body.data;
+    const snf = (await call('POST', '/api/notification-recipients', { token: tk, body: { name: 'Sunrise SNF', kind: 'post_acute', transport: 'https_webhook', endpoint: 'https://127.0.0.1:1/adt', authHeaderSecret: 'Bearer secret' } })).body.data;
     assert.equal(snf.hasSecret, true);
     const pcp = (await call('POST', '/api/notification-recipients', { token: tk, body: { name: 'Dr. Patel (PCP)', kind: 'pcp', transport: 'email', endpoint: 'patel@clinic.example' } })).body.data;
     const pcpOther = (await call('POST', '/api/notification-recipients', { token: tk, body: { name: 'Other PCP', kind: 'pcp', transport: 'stub' } })).body.data;
-    assert.equal((await call('GET', '/api/notification-recipients', { token: rn.token })).body.data.length, 4);
+    // Reading the recipient directory is admin/staff only (#SEC-05) — a nurse cannot.
+    assert.equal((await call('GET', '/api/notification-recipients', { token: rn.token })).status, 403);
+    assert.equal((await call('GET', '/api/notification-recipients', { token: tk })).body.data.length, 4);
     const testSend = await call('POST', `/api/notification-recipients/${hie.id}/test`, { token: tk });
     assert.equal(testSend.body.data.ok, true);
     assert.match(testSend.body.data.message, /^MSH\|\^~\\&\|EMR\|/);
@@ -2005,7 +2076,9 @@ test('ADT notifications: recipient directory, A01/A02/A03 log rows with HL7 payl
     const { patient, encounterId, bed2 } = await admitPatient(tk, 'Adtn', { pcpName: 'Dr. Patel', pcpNpi: '1234567893', pcpRecipientId: pcp.id });
     assert.equal(patient.pcpName, 'Dr. Patel');
     assert.equal(patient.pcpRecipientId, pcp.id);
-    const a01 = (await call('GET', `/api/adt-notifications?encounterId=${encounterId}`, { token: rn.token })).body.data;
+    // Reading the ADT notification log is admin/staff only (#SEC-05) — a nurse cannot.
+    assert.equal((await call('GET', `/api/adt-notifications?encounterId=${encounterId}`, { token: rn.token })).status, 403);
+    const a01 = (await call('GET', `/api/adt-notifications?encounterId=${encounterId}`, { token: tk })).body.data;
     assert.equal(a01.length, 3);
     assert.deepEqual(a01.map((l) => l.recipientName).sort(), ['Dr. Patel (PCP)', 'State HIE', 'Sunrise SNF']);
     assert.ok(a01.every((l) => l.eventType === 'A01' && l.status === 'queued'));
@@ -2040,14 +2113,14 @@ test('ADT notifications: recipient directory, A01/A02/A03 log rows with HL7 payl
     assert.equal(a02.length, 3);
     assert.match(a02[0].message, /ADT\^A02\^ADT_A02/);
     assert.match(a02[0].message, /PV1\|1\|I\|W-Adtn\^R-Adtn\^B2-Adtn\|emergency\|\|W-Adtn\^R-Adtn\^B-Adtn\|/);
-    await call('POST', '/api/discharges', { token: tk, body: { phase: 'initiate', encounterId, disposition: 'Skilled Nursing Facility' } });
-    await satisfyDischargeGates(tk, encounterId);
-    assert.equal((await call('POST', '/api/discharges/confirm', { token: tk, body: { encounterId } })).status, 200);
+    await call('POST', '/api/discharges', { token: tk, body: { phase: 'initiate', encounterId, disposition: '03' } });
+    const mdTokenD = await satisfyDischargeGates(tk, encounterId);
+    assert.equal((await call('POST', '/api/discharges/confirm', { token: mdTokenD, body: { encounterId } })).status, 200);
     const a03 = (await call('GET', `/api/adt-notifications?encounterId=${encounterId}`, { token: tk })).body.data.filter((l) => l.eventType === 'A03');
     assert.equal(a03.length, 3);
     assert.match(a03[0].message, /EVN\|A03\|/);
     const pv1 = a03[0].message.split('\r').find((s) => s.startsWith('PV1|')).split('|');
-    assert.equal(pv1[36], 'Skilled Nursing Facility', 'PV1-36 discharge disposition');
+    assert.equal(pv1[36], '03', 'PV1-36 discharge disposition (UB-04 code)');
     assert.match(pv1[45], /^\d{14}$/, 'PV1-45 discharge time');
     assert.equal((await call('GET', `/api/adt-notifications?encounterId=${encounterId}`, { token: (await newTenant('adtnB')).token })).body.data.length, 0);
     assert.equal((await call('DELETE', `/api/notification-recipients/${pcpOther.id}`, { token: tk })).status, 200);
@@ -2058,7 +2131,8 @@ test('CDS #9: drug search, DDI/DA checks, CPOE override, severity suppress, e-Rx
     const tk = t.token;
     const md = await addUser(t, 'mdcds', 'physician');
     const rn = await addUser(t, 'rncds', 'nurse');
-    await call('PUT', '/auth/profile', { token: md.token, body: { npi: '1234567895' } });
+    // NPI is admin-only now (#SEC-16) — see the e-prescribing test for the same change.
+    await call('PUT', `/auth/users/${md.id}`, { token: tk, body: { npi: '1234567895' } });
     const { patient, encounterId } = await admitPatient(tk, 'Cds');
 
     const search = await call('GET', '/api/drugs/search?q=warf', { token: md.token });
@@ -2173,10 +2247,7 @@ test('Patient Access #64: portal invite, SMART PKCE, FHIR search, isolation, acc
     const { patient } = await admitPatient(tk, 'Pa');
     await pool.query(`UPDATE patients SET email = $1 WHERE id = $2`, [`patient-${suffix}@test.example`, patient.id]);
 
-    const invite = await call('POST', `/api/patients/${patient.id}/portal-invite`, {
-        token: tk,
-        body: { email: `patient-${suffix}@test.example` },
-    });
+    const invite = await call('POST', `/api/patients/${patient.id}/portal-invite`, { token: tk, body: {} });
     assert.equal(invite.status, 200, JSON.stringify(invite.body));
     assert.ok(invite.body.data.inviteToken);
     const setPw = await call('POST', '/patient-auth/set-password', {
@@ -2209,21 +2280,30 @@ test('Patient Access #64: portal invite, SMART PKCE, FHIR search, isolation, acc
     const verifier = crypto.randomBytes(32).toString('base64url');
     const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
     const state = 'xyz';
+    const aud = encodeURIComponent(`${config.backendUrl}/fhir`);
     const authz = await call(
         'GET',
-        `/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent('http://127.0.0.1:9999/cb')}&scope=${encodeURIComponent('openid fhirUser launch/patient offline_access patient/*.read')}&state=${state}&code_challenge=${challenge}&code_challenge_method=S256`,
+        `/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent('http://127.0.0.1:9999/cb')}&scope=${encodeURIComponent('openid fhirUser launch/patient offline_access patient/*.read')}&state=${state}&code_challenge=${challenge}&code_challenge_method=S256&aud=${aud}`,
     );
     // Express redirect — fetch follows by default; use redirect:manual via raw fetch
     const authzRes = await fetch(
         base +
-            `/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent('http://127.0.0.1:9999/cb')}&scope=${encodeURIComponent('openid fhirUser launch/patient offline_access patient/*.read')}&state=${state}&code_challenge=${challenge}&code_challenge_method=S256`,
+            `/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent('http://127.0.0.1:9999/cb')}&scope=${encodeURIComponent('openid fhirUser launch/patient offline_access patient/*.read')}&state=${state}&code_challenge=${challenge}&code_challenge_method=S256&aud=${aud}`,
         { redirect: 'manual' },
     );
     assert.equal(authzRes.status, 302);
     assert.match(authzRes.headers.get('location') || '', /\/patient\/authorize/);
 
-    const wrongRedirect = await call('GET', `/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent('http://evil.example/cb')}&scope=patient/*.read&state=${state}&code_challenge=${challenge}&code_challenge_method=S256`);
+    const wrongRedirect = await call('GET', `/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent('http://evil.example/cb')}&scope=patient/*.read&state=${state}&code_challenge=${challenge}&code_challenge_method=S256&aud=${aud}`);
     assert.ok(wrongRedirect.status >= 400);
+
+    const wrongAudRes = await fetch(
+        base +
+            `/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent('http://127.0.0.1:9999/cb')}&scope=${encodeURIComponent('patient/*.read')}&state=${state}&code_challenge=${challenge}&code_challenge_method=S256&aud=${encodeURIComponent('http://evil.example/fhir')}`,
+        { redirect: 'manual' },
+    );
+    assert.equal(wrongAudRes.status, 302);
+    assert.match(wrongAudRes.headers.get('location') || '', /error=invalid_request/);
 
     const decision = await call('POST', '/oauth/authorize/decision', {
         token: patientJwt,

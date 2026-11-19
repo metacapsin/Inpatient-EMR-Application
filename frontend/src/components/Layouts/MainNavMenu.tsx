@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, useLocation } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+import type { IRootState } from '../../store';
+import { hasRole } from '../auth/RoleGuard';
 import IconCaretDown from '../Icon/IconCaretDown';
 import IconMenuDashboard from '../Icon/Menu/IconMenuDashboard';
 import IconMenuUsers from '../Icon/Menu/IconMenuUsers';
@@ -50,7 +52,9 @@ export function MainNavMenu({ variant }: MainNavMenuProps) {
     const { pathname } = useLocation();
     const dispatch = useDispatch();
     const { isModuleEnabled } = useTenantModules();
-    const visible = (links: readonly MainNavLink[]) => links.filter((l) => !l.module || isModuleEnabled(l.module));
+    const role = useSelector((state: IRootState) => state.auth.role);
+    const visible = (links: readonly MainNavLink[]) =>
+        links.filter((l) => (!l.module || isModuleEnabled(l.module)) && (!l.roles || hasRole(role, l.roles)));
 
     const [sidebarSections, setSidebarSections] = useState<Record<string, boolean>>({
         appointments: false,

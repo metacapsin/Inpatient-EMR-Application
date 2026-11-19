@@ -5,7 +5,7 @@ import {
     apiGetStaffingAssignment,
     apiUpdateStaffingAssignment,
 } from './staffingApi';
-import { STAFFING_API_TIMEOUT_MS, USE_STAFFING_MOCK } from '../config/staffingMock.config';
+import { USE_STAFFING_MOCK } from '../config/staffingMock.config';
 import {
     mockApplyBoardUpdate,
     mockCreateStaffingAssignment,
@@ -24,56 +24,13 @@ import type {
 
 export type StaffingDataSource = 'api' | 'mock';
 
-let lastSource: StaffingDataSource = USE_STAFFING_MOCK ? 'mock' : 'api';
-
+/** Pure switch: real API unless VITE_STAFFING_API_MOCK=true. No timeout/error fallback to fixture boards. */
 export function getLastStaffingDataSource(): StaffingDataSource {
-    return lastSource;
-}
-
-function setSource(source: StaffingDataSource): void {
-    lastSource = source;
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-    return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('STAFFING_API_TIMEOUT')), ms);
-        promise
-            .then((v) => {
-                clearTimeout(timer);
-                resolve(v);
-            })
-            .catch((e) => {
-                clearTimeout(timer);
-                reject(e);
-            });
-    });
-}
-
-async function callApi<T>(fn: () => Promise<T>): Promise<T> {
-    if (!USE_STAFFING_MOCK) return fn();
-    return withTimeout(fn(), STAFFING_API_TIMEOUT_MS);
+    return USE_STAFFING_MOCK ? 'mock' : 'api';
 }
 
 async function withMockFallback<T>(apiFn: () => Promise<T>, mockFn: () => Promise<T>): Promise<T> {
-    if (!USE_STAFFING_MOCK) {
-        const data = await apiFn();
-        setSource('api');
-        return data;
-    }
-    if (lastSource === 'mock') {
-        const data = await mockFn();
-        setSource('mock');
-        return data;
-    }
-    try {
-        const data = await callApi(apiFn);
-        setSource('api');
-        return data;
-    } catch {
-        const data = await mockFn();
-        setSource('mock');
-        return data;
-    }
+    return USE_STAFFING_MOCK ? mockFn() : apiFn();
 }
 
 export async function fetchStaffingAssignment(

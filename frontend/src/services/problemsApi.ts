@@ -3,6 +3,10 @@ import { asRecord, unwrapList } from '../lib/apiPayload';
 
 export type ProblemStatus = 'active' | 'inactive' | 'resolved' | 'entered_in_error';
 export type ProblemChronicity = 'acute' | 'chronic';
+// UB-04/CMS Present On Admission indicator set: Y yes, N no, U insufficient documentation,
+// W clinically undetermined, '1' exempt from POA reporting.
+export type PoaCode = 'Y' | 'N' | 'U' | 'W' | '1';
+const POA_CODES: PoaCode[] = ['Y', 'N', 'U', 'W', '1'];
 
 export interface Icd10SearchHit {
     code: string;
@@ -25,6 +29,8 @@ export interface PatientProblem {
     notedBy?: string | null;
     createdAt?: string;
     updatedAt?: string;
+    poa?: PoaCode | null;
+    isPrincipal: boolean;
 }
 
 export interface CreateProblemPayload {
@@ -33,6 +39,9 @@ export interface CreateProblemPayload {
     chronicity?: ProblemChronicity | null;
     onsetDate?: string | null;
     status?: 'active' | 'inactive';
+    // poa/isPrincipal require encounterId — they're encounter-scoped concepts.
+    poa?: PoaCode | null;
+    isPrincipal?: boolean;
 }
 
 export interface UpdateProblemPayload {
@@ -41,6 +50,8 @@ export interface UpdateProblemPayload {
     onsetDate?: string | null;
     resolvedDate?: string | null;
     encounterId?: string | null;
+    poa?: PoaCode | null;
+    isPrincipal?: boolean;
 }
 
 function unwrapData<T>(payload: unknown): T | null {
@@ -66,6 +77,8 @@ function coerceProblem(raw: unknown): PatientProblem | null {
     const chronRaw = r.chronicity == null ? null : String(r.chronicity).toLowerCase();
     const chronicity: ProblemChronicity | null =
         chronRaw === 'acute' || chronRaw === 'chronic' ? chronRaw : null;
+    const poaRaw = r.poa == null ? null : String(r.poa).toUpperCase();
+    const poa: PoaCode | null = POA_CODES.includes(poaRaw as PoaCode) ? (poaRaw as PoaCode) : null;
     return {
         id,
         tenantId: String(r.tenantId ?? r.tenant_id ?? ''),
@@ -80,6 +93,8 @@ function coerceProblem(raw: unknown): PatientProblem | null {
         notedBy: (r.notedBy ?? r.noted_by ?? null) as string | null,
         createdAt: (r.createdAt ?? r.created_at) as string | undefined,
         updatedAt: (r.updatedAt ?? r.updated_at) as string | undefined,
+        poa,
+        isPrincipal: Boolean(r.isPrincipal ?? r.is_principal ?? false),
     };
 }
 

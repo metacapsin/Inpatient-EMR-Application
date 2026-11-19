@@ -1,9 +1,11 @@
 /** Unified order-entry (CPOE) — matches backend/src/routes/orders.js. */
 
-export const CPOE_ORDER_TYPES = ['medication', 'prn_stat', 'lab', 'radiology'] as const;
+export const CPOE_ORDER_TYPES = ['medication', 'prn_stat', 'lab', 'radiology', 'dietary', 'therapy', 'procedure', 'consult', 'nursing'] as const;
 export type CpoeOrderType = (typeof CPOE_ORDER_TYPES)[number];
 
-export type CpoeOrderStatus = 'draft' | 'active' | 'completed' | 'discontinued' | 'cancelled';
+export type CpoeOrderStatus = 'draft' | 'active' | 'held' | 'completed' | 'discontinued' | 'cancelled';
+
+export type CpoeOrderPriority = 'routine' | 'urgent' | 'stat';
 
 /** Ledger row (`orders` table) merged with its type-specific detail row. */
 export type CpoeOrderRow = {
@@ -18,11 +20,27 @@ export type CpoeOrderRow = {
     orderedAt: string;
     createdAt: string;
     detail: Record<string, unknown> | null;
+    acknowledgedBy?: string | null;
+    acknowledgedAt?: string | null;
+    isVerbal?: boolean;
+    readBackConfirmed?: boolean;
+    requiresCosign?: boolean;
+    cosignedBy?: string | null;
+    cosignedAt?: string | null;
+    reason?: string | null;
+    replacesOrderId?: string | null;
+    orderSetId?: string | null;
 };
 
 export type CdsOverrideInput = { reason: string };
 
-export type MedicationOrderInput = {
+/** A verbal/telephone order can be any order type — read-back must be confirmed at entry. */
+export type VerbalOrderFields = {
+    isVerbal?: boolean;
+    readBackConfirmed?: boolean;
+};
+
+export type MedicationOrderInput = VerbalOrderFields & {
     orderType: 'medication';
     name: string;
     dose?: string;
@@ -30,10 +48,11 @@ export type MedicationOrderInput = {
     frequency?: string;
     nextScheduledTime?: string;
     rxnormCode?: string | null;
+    priority?: CpoeOrderPriority;
     cdsOverride?: CdsOverrideInput;
 };
 
-export type PrnStatOrderInput = {
+export type PrnStatOrderInput = VerbalOrderFields & {
     orderType: 'prn_stat';
     medicationName: string;
     type: 'PRN' | 'STAT';
@@ -47,7 +66,7 @@ export type PrnStatOrderInput = {
     cdsOverride?: CdsOverrideInput;
 };
 
-export type LabOrderInput = {
+export type LabOrderInput = VerbalOrderFields & {
     orderType: 'lab';
     labTests: Array<{ name: string; code?: string; specimen?: string }>;
     priority: 'Routine' | 'Urgent' | 'STAT';
@@ -57,7 +76,7 @@ export type LabOrderInput = {
     clinicalIndication?: string;
 };
 
-export type RadiologyOrderInput = {
+export type RadiologyOrderInput = VerbalOrderFields & {
     orderType: 'radiology';
     modality: string;
     bodyRegion: string;
@@ -69,6 +88,67 @@ export type RadiologyOrderInput = {
     transportRequired?: boolean;
 };
 
-export type CpoeOrderInput = MedicationOrderInput | PrnStatOrderInput | LabOrderInput | RadiologyOrderInput;
+export type DietaryOrderInput = VerbalOrderFields & {
+    orderType: 'dietary';
+    dietType: string;
+    restrictions?: string;
+    notes?: string;
+    priority?: CpoeOrderPriority;
+};
+
+export type TherapyOrderInput = VerbalOrderFields & {
+    orderType: 'therapy';
+    therapyType: string;
+    frequency?: string;
+    notes?: string;
+    priority?: CpoeOrderPriority;
+};
+
+export type ProcedureOrderInput = VerbalOrderFields & {
+    orderType: 'procedure';
+    procedureName: string;
+    laterality?: string;
+    scheduledFor?: string;
+    notes?: string;
+    priority?: CpoeOrderPriority;
+};
+
+export type ConsultOrderInput = VerbalOrderFields & {
+    orderType: 'consult';
+    consultingService: string;
+    reason: string;
+    priority?: CpoeOrderPriority;
+};
+
+export type NursingOrderInput = VerbalOrderFields & {
+    orderType: 'nursing';
+    nursingOrderType: string;
+    details?: string;
+    priority?: CpoeOrderPriority;
+};
+
+export type CpoeOrderInput =
+    | MedicationOrderInput
+    | PrnStatOrderInput
+    | LabOrderInput
+    | RadiologyOrderInput
+    | DietaryOrderInput
+    | TherapyOrderInput
+    | ProcedureOrderInput
+    | ConsultOrderInput
+    | NursingOrderInput;
 
 export type PlaceOrderBody = CpoeOrderInput & { patientId: string; encounterId: string };
+
+/** A saved, reusable bundle of orders (`order_sets` + `order_set_items`). */
+export type OrderSetItem = { orderType: CpoeOrderType; detail: Record<string, unknown> };
+export type OrderSet = {
+    id: string;
+    name: string;
+    description?: string | null;
+    isActive?: boolean;
+    createdBy?: string | null;
+    createdAt?: string;
+    items: OrderSetItem[];
+};
+export type OrderSetInput = { name: string; description?: string | null; items: OrderSetItem[] };

@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { useId } from 'react';
 import { cn } from '../../lib/utils';
+import { useDialogA11y } from '../../hooks/useDialogA11y';
 
 export interface AppModalProps {
     open: boolean;
@@ -30,6 +32,8 @@ export function AppModal({
     bodyClassName,
     footerClassName,
 }: AppModalProps) {
+    const titleId = useId();
+    const panelRef = useDialogA11y<HTMLDivElement>(open, onClose);
     if (!open) return null;
 
     const width =
@@ -45,7 +49,7 @@ export function AppModal({
     const headerAlign = description ? 'items-start' : 'items-center';
 
     return (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="app-modal-title">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
             <button
                 type="button"
                 className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
@@ -53,8 +57,10 @@ export function AppModal({
                 onClick={onClose}
             />
             <div
+                ref={panelRef}
+                tabIndex={-1}
                 className={cn(
-                    'relative z-[101] flex max-h-[min(90vh,720px)] w-full flex-col overflow-hidden rounded-2xl border border-gray-200/90 bg-white shadow-2xl shadow-gray-900/10 ring-1 ring-black/[0.04] dark:border-white/10 dark:bg-[#141210] dark:shadow-black/50 dark:ring-white/[0.06]',
+                    'relative z-[101] flex max-h-[min(90vh,720px)] outline-none w-full flex-col overflow-hidden rounded-2xl border border-gray-200/90 bg-white shadow-2xl shadow-gray-900/10 ring-1 ring-black/[0.04] dark:border-white/10 dark:bg-[#141210] dark:shadow-black/50 dark:ring-white/[0.06]',
                     width,
                     className,
                 )}
@@ -76,7 +82,7 @@ export function AppModal({
                         ) : null}
                         <div className="min-w-0 flex-1">
                             <h2
-                                id="app-modal-title"
+                                id={titleId}
                                 className={cn(
                                     'break-words text-lg font-semibold tracking-tight text-gray-900 dark:text-white',
                                     !description && 'leading-10',

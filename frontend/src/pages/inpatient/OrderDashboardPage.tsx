@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { MockFlagBanner } from '../../components/shared/MockFlagBanner';
 import { ClipboardList } from 'lucide-react';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
@@ -164,6 +165,7 @@ export default function OrderDashboardPage() {
 
     return (
         <div className="font-inter relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200/70 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-6px_rgba(0,0,0,0.06)] dark:border-white/[0.08] dark:bg-[#141210] dark:shadow-[0_8px_32px_-8px_rgba(0,0,0,0.45)]">
+            <MockFlagBanner flag="unifiedOrders" feature="Orders dashboard" />
             <div className="shrink-0 space-y-3 p-4 sm:p-5 sm:pb-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex min-w-0 items-center gap-2.5">

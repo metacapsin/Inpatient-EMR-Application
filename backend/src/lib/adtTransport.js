@@ -1,26 +1,42 @@
 import net from 'node:net';
+import tls from 'node:tls';
 import { sendEmail } from './email.js';
 import { parseAck } from './hl7Adt.js';
+import { decryptSecret, looksEncrypted } from './crypto.js';
+import { plaintextMllpAllowed } from '../config.js';
 
 /**
  * Delivery adapters for ADT notifications, selected by `notification_recipients.transport`:
  *   stub           log only (dev / no vendor)
  *   https_webhook  POST the HL7 message as text/plain; `Authorization` header from auth_header_secret
- *   mllp           raw TCP with MLLP framing (<VT>msg<FS><CR>), waits for an ACK and checks MSA-1
+ *   mllp           raw TCP (mllp://) or TLS (mllps://) with MLLP framing (<VT>msg<FS><CR>), waits for
+ *                  an ACK and checks MSA-1
  *   email          HL7 body via lib/email.js (nodemailer / stub)
  *   direct         reserved for Direct Secure Messaging — not configured
  * Each returns { ok: true, detail } or throws an Error whose message becomes `last_error`.
  */
 const MLLP_SB = '\x0b', MLLP_EB = '\x1c', MLLP_CR = '\x0d';
 
+/** auth_header_secret is encrypted at rest (SEC-12) going forward; a value stored before that
+ * migration is still plain text, so this stays readable for existing recipients. */
+function resolveSecret(stored) {
+    if (!stored) return null;
+    return looksEncrypted(stored) ? decryptSecret(stored) : stored;
+}
+
 async function viaWebhook(recipient, message) {
     if (!recipient.endpoint) throw new Error('Recipient has no endpoint URL');
+    // SEC-12: defense in depth — this transport carries PHI in the body, so even if an old row
+    // somehow has an http:// endpoint (validation already requires https:// for new/edited ones),
+    // refuse to send it in cleartext.
+    if (!/^https:\/\//.test(recipient.endpoint)) throw new Error('Webhook endpoint must be https://');
+    const secret = resolveSecret(recipient.auth_header_secret);
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 15000);
     try {
         const res = await fetch(recipient.endpoint, {
             method: 'POST',
-            headers: { 'Content-Type': 'x-application/hl7-v2+er7; charset=utf-8', ...(recipient.auth_header_secret ? { Authorization: recipient.auth_header_secret } : {}) },
+            headers: { 'Content-Type': 'x-application/hl7-v2+er7; charset=utf-8', ...(secret ? { Authorization: secret } : {}) },
             body: message,
             signal: ctrl.signal,
         });
@@ -34,16 +50,25 @@ async function viaWebhook(recipient, message) {
 }
 
 function viaMllp(recipient, message) {
-    const m = /^(?:mllp:\/\/)?([^:/]+):(\d+)/.exec(recipient.endpoint ?? '');
+    const m = /^(?:(mllps?):\/\/)?([^:/]+):(\d+)/.exec(recipient.endpoint ?? '');
     if (!m) throw new Error('MLLP endpoint must be host:port');
-    const [, host, port] = m;
+    const [, scheme, host, port] = m;
+    const useTls = scheme === 'mllps';
+    // SEC-12: plaintext MLLP carries HL7 PHI over an unencrypted socket — require an explicit opt-in
+    // (real hospital interface engines mostly run this over a dedicated VPN/private link that this
+    // app has no way to verify) unless the recipient asked for mllps:// (TLS) instead.
+    if (!useTls && !plaintextMllpAllowed()) {
+        throw new Error('Plaintext MLLP is disabled — use mllps://host:port (TLS) or set ALLOW_PLAINTEXT_MLLP=true if this link is already private/VPN-only');
+    }
     return new Promise((resolve, reject) => {
-        const sock = net.createConnection({ host, port: Number(port) });
+        const sock = useTls
+            ? tls.connect({ host, port: Number(port) })
+            : net.createConnection({ host, port: Number(port) });
         let buf = '';
         const fail = (err) => { sock.destroy(); reject(new Error(`MLLP failed: ${err.message || err}`)); };
         sock.setTimeout(15000, () => fail(new Error('timed out waiting for ACK')));
         sock.on('error', fail);
-        sock.on('connect', () => sock.write(MLLP_SB + message + MLLP_EB + MLLP_CR));
+        sock.on(useTls ? 'secureConnect' : 'connect', () => sock.write(MLLP_SB + message + MLLP_EB + MLLP_CR));
         sock.on('data', (d) => {
             buf += d.toString('utf8');
             if (buf.includes(MLLP_EB)) {

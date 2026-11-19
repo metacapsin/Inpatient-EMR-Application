@@ -5,8 +5,8 @@ import * as yup from 'yup';
 import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'sonner';
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
-import { loginUser } from '../../store/authSlice';
+import { Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { loginUser, verifyMfaCode } from '../../store/authSlice';
 import type { AppDispatch, IRootState } from '../../store';
 import api from '../../services/api';
 import AuthCard from '../../components/auth/AuthCard';
@@ -41,12 +41,32 @@ const loginCardClassName =
   'w-full max-w-[420px] rounded-xl border border-slate-200/80 bg-white p-8 sm:p-9 ' +
   'shadow-[0_1px_2px_rgba(15,23,42,0.05),0_4px_12px_rgba(15,23,42,0.06),0_16px_40px_-12px_rgba(15,23,42,0.08)]';
 
+/** Shared post-login redirect: brand-new tenants land in onboarding until their admin finishes setup. */
+async function redirectAfterLogin(role: string | null, navigate: ReturnType<typeof useNavigate>) {
+  if (role === 'admin') {
+    try {
+      const tenant = (await api.get('/tenants/current')).data.data;
+      if (tenant?.onboardingStatus && tenant.onboardingStatus !== 'complete') {
+        navigate('/app/onboarding', { replace: true });
+        return;
+      }
+    } catch {
+      // If the check fails, fall through to the normal dashboard redirect.
+    }
+  }
+  navigate('/app/dashboard', { replace: true });
+}
+
 const LoginPage = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
   const token = useSelector((s: IRootState) => s.auth.token);
   const authLoading = useSelector((s: IRootState) => s.auth.loading);
+  const mfaChallenge = useSelector((s: IRootState) => s.auth.mfaChallenge);
   const [showPassword, setShowPassword] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [useBackupCode, setUseBackupCode] = useState(false);
 
   const {
     register,
@@ -77,21 +97,13 @@ const LoginPage = () => {
         localStorage.removeItem('rememberedEmail');
       }
       const result = await dispatch(loginUser({ email: values.email.trim(), password: values.password })).unwrap();
-      toast.success('Welcome back', { id: toastId });
-
-      // Brand-new tenants land in the onboarding wizard until their admin finishes setup.
-      if (result.role === 'admin') {
-        try {
-          const tenant = (await api.get('/tenants/current')).data.data;
-          if (tenant?.onboardingStatus && tenant.onboardingStatus !== 'complete') {
-            navigate('/app/onboarding', { replace: true });
-            return;
-          }
-        } catch {
-          // If the check fails, fall through to the normal dashboard redirect.
-        }
+      if (result.mfaRequired) {
+        setLoginEmail(values.email.trim());
+        toast.dismiss(toastId);
+        return;
       }
-      navigate('/app/dashboard', { replace: true });
+      toast.success('Welcome back', { id: toastId });
+      await redirectAfterLogin(result.role, navigate);
     } catch (err: unknown) {
       const message =
         typeof err === 'string'
@@ -99,6 +111,27 @@ const LoginPage = () => {
           : err && typeof err === 'object' && 'message' in err && typeof (err as { message: string }).message === 'string'
             ? (err as { message: string }).message
             : 'Sign in failed. Check your credentials.';
+      toast.error(message, { id: toastId, duration: 5000 });
+    }
+  };
+
+  const onSubmitMfa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaChallenge) return;
+    const toastId = 'mfa';
+    toast.loading('Verifying…', { id: toastId });
+    try {
+      const result = await dispatch(
+        verifyMfaCode(
+          useBackupCode
+            ? { email: loginEmail, mfaToken: mfaChallenge.mfaToken, backupCode: mfaCode.trim() }
+            : { email: loginEmail, mfaToken: mfaChallenge.mfaToken, code: mfaCode.trim() },
+        ),
+      ).unwrap();
+      toast.success('Welcome back', { id: toastId });
+      await redirectAfterLogin(result.role, navigate);
+    } catch (err: unknown) {
+      const message = typeof err === 'string' ? err : 'Invalid code';
       toast.error(message, { id: toastId, duration: 5000 });
     }
   };
@@ -147,51 +180,91 @@ const LoginPage = () => {
         </div>
 
         {/* FORM */}
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+        {mfaChallenge ? (
+          <form onSubmit={onSubmitMfa} className="space-y-5">
+            <div className="flex items-center gap-2 text-sm text-slate-600">
+              <ShieldCheck className="h-4 w-4 text-[#97704f]" />
+              {useBackupCode ? 'Enter one of your backup codes.' : 'Enter the 6-digit code from your authenticator app.'}
+            </div>
 
-          <AuthInputField
-            label="Email"
-            type="email"
-            autoComplete="email"
-            placeholder="name@organization.org"
-            icon={<Mail className="h-[18px] w-[18px]" />}
-            error={errors.email?.message}
-            {...register('email')}
-          />
+            <AuthInputField
+              label={useBackupCode ? 'Backup code' : 'Authentication code'}
+              type="text"
+              autoComplete="one-time-code"
+              placeholder={useBackupCode ? 'XXXXX-XXXXX' : '123456'}
+              icon={<ShieldCheck className="h-[18px] w-[18px]" />}
+              value={mfaCode}
+              onChange={(e) => setMfaCode(e.target.value)}
+              autoFocus
+            />
 
-          <AuthInputField
-            label="Password"
-            type={showPassword ? 'text' : 'password'}
-            autoComplete="current-password"
-            placeholder="Enter your password"
-            icon={<Lock className="h-[18px] w-[18px]" />}
-            error={errors.password?.message}
-            suffix={
-              <button
-                type="button"
-                onClick={() => setShowPassword(v => !v)}
-                className="p-1 text-slate-400 hover:text-slate-700"
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            }
-            {...register('password')}
-          />
+            <button
+              type="button"
+              onClick={() => {
+                setUseBackupCode((v) => !v);
+                setMfaCode('');
+              }}
+              className="text-xs text-[#97704f] hover:underline"
+            >
+              {useBackupCode ? 'Use your authenticator app instead' : "Lost your device? Use a backup code"}
+            </button>
 
-          {/* REMEMBER */}
-          <div className="flex items-center justify-between text-sm">
-            <label className="flex items-center gap-2 text-slate-600">
-              <input type="checkbox" {...register('rememberMe')} />
-              Remember me
-            </label>
+            <button
+              type="submit"
+              disabled={authLoading || !mfaCode.trim()}
+              className="w-full rounded-lg py-2.5 text-white font-medium
+  bg-gradient-to-r from-[#714e30] to-[#97704f]
+  shadow-md hover:opacity-90 transition disabled:opacity-60"
+            >
+              {authLoading ? 'Verifying…' : 'Verify'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
 
-            <Link to="/forgot-password" className=" hover:underline">
-              Forgot password?
-            </Link>
-          </div>
+            <AuthInputField
+              label="Email"
+              type="email"
+              autoComplete="email"
+              placeholder="name@organization.org"
+              icon={<Mail className="h-[18px] w-[18px]" />}
+              error={errors.email?.message}
+              {...register('email')}
+            />
 
-          {/* BUTTON */}
-          <button
+            <AuthInputField
+              label="Password"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="current-password"
+              placeholder="Enter your password"
+              icon={<Lock className="h-[18px] w-[18px]" />}
+              error={errors.password?.message}
+              suffix={
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="p-1 text-slate-400 hover:text-slate-700"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              }
+              {...register('password')}
+            />
+
+            {/* REMEMBER */}
+            <div className="flex items-center justify-between text-sm">
+              <label className="flex items-center gap-2 text-slate-600">
+                <input type="checkbox" {...register('rememberMe')} />
+                Remember me
+              </label>
+
+              <Link to="/forgot-password" className=" hover:underline">
+                Forgot password?
+              </Link>
+            </div>
+
+            {/* BUTTON */}
+            <button
   type="submit"
   disabled={busy}
   className="w-full rounded-lg py-2.5 text-white font-medium
@@ -201,7 +274,8 @@ const LoginPage = () => {
   {busy ? 'Signing in...' : 'Login'}
 </button>
 
-        </form>
+          </form>
+        )}
 
         <p className="mt-6 text-center text-xs text-slate-400">
           Platform administrator?{' '}

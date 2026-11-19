@@ -35,3 +35,8 @@ backend/data/icd10/*.txt
 backend/data/icd10/*.zip
 backend/data/icd10/*.pdf
 !backend/data/icd10/README.md
+
+# Planning notes and status text reports stay local
+.cursor/plans/
+*.plan.md
+/*.txt

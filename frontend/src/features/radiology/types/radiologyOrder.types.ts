@@ -26,6 +26,8 @@ export interface RadiologyOrder {
     icd10Codes: string[];
     priority: RadiologyPriority | string;
     specialInstructions?: string;
+    pregnancyStatus?: string;
+    contrastAllergy?: string;
     transportRequired?: boolean;
     scheduledFor?: string | null;
     orderedBy: string;
@@ -61,6 +63,8 @@ export type CreateRadiologyOrderPayload = Pick<
     | 'icd10Codes'
     | 'priority'
     | 'specialInstructions'
+    | 'pregnancyStatus'
+    | 'contrastAllergy'
     | 'transportRequired'
     | 'scheduledFor'
     | 'orderedBy'

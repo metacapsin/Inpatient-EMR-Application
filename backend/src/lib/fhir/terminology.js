@@ -15,6 +15,19 @@ export const SYSTEMS = Object.freeze({
     v3ActCode: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
     encounterStatus: 'http://hl7.org/fhir/encounter-status',
     administrativeGender: 'http://hl7.org/fhir/administrative-gender',
+    cdcRaceEthnicity: 'urn:oid:2.16.840.1.113883.6.238',
+    nullFlavor: 'http://terminology.hl7.org/CodeSystem/v3-NullFlavor',
+});
+
+/** OTH/ASKU/UNK are HL7 v3 NullFlavor codes, not SNOMED — used across the USCDI SOGI fields below. */
+export const NULL_FLAVOR_CODES = new Set(['OTH', 'ASKU', 'UNK']);
+
+/** US Core Patient demographic extension URLs (USCDI v3). */
+export const US_CORE_EXTENSIONS = Object.freeze({
+    race: 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-race',
+    ethnicity: 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity',
+    birthsex: 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-birthsex',
+    genderIdentity: 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-genderIdentity',
 });
 
 /** @type {Record<string, { code: string, display: string, unit?: string }>} */

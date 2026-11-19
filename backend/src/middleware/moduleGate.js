@@ -28,12 +28,15 @@ const MODULE_RULES = [
 
     { module: 'staffing', test: (p) => /^\/api\/Staffing(\/|$)/i.test(p) },
 
+    // Server-side AI assistant (migration 022 turns it on for existing tenants).
+    { module: 'ai', test: (p) => /^\/api\/ai(\/|$)/.test(p) },
+
     { module: 'patients', test: (p) => /^\/(Patient|patient)\//.test(p) },
     { module: 'patients', test: (p) => /^\/(Visitors|PatientFamily)(\/|$)/.test(p) },
     { module: 'patients', test: (p) => p.startsWith('/api/health/metrics') },
     { module: 'patients', test: (p) => /^\/api\/(CarePlan|IORecord|NursingFlowsheet|HAIEvent)(\/|$)/.test(p) },
     { module: 'patients', test: (p) => /^\/api\/(Consent|PatientRights)(\/|$)/.test(p) },
-    { module: 'patients', test: (p) => /^\/(lab-orders|LabDetails)(\/|$)/.test(p) },
+    { module: 'patients', test: (p) => /^\/(lab-orders)(\/|$)/.test(p) },
     // Problem list under /api/patients/:id/problems (must not match medication paths above).
     { module: 'patients', test: (p) => /^\/api\/patients\/[^/]+\/problems\/?$/.test(p) },
     { module: 'patients', test: (p) => /^\/api\/problems(\/|$)/.test(p) },

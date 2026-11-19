@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
-import { patientDataAPI, aiHealthInsightsAPI } from '../../services/api';
+import { patientDataAPI } from '../../services/api';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
-import { FaFlask, FaTimes } from 'react-icons/fa';
-import IconSparkles from '../../components/Icon/IconSparkles';
+import { FaFlask } from 'react-icons/fa';
 import IconSearch from '../../components/Icon/IconSearch';
 import { useSelector } from 'react-redux';
 import type { IRootState } from '../../store';
@@ -26,13 +25,6 @@ interface LabOrder {
   [key: string]: any;
 }
 
-interface LabExplanation {
-  labOrderId?: string;
-  explanations?: Array<{
-    testName?: string;
-    plainLanguageExplanation?: string;
-  }>;
-}
 
 const FETCH_LIMIT = 500;
 
@@ -58,11 +50,6 @@ const LabOrders: React.FC = () => {
   const [rowsPerPage] = useState(2);
 
   // AI Modal states
-  const [showAIModal, setShowAIModal] = useState(false);
-  const [selectedLabOrderId, setSelectedLabOrderId] = useState<string | null>(null);
-  const [labExplanation, setLabExplanation] = useState<LabExplanation | null>(null);
-  const [loadingAI, setLoadingAI] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
 
   const formatDate = (dateString: string): string => {
     if (!dateString) return '';
@@ -180,32 +167,7 @@ const LabOrders: React.FC = () => {
     updatePaginatedList(paginatedCardList, page);
   };
 
-  const handleAIClick = async (labOrderId: string) => {
-    setSelectedLabOrderId(labOrderId);
-    setShowAIModal(true);
-    setLoadingAI(true);
-    setAiError(null);
-    setLabExplanation(null);
 
-    try {
-      const response = await aiHealthInsightsAPI.explainLabReport({ labId: labOrderId });
-      const explanation = response.data?.data || response.data;
-      setLabExplanation(explanation || {});
-    } catch (error: any) {
-      console.error('Error fetching lab explanation:', error);
-      setAiError(error.response?.data?.message || 'Failed to fetch lab explanation. Please try again.');
-      toast.error('Failed to fetch lab explanation');
-    } finally {
-      setLoadingAI(false);
-    }
-  };
-
-  const handleCloseAIModal = () => {
-    setShowAIModal(false);
-    setSelectedLabOrderId(null);
-    setLabExplanation(null);
-    setAiError(null);
-  };
 
   return (
     <div className={moduleSurfaceClass}>
@@ -234,7 +196,7 @@ const LabOrders: React.FC = () => {
                 <input
                   type="text"
                   className="form-input pl-10"
-                  placeholder="Search lab orders..."
+                  aria-label="Search lab orders" placeholder="Search lab orders..."
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
                 />
@@ -279,15 +241,6 @@ const LabOrders: React.FC = () => {
                           {orDash(labOrder.orderDate)}
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleAIClick(labOrder.labOrderId || labOrder._id)}
-                        className="btn btn-sm btn-primary shrink-0"
-                        aria-label="View AI explanation"
-                        title="View AI Lab Report Explanation"
-                      >
-                        <IconSparkles className="w-4 h-4" />
-                      </button>
                     </div>
                   </div>
                   <div className="space-y-2 flex flex-col flex-1 min-h-0">
@@ -393,84 +346,6 @@ const LabOrders: React.FC = () => {
           )}
         </div>
 
-      {/* AI Explanation Modal */}
-      {showAIModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
-          onClick={handleCloseAIModal}
-        >
-          <div
-            className="bg-white dark:bg-[#0e1726] rounded-lg shadow-xl max-w-3xl w-full flex flex-col max-h-[90vh]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 bg-primary text-white rounded-t-lg shrink-0">
-              <h5 className="text-lg font-semibold">AI Lab Report Explanation</h5>
-              <button
-                type="button"
-                onClick={handleCloseAIModal}
-                className="p-1.5 rounded hover:bg-white/20 transition-colors"
-                aria-label="Close"
-              >
-                <FaTimes className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Content */}
-            <div className="flex-1 overflow-y-auto p-6">
-              {loadingAI && (
-                <div className="flex flex-col items-center justify-center py-16 gap-3">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-                  <p className="text-gray-600 dark:text-gray-400">Generating lab report explanation...</p>
-                </div>
-              )}
-
-              {aiError && (
-                <div className="bg-danger/10 border border-danger/20 rounded-lg p-4 mb-4">
-                  <p className="text-danger font-semibold mb-2">Error</p>
-                  <p className="text-danger/80 text-sm">{aiError}</p>
-                </div>
-              )}
-
-              {!loadingAI && !aiError && labExplanation && (
-                <div className="space-y-6">
-                  {labExplanation.explanations && labExplanation.explanations.length > 0 ? (
-                    labExplanation.explanations.map((explanation, index) => (
-                      <div key={index} className="panel p-5 border border-white-light dark:border-[#191e3a]">
-                        {explanation.testName && (
-                          <h6 className="text-primary text-lg font-semibold mb-3 flex items-center gap-2">
-                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
-                            </svg>
-                            {explanation.testName}
-                          </h6>
-                        )}
-                        {explanation.plainLanguageExplanation && (
-                          <div className="mt-4">
-                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
-                              {explanation.plainLanguageExplanation}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                      <p>No explanation available for this lab order.</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {!loadingAI && !aiError && !labExplanation && (
-                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                  <p>No data available.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

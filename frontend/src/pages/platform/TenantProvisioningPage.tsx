@@ -7,7 +7,7 @@ import AuthInputField from '../../components/auth/AuthInputField';
 import AuthButton from '../../components/auth/AuthButton';
 import { platformTenantsAPI, type Tenant } from '../../services/platformApi';
 
-const MODULE_OPTIONS = ['adt', 'patients', 'medication', 'billing', 'staffing'];
+const MODULE_OPTIONS = ['adt', 'patients', 'medication', 'billing', 'staffing', 'ai'];
 
 const TenantProvisioningPage = () => {
   const navigate = useNavigate();

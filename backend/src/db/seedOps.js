@@ -68,12 +68,6 @@ export async function seedOpsDemo(db, tenantId, { password }) {
         [t, p0, enc.id],
     );
     await db.query(
-        `INSERT INTO lab_documents (tenant_id, patient_id, name, lab_name, value, unit, reference_range, lab_date) VALUES
-         ($1,$2,'WBC','Hospital Lab','13.2','10^3/uL','4.0-11.0', CURRENT_DATE - 1), ($1,$2,'Hemoglobin','Hospital Lab','11.8','g/dL','12.0-15.5', CURRENT_DATE - 1),
-         ($1,$2,'Creatinine','Hospital Lab','0.9','mg/dL','0.6-1.2', CURRENT_DATE - 1)`,
-        [t, p0],
-    );
-    await db.query(
         `INSERT INTO patient_documents (tenant_id, patient_id, name, document_type, notes, mime_type, content) VALUES ($1,$2,'Admission summary.txt','Clinical summary','Seed document','text/plain',$3)`,
         [t, p0, Buffer.from('Admission summary (demo document).\nCommunity-acquired pneumonia, admitted to ICU.\n')],
     );

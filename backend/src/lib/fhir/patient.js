@@ -1,5 +1,27 @@
 // @ts-check
-import { mapGender, instant } from './terminology.js';
+import { mapGender, instant, SYSTEMS, US_CORE_EXTENSIONS, NULL_FLAVOR_CODES } from './terminology.js';
+import { RACE_CODES, ETHNICITY_CODES, SEX_AT_BIRTH_CODES, GENDER_IDENTITY_CODES } from '../uscdiCodes.js';
+
+/**
+ * US Core race/ethnicity extension: one `ombCategory` sub-extension per code, plus a free-text `text`.
+ * ASKU/UNK aren't OMB categories — they go in `text` only, matching the US Core IG's own guidance for
+ * "declined to answer" style responses.
+ * @param {string} url
+ * @param {string[]} codes
+ * @returns {fhir4.Extension | undefined}
+ */
+function ombCategoryExtension(url, codes) {
+    if (!codes.length) return undefined;
+    const labels = (url === US_CORE_EXTENSIONS.race ? RACE_CODES : ETHNICITY_CODES);
+    /** @type {fhir4.Extension[]} */
+    const sub = [];
+    for (const code of codes) {
+        if (code === 'ASKU' || code === 'UNK') continue;
+        sub.push({ url: 'ombCategory', valueCoding: { system: SYSTEMS.cdcRaceEthnicity, code, display: labels[code] } });
+    }
+    sub.push({ url: 'text', valueString: codes.map((c) => labels[c]).filter(Boolean).join(', ') });
+    return { url, extension: sub };
+}
 
 /**
  * Map an EMR patients row to a FHIR R4 Patient (US Core demographics subset).
@@ -52,5 +74,31 @@ export function toFhirPatient(row) {
 
     if (!resource.telecom?.length) delete resource.telecom;
     if (!resource.address?.length) delete resource.address;
+
+    /** @type {fhir4.Extension[]} */
+    const extensions = [];
+    const race = Array.isArray(row.race) ? /** @type {string[]} */ (row.race) : [];
+    const raceExt = ombCategoryExtension(US_CORE_EXTENSIONS.race, race);
+    if (raceExt) extensions.push(raceExt);
+    if (row.ethnicity) {
+        const ethnicityExt = ombCategoryExtension(US_CORE_EXTENSIONS.ethnicity, [String(row.ethnicity)]);
+        if (ethnicityExt) extensions.push(ethnicityExt);
+    }
+    if (row.sex_at_birth && SEX_AT_BIRTH_CODES[String(row.sex_at_birth)]) {
+        extensions.push({ url: US_CORE_EXTENSIONS.birthsex, valueCode: String(row.sex_at_birth) });
+    }
+    if (row.gender_identity && GENDER_IDENTITY_CODES[String(row.gender_identity)]) {
+        const code = String(row.gender_identity);
+        const system = NULL_FLAVOR_CODES.has(code) ? SYSTEMS.nullFlavor : SYSTEMS.snomed;
+        extensions.push({
+            url: US_CORE_EXTENSIONS.genderIdentity,
+            extension: [{
+                url: 'value',
+                valueCodeableConcept: { coding: [{ system, code, display: GENDER_IDENTITY_CODES[code] }] },
+            }],
+        });
+    }
+    if (extensions.length) resource.extension = extensions;
+
     return resource;
 }

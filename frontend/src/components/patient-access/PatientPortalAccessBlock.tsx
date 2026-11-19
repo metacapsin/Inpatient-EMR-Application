@@ -37,7 +37,7 @@ export function PatientPortalAccessBlock({ patientId, defaultEmail = '' }: Props
     async function invite() {
         if (!patientId) return;
         setBusy(true);
-        const res = await invitePortalAccount(patientId, email.trim() || undefined);
+        const res = await invitePortalAccount(patientId);
         setBusy(false);
         if (!res.ok) return toast.error(res.message);
         setAccount(res.data);
@@ -73,25 +73,30 @@ export function PatientPortalAccessBlock({ patientId, defaultEmail = '' }: Props
                         Status: <span className="font-semibold capitalize">{status}</span>
                         {account?.email ? <span className="text-gray-500"> · {account.email}</span> : null}
                     </p>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                    <div className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                         Invite email
-                        <input
-                            className="mt-1 h-9 w-full max-w-md rounded-md border border-gray-200 bg-white px-2.5 text-xs outline-none focus:border-primary/60 dark:border-white/10 dark:bg-[#1a1816]"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            type="email"
-                            placeholder="patient@example.com"
-                        />
-                    </label>
+                        <p className="mt-1 h-9 w-full max-w-md rounded-md border border-gray-200 bg-gray-100 px-2.5 text-xs leading-9 text-gray-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300">
+                            {email || 'No email on file — add one in Demographics first'}
+                        </p>
+                        <p className="mt-1 text-[10px] font-normal normal-case text-gray-400">
+                            Always sent to the patient's email on file — it can't be redirected elsewhere from here.
+                        </p>
+                    </div>
                     <div className="flex flex-wrap gap-2">
-                        <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void invite()}
-                            className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
-                        >
-                            {status === 'none' || status === 'deactivated' ? 'Send invite' : 'Resend invite'}
-                        </button>
+                        {status === 'active' ? (
+                            <p className="text-xs text-gray-500">
+                                Account is active. To issue a new password, have the patient use "Forgot password" on the portal login page — invites can't reset an active account.
+                            </p>
+                        ) : (
+                            <button
+                                type="button"
+                                disabled={busy || !email}
+                                onClick={() => void invite()}
+                                className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
+                            >
+                                {status === 'none' || status === 'deactivated' ? 'Send invite' : 'Resend invite'}
+                            </button>
+                        )}
                         {status === 'active' || status === 'invited' ? (
                             <button
                                 type="button"

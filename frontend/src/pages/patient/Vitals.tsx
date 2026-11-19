@@ -328,11 +328,11 @@ const Vitals: React.FC = () => {
 
       const metrics = [
         { metricType: "heart_rate", value: form.heartRateBpm, unit: "bpm" },
-        // { metricType: "respiratory_rate", value: form.respiratoryRatePerMin, unit: "breaths/min" },
+        { metricType: "respiratory_rate", value: form.respiratoryRatePerMin, unit: "breaths/min" },
         { metricType: "temperature", value: form.temperatureFahrenheit, unit: "F" },
         { metricType: "oxygen_saturation", value: form.spo2Percent, unit: "%" },
         { metricType: "weight", value: form.weightLbs, unit: "lbs" },
-        // { metricType: "height", value: form.heightInches, unit: "inches" },
+        { metricType: "height", value: form.heightInches, unit: "inches" },
         { metricType: "glucose", value: form.bloodGlucose, unit: "mg/dL" },
       ];
 
@@ -406,7 +406,7 @@ const Vitals: React.FC = () => {
           <input
             type="text"
             className="form-input pl-10 w-full"
-            placeholder="Search by date or values"
+            aria-label="Search vitals" placeholder="Search by date or values"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
           />
@@ -463,12 +463,18 @@ const Vitals: React.FC = () => {
                 </p>
               </div>
               <div>
-                <span className="text-gray-600 dark:text-gray-400">Weight</span>
-                <p className="font-semibold">{latestVital.weightLbs != null ? `${latestVital.weightLbs} lbs` : '—'}</p>
+                <span className="text-gray-600 dark:text-gray-400">Weight / Height</span>
+                <p className="font-semibold">
+                  {[latestVital.weightLbs != null && `${latestVital.weightLbs} lbs`, latestVital.heightDisplay && latestVital.heightDisplay !== '—' && latestVital.heightDisplay].filter(Boolean).join(' / ') || '—'}
+                </p>
               </div>
               <div>
                 <span className="text-gray-600 dark:text-gray-400">Blood Glucose</span>
                 <p className="font-semibold">{latestVital.bloodGlucose != null ? `${latestVital.bloodGlucose} mg/dL` : '—'}</p>
+              </div>
+              <div>
+                <span className="text-gray-600 dark:text-gray-400">Respiratory Rate</span>
+                <p className="font-semibold">{latestVital.respiratoryRatePerMin != null ? `${latestVital.respiratoryRatePerMin} /min` : '—'}</p>
               </div>
             </div>
           </div>
@@ -531,6 +537,11 @@ const Vitals: React.FC = () => {
                     <input type="number" className="form-input" min={0} max={600} placeholder="e.g. 100"
                       value={form.bloodGlucose ?? ''} onChange={(e) => setForm((f) => ({ ...f, bloodGlucose: e.target.value ? Number(e.target.value) : undefined }))} />
                   </div>
+                  <div>
+                    <label className="form-label">Respiratory Rate (breaths/min)</label>
+                    <input type="number" className="form-input" min={0} max={100} placeholder="e.g. 16"
+                      value={form.respiratoryRatePerMin ?? ''} onChange={(e) => setForm((f) => ({ ...f, respiratoryRatePerMin: e.target.value ? Number(e.target.value) : undefined }))} />
+                  </div>
                 </div>
               </div>
 
@@ -542,6 +553,11 @@ const Vitals: React.FC = () => {
                     <label className="form-label">Weight (lbs)</label>
                     <input type="number" step="0.1" className="form-input" min={0} placeholder="e.g. 150"
                       value={form.weightLbs ?? ''} onChange={(e) => setForm((f) => ({ ...f, weightLbs: e.target.value ? Number(e.target.value) : undefined }))} />
+                  </div>
+                  <div>
+                    <label className="form-label">Height (inches)</label>
+                    <input type="number" step="0.1" className="form-input" min={0} max={120} placeholder="e.g. 66"
+                      value={form.heightInches ?? ''} onChange={(e) => setForm((f) => ({ ...f, heightInches: e.target.value ? Number(e.target.value) : undefined }))} />
                   </div>
                 </div>
               </div>

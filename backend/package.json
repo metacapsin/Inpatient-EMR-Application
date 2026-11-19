@@ -15,7 +15,7 @@
     "db:setup": "node src/db/migrate.js && node src/db/seed.js",
     "db:seed:cds": "node src/db/seedCds.js",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "cross-env NODE_ENV=test node --test --test-concurrency=1 \"tests/**/*.test.js\""
+    "test": "cross-env NODE_ENV=test node --test --test-concurrency=1 tests/api.test.js tests/ai.test.js tests/audit.test.js tests/authHardening.test.js tests/rbac.test.js tests/patientPortal.test.js tests/securityHardening.test.js tests/criticalResults.test.js tests/admissionDischarge.test.js tests/clinicalDocs.test.js tests/patientRegistration.test.js tests/cpoeFull.test.js tests/cds.unit.test.js tests/contracts.test.js tests/eligibilityMapper.test.js tests/seedIcd10Parse.test.js tests/vitalsLabsImaging.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

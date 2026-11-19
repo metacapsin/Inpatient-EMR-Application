@@ -20,9 +20,9 @@ export async function getPortalAccount(patientId: string): Promise<ServiceResult
     }
 }
 
-export async function invitePortalAccount(patientId: string, email?: string): Promise<ServiceResult<PatientAccountStatus>> {
+export async function invitePortalAccount(patientId: string): Promise<ServiceResult<PatientAccountStatus>> {
     try {
-        const { data } = await api.post<Envelope<unknown>>(`/api/patients/${encodeURIComponent(patientId)}/portal-invite`, email ? { email } : {});
+        const { data } = await api.post<Envelope<unknown>>(`/api/patients/${encodeURIComponent(patientId)}/portal-invite`, {});
         return { ok: true, data: patientAccountSchema.parse(unwrap(data)) };
     } catch (e) {
         return { ok: false, message: getApiErrorMessage(e, 'Could not send portal invite') };

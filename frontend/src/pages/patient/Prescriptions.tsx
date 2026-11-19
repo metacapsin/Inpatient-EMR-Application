@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI } from '../../services/api';
+import { ModuleErrorState } from '../../components/facesheet/ModuleErrorState';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
@@ -319,6 +320,7 @@ const Prescriptions: React.FC = () => {
   const [paginatedCardList, setPaginatedCardList] = useState<PrescriptionRecord[]>([]);
   const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage] = useState(2);
   const [showTextModal, setShowTextModal] = useState(false);
@@ -344,6 +346,7 @@ const Prescriptions: React.FC = () => {
     }
 
     setLoading(true);
+    setLoadError(null);
     try {
       const response = await patientDataAPI.getAllPrescriptionList(rcopiaID);
       const rawList = extractPrescriptionListFromResponse(response.data);
@@ -356,7 +359,7 @@ const Prescriptions: React.FC = () => {
       setFilteredCardList(formattedData);
       updatePaginatedList(formattedData, 1);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to fetch prescriptions');
+      setLoadError(error.response?.data?.message || 'Failed to fetch prescriptions');
     } finally {
       setLoading(false);
     }
@@ -452,7 +455,7 @@ const Prescriptions: React.FC = () => {
         <input
           type="text"
           className="form-input pl-10 w-full"
-          placeholder="Search here"
+          aria-label="Search prescriptions" placeholder="Search here"
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
         />
@@ -469,7 +472,9 @@ const Prescriptions: React.FC = () => {
         {/* Card View */}
         <div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {loading ? (
+            {loadError ? (
+              <ModuleErrorState message={loadError} onRetry={() => void getPatientPrescriptions()} retrying={loading} />
+            ) : loading ? (
               <div className="col-span-full text-center py-4">Loading...</div>
             ) : filteredCardList.length === 0 ? (
               <div className="col-span-full text-center mt-2">

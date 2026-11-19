@@ -1,17 +1,14 @@
 import React from 'react';
 
 const QUICK_QUESTIONS = [
-  "What medications am I currently taking?",
-  "What is my medical history?",
-  "Do I have any recorded allergies?",
-  "What are my recent vital signs?",
-  "What diagnoses do I have?",
-  "Summarize my medical notes",
-  "Show my recent notes",
-  "Analyze trends in my notes",
-  "What are my latest clinical notes?",
-  "Highlight important findings in my notes",
-  "Show my progress notes timeline",
+  "Which medications are currently active for this patient?",
+  "Summarise the documented problem list.",
+  "Are any allergies recorded, and how severe are they?",
+  "What are the latest vital signs?",
+  "Which recent lab results are abnormal or critical?",
+  "What is the admission diagnosis and current encounter status?",
+  "Summarise what is documented about this patient in one paragraph.",
+  "List items in the chart that may need review.",
 ];
 
 export interface QuickQuestionsProps {

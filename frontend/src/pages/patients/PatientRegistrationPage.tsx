@@ -10,16 +10,20 @@ import {
     updatePatientDetails,
     uploadPatientPhoto,
     type DuplicateCandidate,
+    type GuardianLegalRole,
     type PatientApiRecord,
     type PatientInsuranceInput,
     type PatientRegistrationPayload,
 } from '../../services/patient.service';
 import {
     ADVANCE_DIRECTIVE_STATUSES,
+    COMMUNICATION_PREFERENCES,
     COUNTRIES,
     EMERGENCY_RELATIONSHIPS,
     ETHNICITIES,
+    GENDER_IDENTITIES,
     GUARANTOR_RELATIONSHIPS,
+    GUARDIAN_ROLES,
     INSURANCE_PLAN_TYPES,
     INSURANCE_STATUSES,
     INSURANCE_TYPES,
@@ -28,6 +32,8 @@ import {
     NAME_SUFFIXES,
     PREFERRED_LANGUAGES,
     RACES,
+    SEX_AT_BIRTH_OPTIONS,
+    SEXUAL_ORIENTATIONS,
     SEX_OPTIONS,
     US_STATES,
     type ReferenceOption,
@@ -41,6 +47,7 @@ import {
 } from '../../services/eligibility.service';
 import { PayerAutocomplete } from '../../components/patients/PayerAutocomplete';
 import { CoverageResultPanel } from '../../components/patients/CoverageResultPanel';
+import { createRegistrationConsent } from '../../services/consent.service';
 import {
     EMPTY_CONTACT,
     EMPTY_INSURANCE,
@@ -99,6 +106,7 @@ function contactFromRecord(raw: unknown): ContactState {
     return {
         relationshipToPatient: str(r.relationshipToPatient), contactName: str(r.contactName), contactPhone: str(r.contactPhone),
         street: str(r.street), emergencyCity: str(r.emergencyCity), emergencyState: str(r.emergencyState), emergencyZipCode: str(r.emergencyZipCode),
+        isGuardian: r.isGuardian === true, legalRole: str(r.legalRole),
     };
 }
 
@@ -118,9 +126,12 @@ function personalFromRecord(p: PatientApiRecord): PersonalState {
         mailingAddress1: mail[0], mailingAddress2: mail[1], mailingCity: mail[2], mailingState: mail[3], mailingZipCode: mail[4],
         homePhone: str(r.homePhone), mobilePhone: str(r.mobilePhone), workPhone: str(r.workPhone), otherPhone: str(r.otherPhone),
         advancedHealthCareDirective: str(r.advancedHealthCareDirective), preferredLanguage: str(r.preferredLanguage),
-        ethnicity: str(r.ethnicity), race: str(r.race), noticeOfPrivacyPracticesDate: str(r.noticeOfPrivacyPracticesDate).slice(0, 10),
+        ethnicity: str(r.ethnicity), race: Array.isArray(r.race) ? r.race.map(String) : [], noticeOfPrivacyPracticesDate: str(r.noticeOfPrivacyPracticesDate).slice(0, 10),
         countryOfBirth: str(r.countryOfBirth),
         pcpName: str(r.pcpName), pcpNpi: str(r.pcpNpi), pcpRecipientId: str(r.pcpRecipientId),
+        genderIdentity: str(r.genderIdentity), sexAtBirth: str(r.sexAtBirth), sexualOrientation: str(r.sexualOrientation),
+        interpreterNeeded: r.interpreterNeeded === true,
+        communicationPreference: Array.isArray(r.communicationPreference) ? r.communicationPreference.map(String) : [],
     };
 }
 
@@ -166,6 +177,22 @@ function SelectInput({ id, value, onChange, options, error, placeholder = 'Selec
                 <option key={o.value} value={o.value}>{o.label}</option>
             ))}
         </select>
+    );
+}
+
+function CheckboxGroup({ id, values, onChange, options }: {
+    id: string; values: string[]; onChange: (v: string[]) => void; options: ReferenceOption[];
+}) {
+    const toggle = (v: string) => onChange(values.includes(v) ? values.filter((x) => x !== v) : [...values, v]);
+    return (
+        <div id={id} className="flex flex-wrap gap-x-4 gap-y-2">
+            {options.map((o) => (
+                <label key={o.value} className="inline-flex items-center gap-1.5 text-sm text-gray-800 dark:text-gray-200">
+                    <input type="checkbox" className="accent-primary" checked={values.includes(o.value)} onChange={() => toggle(o.value)} />
+                    {o.label}
+                </label>
+            ))}
+        </div>
     );
 }
 
@@ -314,6 +341,21 @@ function ContactBlock({ index, value, onChange, errors }: { index: 0 | 1; value:
     const set = (k: keyof ContactState) => (v: string) => onChange({ ...value, [k]: v });
     const err = (k: keyof ContactState) => errors[`${prefix}.${k}`];
     const id = (k: keyof ContactState) => `${prefix}-${k}`;
+    // Distinct from "Relationship" above: a legal role, not just a label. A guardian/NOK designation
+    // doesn't require a relationship label too, so this has no cross-field requirement of its own.
+    const guardianRow = (
+        <div className="flex flex-wrap items-end gap-3 sm:col-span-2 lg:col-span-3">
+            <label className="inline-flex h-10 items-center gap-1.5 text-sm text-gray-800 dark:text-gray-200">
+                <input type="checkbox" className="accent-primary" checked={value.isGuardian} onChange={(e) => onChange({ ...value, isGuardian: e.target.checked, legalRole: e.target.checked ? value.legalRole : '' })} />
+                Next of kin / legal guardian
+            </label>
+            {value.isGuardian ? (
+                <Field id={id('legalRole')} label="Legal role" className="w-56">
+                    <SelectInput id={id('legalRole')} value={value.legalRole} onChange={set('legalRole')} options={GUARDIAN_ROLES.filter((o) => o.value)} />
+                </Field>
+            ) : null}
+        </div>
+    );
     return (
         <div className="rounded-lg border border-dashed border-gray-200 p-4 dark:border-white/10">
             <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">{index === 0 ? 'Primary contact' : 'Secondary contact'}</h3>
@@ -341,6 +383,7 @@ function ContactBlock({ index, value, onChange, errors }: { index: 0 | 1; value:
                         <TextInput id={id('emergencyZipCode')} inputMode="numeric" value={value.emergencyZipCode} onChange={(v) => set('emergencyZipCode')(v.replace(/\D/g, '').slice(0, 5))} error={err('emergencyZipCode')} />
                     </Field>
                 </div>
+                {guardianRow}
             </div>
         </div>
     );
@@ -358,6 +401,7 @@ const SECTIONS = [
     { id: 'demographics', label: 'Demographics' },
     { id: 'pcp', label: 'Primary care' },
     { id: 'emergency', label: 'Emergency contacts' },
+    { id: 'consent', label: 'Consent' },
 ] as const;
 
 function DuplicateDialog({ matches, onCancel, onProceed }: { matches: DuplicateCandidate[]; onCancel: () => void; onProceed: () => void }) {
@@ -432,6 +476,11 @@ export default function PatientRegistrationPage() {
     const [verifyError, setVerifyError] = useState<{ primary: string; secondary: string }>({ primary: '', secondary: '' });
     // X12 service type the 270 asks about; inpatient EMR defaults to general plan coverage.
     const [serviceType, setServiceType] = useState('30');
+
+    // Registration-time consent — new patients only (an existing patient's consent status lives on the
+    // Consents tab, not here).
+    const [consentGeneralTreatment, setConsentGeneralTreatment] = useState(false);
+    const [consentHipaaNpp, setConsentHipaaNpp] = useState(false);
 
     // Photo: a newly selected file is uploaded after save; in edit mode the stored photo shows first
     // and "remove" clears it on save.
@@ -519,7 +568,7 @@ export default function PatientRegistrationPage() {
             breastfeeding: isFemale ? yesNoBool(breastfeeding) : null,
             insurance: hasInsurance === 'yes' ? toInsurancePayload(insurance) : null,
             secondaryInsurance: hasInsurance === 'yes' && hasSecondary === 'yes' ? toInsurancePayload(secondary) : null,
-            emergencyContacts: contacts.map((c) => ({ ...c })),
+            emergencyContacts: contacts.map((c) => ({ ...c, legalRole: c.legalRole as GuardianLegalRole | '' })),
         };
     };
 
@@ -547,6 +596,12 @@ export default function PatientRegistrationPage() {
                 if (!patient.id) throw new Error('Server did not return the new patient id.');
                 id = patient.id;
                 label = `${patient.fullName || 'Patient'} registered${patient.mrn ? ` · ${patient.mrn}` : ''}${eligibility?.eligible === false ? ' (eligibility check failed)' : ''}`;
+                const signedByName = `${form.firstName} ${form.lastName}`.trim() || 'Patient';
+                for (const [checked, consentType] of [[consentGeneralTreatment, 'General Treatment'], [consentHipaaNpp, 'HIPAA NPP']] as const) {
+                    if (!checked) continue;
+                    const result = await createRegistrationConsent({ patientId: id, consentType, signedByName });
+                    if (!result.ok) toast(`Patient registered, but recording ${consentType} consent failed: ${result.message}`, { icon: '⚠️' });
+                }
             }
             try {
                 if (photo) await uploadPatientPhoto(id, photo);
@@ -562,7 +617,7 @@ export default function PatientRegistrationPage() {
             setSaving(false);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editId, isEdit, existing, photo, removeExistingPhoto, existingPhotoUrl, form, hasInsurance, hasSecondary, insurance, secondary, contacts, navigate]);
+    }, [editId, isEdit, existing, photo, removeExistingPhoto, existingPhotoUrl, form, hasInsurance, hasSecondary, insurance, secondary, contacts, navigate, consentGeneralTreatment, consentHipaaNpp]);
 
     const submit = async (ev: FormEvent) => {
         ev.preventDefault();
@@ -713,7 +768,7 @@ export default function PatientRegistrationPage() {
                 {/* Section jump nav */}
                 <aside className="mb-3 lg:mb-0">
                     <nav aria-label="Form sections" className="flex gap-1 overflow-x-auto rounded-lg border border-gray-200/80 bg-white p-1.5 dark:border-white/[0.08] dark:bg-[#1a1a1a] lg:sticky lg:top-20 lg:flex-col">
-                        {SECTIONS.map((s) => (
+                        {SECTIONS.filter((s) => s.id !== 'consent' || !isEdit).map((s) => (
                             <a key={s.id} href={`#${s.id}`} className="shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:text-primary dark:text-gray-300 dark:hover:bg-white/5">
                                 {s.label}
                             </a>
@@ -869,14 +924,26 @@ export default function PatientRegistrationPage() {
                     </Section>
 
                     {/* 7. Additional demographics */}
-                    <Section id="demographics" title="Additional Demographics">
+                    <Section id="demographics" title="Additional Demographics" subtitle="USCDI demographics below are all optional — asking and recording 'declined to answer' is preferred over leaving them blank.">
                         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                             <Field id="advancedHealthCareDirective" label="Advance healthcare directive"><SelectInput id="advancedHealthCareDirective" value={form.advancedHealthCareDirective} onChange={set('advancedHealthCareDirective')} options={ADVANCE_DIRECTIVE_STATUSES} /></Field>
                             <Field id="preferredLanguage" label="Preferred language"><SelectInput id="preferredLanguage" value={form.preferredLanguage} onChange={set('preferredLanguage')} options={PREFERRED_LANGUAGES} /></Field>
                             <Field id="ethnicity" label="Ethnicity"><SelectInput id="ethnicity" value={form.ethnicity} onChange={set('ethnicity')} options={ETHNICITIES} /></Field>
-                            <Field id="race" label="Race"><SelectInput id="race" value={form.race} onChange={set('race')} options={RACES} /></Field>
                             <Field id="noticeOfPrivacyPracticesDate" label="Notice of Privacy Practices signed" error={errors.noticeOfPrivacyPracticesDate}><TextInput id="noticeOfPrivacyPracticesDate" type="date" max={todayYmd()} value={form.noticeOfPrivacyPracticesDate} onChange={set('noticeOfPrivacyPracticesDate')} error={errors.noticeOfPrivacyPracticesDate} /></Field>
                             <Field id="countryOfBirth" label="Country of birth"><SelectInput id="countryOfBirth" value={form.countryOfBirth} onChange={set('countryOfBirth')} options={COUNTRIES} /></Field>
+                            <Field id="sexAtBirth" label="Sex at birth"><SelectInput id="sexAtBirth" value={form.sexAtBirth} onChange={set('sexAtBirth')} options={SEX_AT_BIRTH_OPTIONS} /></Field>
+                            <Field id="genderIdentity" label="Gender identity"><SelectInput id="genderIdentity" value={form.genderIdentity} onChange={set('genderIdentity')} options={GENDER_IDENTITIES} /></Field>
+                            <Field id="sexualOrientation" label="Sexual orientation"><SelectInput id="sexualOrientation" value={form.sexualOrientation} onChange={set('sexualOrientation')} options={SEXUAL_ORIENTATIONS} /></Field>
+                            <Field id="race" label="Race" className="sm:col-span-2 lg:col-span-3">
+                                <CheckboxGroup id="race" values={form.race} onChange={(v) => setForm((f) => ({ ...f, race: v }))} options={RACES} />
+                            </Field>
+                            <Field id="communicationPreference" label="Communication preference" className="sm:col-span-2 lg:col-span-2">
+                                <CheckboxGroup id="communicationPreference" values={form.communicationPreference} onChange={(v) => setForm((f) => ({ ...f, communicationPreference: v }))} options={COMMUNICATION_PREFERENCES} />
+                            </Field>
+                            <label className="inline-flex h-10 items-center gap-1.5 self-end text-sm text-gray-800 dark:text-gray-200">
+                                <input type="checkbox" className="accent-primary" checked={form.interpreterNeeded} onChange={(e) => setForm((f) => ({ ...f, interpreterNeeded: e.target.checked }))} />
+                                Interpreter needed
+                            </label>
                         </div>
                     </Section>
 
@@ -898,6 +965,23 @@ export default function PatientRegistrationPage() {
                             <ContactBlock index={1} value={contacts[1]} onChange={(c) => setContacts([contacts[0], c])} errors={errors} />
                         </div>
                     </Section>
+
+                    {/* 10. Registration-time consent — new patients only; an existing patient's consent
+                         status and history live on the Consents tab. */}
+                    {!isEdit ? (
+                        <Section id="consent" title="Consent" subtitle="Optional here — can also be captured later from the Consents tab once there's an encounter.">
+                            <div className="flex flex-col gap-2">
+                                <label className="inline-flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200">
+                                    <input type="checkbox" className="accent-primary" checked={consentGeneralTreatment} onChange={(e) => setConsentGeneralTreatment(e.target.checked)} />
+                                    Patient (or guardian) consents to general treatment
+                                </label>
+                                <label className="inline-flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200">
+                                    <input type="checkbox" className="accent-primary" checked={consentHipaaNpp} onChange={(e) => setConsentHipaaNpp(e.target.checked)} />
+                                    Patient acknowledges receipt of the Notice of Privacy Practices
+                                </label>
+                            </div>
+                        </Section>
+                    ) : null}
 
                     {/* Sticky action bar */}
                     <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200/80 bg-white/95 px-4 py-3 backdrop-blur dark:border-white/10 dark:bg-[#141210]/95">

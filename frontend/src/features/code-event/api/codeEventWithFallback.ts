@@ -5,10 +5,11 @@ import {
     apiFetchCodeEventById,
     apiFetchCodeEventByPatient,
     apiGenerateCodeEventNote,
+    apiSaveCodeEventNote,
     apiUpdateCodeEventTeam,
     apiUpdateCodeEventTimeline,
 } from './codeEventApi';
-import { CODE_EVENT_API_TIMEOUT_MS, USE_CODE_EVENT_MOCK } from '../config/codeEventMock.config';
+import { USE_CODE_EVENT_MOCK } from '../config/codeEventMock.config';
 import {
     mockActivateCodeEvent,
     mockCloseCodeEvent,
@@ -17,6 +18,7 @@ import {
     mockFetchCodeEventByPatient,
     mockGenerateCodeEventNote,
     mockListOnShiftStaff,
+    mockSaveCodeEventNote,
     mockUpdateCodeEventTeam,
     mockUpdateCodeEventTimeline,
 } from '../../../mocks/codeEventMock';
@@ -31,125 +33,59 @@ import type {
 
 export type CodeEventDataSource = 'api' | 'mock';
 
-let lastSource: CodeEventDataSource = USE_CODE_EVENT_MOCK ? 'mock' : 'api';
 
+/** Pure switch: real API unless VITE_CODE_EVENT_MOCK=true. A code-blue timeline is never fabricated on error. */
 export function getLastCodeEventDataSource(): CodeEventDataSource {
-    return lastSource;
+    return USE_CODE_EVENT_MOCK ? 'mock' : 'api';
 }
 
-function setSource(source: CodeEventDataSource): void {
-    lastSource = source;
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-    return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('CODE_EVENT_API_TIMEOUT')), ms);
-        promise
-            .then((v) => {
-                clearTimeout(timer);
-                resolve(v);
-            })
-            .catch((e) => {
-                clearTimeout(timer);
-                reject(e);
-            });
-    });
-}
-
-async function callApi<T>(fn: () => Promise<T>): Promise<T> {
-    if (!USE_CODE_EVENT_MOCK) return fn();
-    return withTimeout(fn(), CODE_EVENT_API_TIMEOUT_MS);
-}
-
-async function withMockFallback<T>(apiFn: () => Promise<T>, mockFn: () => Promise<T>): Promise<T> {
-    if (!USE_CODE_EVENT_MOCK) {
-        const data = await apiFn();
-        setSource('api');
-        return data;
-    }
-    if (lastSource === 'mock') {
-        const data = await mockFn();
-        setSource('mock');
-        return data;
-    }
-    try {
-        const data = await callApi(apiFn);
-        setSource('api');
-        return data;
-    } catch {
-        const data = await mockFn();
-        setSource('mock');
-        return data;
-    }
+function pick<T>(apiFn: () => Promise<T>, mockFn: () => Promise<T>): Promise<T> {
+    return USE_CODE_EVENT_MOCK ? mockFn() : apiFn();
 }
 
 export async function activateCodeEvent(
     payload: ActivateCodeEventPayload,
     meta?: { patientName?: string; patientMrn?: string; unitId?: string }
 ): Promise<CodeEventRecord> {
-    return withMockFallback(
-        () => apiActivateCodeEvent(payload),
-        () => mockActivateCodeEvent(payload, meta)
-    );
+    return pick(() => apiActivateCodeEvent(payload), () => mockActivateCodeEvent(payload, meta));
 }
 
 export async function fetchActiveCodeEventsByUnit(unitId: string): Promise<CodeEventSummary[]> {
-    return withMockFallback(
-        () => apiFetchActiveCodeEventsByUnit(unitId),
-        () => mockFetchActiveCodeEventsByUnit(unitId)
-    );
+    return pick(() => apiFetchActiveCodeEventsByUnit(unitId), () => mockFetchActiveCodeEventsByUnit(unitId));
 }
 
 export async function fetchCodeEventByPatient(patientId: string): Promise<CodeEventRecord | null> {
-    return withMockFallback(
-        () => apiFetchCodeEventByPatient(patientId),
-        () => mockFetchCodeEventByPatient(patientId)
-    );
+    return pick(() => apiFetchCodeEventByPatient(patientId), () => mockFetchCodeEventByPatient(patientId));
 }
 
 export async function fetchCodeEventById(eventId: string): Promise<CodeEventRecord | null> {
-    if (!USE_CODE_EVENT_MOCK) return apiFetchCodeEventById(eventId);
-    if (lastSource === 'mock') return mockFetchCodeEventById(eventId);
-    try {
-        const data = await callApi(() => apiFetchCodeEventById(eventId));
-        setSource('api');
-        return data;
-    } catch {
-        return mockFetchCodeEventById(eventId);
-    }
+    return pick(() => apiFetchCodeEventById(eventId), () => mockFetchCodeEventById(eventId));
 }
 
 export async function updateCodeEventTimeline(
     eventId: string,
     payload: CodeEventTimelinePayload
 ): Promise<CodeEventRecord> {
-    return withMockFallback(
-        () => apiUpdateCodeEventTimeline(eventId, payload),
-        () => mockUpdateCodeEventTimeline(eventId, payload)
-    );
+    return pick(() => apiUpdateCodeEventTimeline(eventId, payload), () => mockUpdateCodeEventTimeline(eventId, payload));
 }
 
 export async function updateCodeEventTeam(eventId: string, payload: CodeEventTeamPayload): Promise<CodeEventRecord> {
-    return withMockFallback(
-        () => apiUpdateCodeEventTeam(eventId, payload),
-        () => mockUpdateCodeEventTeam(eventId, payload)
-    );
+    return pick(() => apiUpdateCodeEventTeam(eventId, payload), () => mockUpdateCodeEventTeam(eventId, payload));
 }
 
 export async function closeCodeEvent(eventId: string, payload: CloseCodeEventPayload): Promise<CodeEventRecord> {
-    return withMockFallback(
-        () => apiCloseCodeEvent(eventId, payload),
-        () => mockCloseCodeEvent(eventId, payload)
-    );
+    return pick(() => apiCloseCodeEvent(eventId, payload), () => mockCloseCodeEvent(eventId, payload));
 }
 
 export async function generateCodeEventNote(eventId: string): Promise<{ noteText: string }> {
-    return withMockFallback(
-        () => apiGenerateCodeEventNote(eventId),
-        () => mockGenerateCodeEventNote(eventId)
-    );
+    return pick(() => apiGenerateCodeEventNote(eventId), () => mockGenerateCodeEventNote(eventId));
 }
 
+export async function saveCodeEventNote(eventId: string): Promise<{ noteId: string; noteText: string }> {
+    return pick(() => apiSaveCodeEventNote(eventId), () => mockSaveCodeEventNote(eventId));
+}
+
+/** Team picker options. Still a static list: there is no on-shift staff endpoint for code events yet. */
 export async function listOnShiftStaffForCodeEvent(): Promise<{ id: string; name: string; role: string }[]> {
     return mockListOnShiftStaff();
 }

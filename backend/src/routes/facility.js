@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { query } from '../db/pool.js';
-import { conflict, h, notFound, ok, created, parse } from '../lib/http.js';
+import { badRequest, conflict, h, notFound, ok, created, parse } from '../lib/http.js';
 import { requireRole } from '../middleware/auth.js';
 import { enqueueEvs, iso, sweepExpiredReservations } from '../lib/bedManagement.js';
+import { recordAuditEvent } from '../lib/audit.js';
 
 export const facilityRouter = Router();
 const admin = requireRole(); // admin only
@@ -138,6 +139,8 @@ facilityRouter.put('/Beds/updateBedById', admin, h(async (req, res) => {
             id: z.string().optional(), _id: z.string().optional(), roomId: z.string().optional(),
             bedLabel: text(50).optional(), bedName: text(50).optional(),
             status: z.enum(['available', 'hold', 'maintenance', 'blocked', 'dirty']).optional(),
+            // SAF-20: required only when this override actually bypasses an open EVS inspection job.
+            overrideReason: z.string().trim().max(500).optional(),
         }),
         req.body,
     );
@@ -147,12 +150,33 @@ facilityRouter.put('/Beds/updateBedById', admin, h(async (req, res) => {
         const room = await query('SELECT 1 FROM rooms WHERE id = $1 AND tenant_id = $2', [b.roomId, req.user.tenantId]);
         if (!room.rowCount) throw notFound('Room not found');
     }
+    // SAF-20: forcing a bed to 'available' while an EVS job is still open skips the real inspection —
+    // require the admin to say why, and log it, instead of silently rubber-stamping it clean.
+    let bypassedEvsJob = null;
+    if (b.status === 'available') {
+        bypassedEvsJob = (await query(`SELECT id FROM evs_queue WHERE bed_id = $1 AND status <> 'clean'`, [id])).rows[0] ?? null;
+        if (bypassedEvsJob && !b.overrideReason) {
+            throw badRequest('overrideReason is required to mark this bed available while its housekeeping job is still open');
+        }
+    }
     const r = await query(
         `UPDATE beds SET room_id = COALESCE($1, room_id), label = COALESCE($2, label), status = COALESCE($3, status)
          WHERE id = $4 AND tenant_id = $5 AND (status <> 'occupied' OR $3::text IS NULL) RETURNING *`,
         [b.roomId ?? null, b.bedLabel ?? b.bedName ?? null, b.status ?? null, id, req.user.tenantId],
     );
     if (!r.rowCount) throw notFound('Bed not found (or its status cannot be changed while occupied)');
+    if (bypassedEvsJob) {
+        await recordAuditEvent({
+            tenantId: req.user.tenantId,
+            actorType: 'staff',
+            actorId: req.user.id,
+            actorRole: req.user.role,
+            action: 'update',
+            resource: 'bed',
+            resourceId: id,
+            details: { outcome: 'evs_inspection_bypassed', reason: b.overrideReason },
+        });
+    }
     if (b.status) {
         // A manual status override supersedes any timed hold on the bed (unless the override IS a hold).
         if (b.status !== 'hold') await query(`UPDATE bed_reservations SET status = 'cancelled', resolved_at = now() WHERE bed_id = $1 AND status = 'active'`, [id]);
@@ -223,7 +247,8 @@ facilityRouter.get('/Beds/getLiveBedBoard', h(async (req, res) => {
     ok(res, {
         rows: rowsOut,
         summary: {
-            totalBeds: rowsOut.length,
+            // BUG-14: the true facility bed count, not the bedStatus-filtered subset.
+            totalBeds: all.length,
             byStatus,
             withActiveEncounter: rowsOut.filter((x) => x.encounter).length,
             occupiedWithoutEncounter: rowsOut.filter((x) => x.bed.bedStatus === 'occupied' && !x.encounter).length,

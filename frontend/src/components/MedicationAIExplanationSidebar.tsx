@@ -45,7 +45,10 @@ const MedicationAIExplanationSidebar: React.FC<MedicationAIExplanationSidebarPro
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 bg-primary text-white shrink-0 border-b border-primary/20">
-          <h5 className="text-lg font-semibold">AI Medication Explanation</h5>
+          <div className="min-w-0">
+            <h5 className="text-lg font-semibold">AI Medication Explanation</h5>
+            <p className="text-xs text-white/80">AI-generated. Verify against the medical record before clinical use.</p>
+          </div>
           <button
             type="button"
             onClick={onClose}

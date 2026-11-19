@@ -2,13 +2,18 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { query, withTx } from '../db/pool.js';
 import { ApiError, badRequest, conflict, h, notFound, ok, created, parse } from '../lib/http.js';
-import { requireRole } from '../middleware/auth.js';
+import { requireRole, requireClinicalRole } from '../middleware/auth.js';
 import { medLineSchema, medLineOut } from '../lib/medLine.js';
 import * as erx from '../lib/erx.js';
 
 export const medicationRouter = Router();
 const nurseOrMd = requireRole('physician', 'nurse');
-const pharmacy = requireRole('pharmacist', 'physician');
+const medReaders = requireRole('physician', 'nurse', 'pharmacist');
+// SEC-17: signing/transmitting a prescription and dispensing via MAR are clinical attestations — an
+// admin account cannot do these on someone else's behalf, unlike every other requireRole() gate here.
+const prescriberSign = requireClinicalRole('physician');
+const prescriberTransmit = requireClinicalRole('physician', 'pharmacist');
+const dispensers = requireClinicalRole('pharmacist', 'physician');
 const iso = (d) => (d instanceof Date ? d.toISOString() : d ?? undefined);
 const ts = z.string().datetime({ offset: true }).or(z.string().datetime({ local: true }));
 
@@ -21,7 +26,7 @@ async function assertPatient(req, patientId) {
 const medOut = (m) => ({ id: m.id, _id: m.id, name: m.name, dose: m.dose ?? undefined, route: m.route ?? undefined, frequency: m.frequency ?? undefined, instructions: m.instructions ?? undefined, source: m.source ?? 'inpatient', encounterId: m.encounter_id ?? undefined, nextScheduledTime: iso(m.next_scheduled_time), createdAt: iso(m.created_at) });
 
 // ?source=inpatient (default — the MAR list) | home | all
-medicationRouter.get('/api/patients/:patientId/medications', h(async (req, res) => {
+medicationRouter.get('/api/patients/:patientId/medications', medReaders, h(async (req, res) => {
     const q = parse(z.object({ source: z.enum(['inpatient', 'home', 'all']).default('inpatient') }), req.query);
     const params = [req.user.tenantId, req.params.patientId];
     let where = 'tenant_id = $1 AND patient_id = $2 AND is_active';
@@ -64,7 +69,7 @@ const marOut = (m) => ({
 const listMar = async (req, patientId) =>
     (await query(`SELECT * FROM mar_entries WHERE tenant_id = $1 AND patient_id = $2 ORDER BY scheduled_time`, [req.user.tenantId, patientId])).rows.map(marOut);
 
-medicationRouter.get('/api/mar/:patientId', h(async (req, res) => ok(res, await listMar(req, req.params.patientId))));
+medicationRouter.get('/api/mar/:patientId', medReaders, h(async (req, res) => ok(res, await listMar(req, req.params.patientId))));
 
 medicationRouter.post('/api/mar', nurseOrMd, h(async (req, res) => {
     const b = parse(
@@ -115,7 +120,7 @@ const prnOut = (p) => ({
     createdAt: iso(p.created_at),
 });
 
-medicationRouter.get('/api/prn-stat/:patientId', h(async (req, res) => {
+medicationRouter.get('/api/prn-stat/:patientId', medReaders, h(async (req, res) => {
     const r = await query(`SELECT * FROM prn_stat_orders WHERE tenant_id = $1 AND patient_id = $2 ORDER BY created_at DESC`, [req.user.tenantId, req.params.patientId]);
     ok(res, r.rows.map(prnOut));
 }));
@@ -213,7 +218,7 @@ async function setRxStatus(db, req, rx, status, sets = '', params = []) {
 }
 
 // GET /api/prescriptions/:patientId?status=all|draft|signed|transmitted|printed|dispensed|cancelled  (default: open = not dispensed/cancelled)
-medicationRouter.get('/api/prescriptions/:patientId', h(async (req, res) => {
+medicationRouter.get('/api/prescriptions/:patientId', medReaders, h(async (req, res) => {
     const q = parse(z.object({ status: z.enum(['all', 'open', 'draft', 'signed', 'transmitted', 'printed', 'dispensed', 'cancelled', 'error']).default('open') }), req.query);
     const params = [req.user.tenantId, req.params.patientId];
     let where = 'rx.tenant_id = $1 AND rx.patient_id = $2';
@@ -223,7 +228,7 @@ medicationRouter.get('/api/prescriptions/:patientId', h(async (req, res) => {
     ok(res, r.rows.map(rxOut));
 }));
 
-medicationRouter.get('/api/prescriptions/by-id/:id', h(async (req, res) => {
+medicationRouter.get('/api/prescriptions/by-id/:id', medReaders, h(async (req, res) => {
     await loadRx({ query }, req, req.params.id);
     ok(res, await rxFull(req, req.params.id));
 }));
@@ -255,7 +260,7 @@ medicationRouter.post('/api/prescriptions', requireRole('physician'), h(async (r
 }));
 
 // POST /api/prescriptions/:id/sign — physician; copies NPI/DEA; controlled substances blocked until EPCS (Phase B)
-medicationRouter.post('/api/prescriptions/:id/sign', requireRole('physician'), h(async (req, res) => {
+medicationRouter.post('/api/prescriptions/:id/sign', prescriberSign, h(async (req, res) => {
     await withTx(async (db) => {
         const rx = await loadRx(db, req, req.params.id, true);
         if (rx.status !== 'draft') throw conflict(`Only draft prescriptions can be signed (status: ${rx.status})`);
@@ -271,7 +276,7 @@ medicationRouter.post('/api/prescriptions/:id/sign', requireRole('physician'), h
 }));
 
 // POST /api/prescriptions/:id/transmit — signed → transmitted via lib/erx.js (stub mode flips with a fake ref)
-medicationRouter.post('/api/prescriptions/:id/transmit', requireRole('physician', 'pharmacist'), h(async (req, res) => {
+medicationRouter.post('/api/prescriptions/:id/transmit', prescriberTransmit, h(async (req, res) => {
     const b = parse(z.object({ pharmacyId: z.string().optional().nullable() }), req.body ?? {});
     await withTx(async (db) => {
         const rx = await loadRx(db, req, req.params.id, true);
@@ -313,7 +318,7 @@ medicationRouter.post('/api/prescriptions/:id/cancel', requireRole('physician', 
     ok(res, await rxFull(req, req.params.id));
 }));
 
-medicationRouter.post('/api/dispense', pharmacy, h(async (req, res) => {
+medicationRouter.post('/api/dispense', dispensers, h(async (req, res) => {
     const b = parse(
         z.object({
             prescriptionId: z.string().min(1),
@@ -421,7 +426,7 @@ const dischargeBody = z.object({
     counsellingDone: z.boolean(),
 });
 
-medicationRouter.get('/api/discharge/:patientId', h(async (req, res) => {
+medicationRouter.get('/api/discharge/:patientId', medReaders, h(async (req, res) => {
     const r = await query(`SELECT * FROM discharge_medications WHERE tenant_id = $1 AND patient_id = $2 AND encounter_id IS NULL`, [req.user.tenantId, req.params.patientId]);
     ok(res, dischargeOut(r.rows[0], { patientId: req.params.patientId }));
 }));
@@ -440,7 +445,7 @@ medicationRouter.post('/api/discharge', nurseOrMd, h(async (req, res) => {
     ok(res, dischargeOut(r.rows[0]));
 }));
 
-medicationRouter.get('/api/discharges/:encounterId/medications', h(async (req, res) => {
+medicationRouter.get('/api/discharges/:encounterId/medications', medReaders, h(async (req, res) => {
     const r = await query(`SELECT * FROM discharge_medications WHERE tenant_id = $1 AND encounter_id = $2`, [req.user.tenantId, req.params.encounterId]);
     if (r.rowCount) return ok(res, dischargeOut(r.rows[0]));
     const enc = await query('SELECT patient_id FROM encounters WHERE id = $1 AND tenant_id = $2', [req.params.encounterId, req.user.tenantId]);

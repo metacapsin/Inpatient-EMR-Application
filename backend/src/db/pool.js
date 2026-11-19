@@ -6,7 +6,7 @@ pg.types.setTypeParser(1082, (v) => v);
 // NUMERIC -> number (volumes/costs are small, precision loss is not a concern here).
 pg.types.setTypeParser(1700, (v) => (v === null ? null : Number(v)));
 
-export const pool = new pg.Pool({ connectionString: config.databaseUrl, max: 10 });
+export const pool = new pg.Pool({ connectionString: config.databaseUrl, max: 10, ssl: config.databaseSsl });
 
 export const query = (text, params) => pool.query(text, params);
 

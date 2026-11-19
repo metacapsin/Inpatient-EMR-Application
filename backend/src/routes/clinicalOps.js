@@ -2,12 +2,16 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { query, withTx } from '../db/pool.js';
 import { badRequest, conflict, h, notFound, ok, created, parse } from '../lib/http.js';
-import { requireRole } from '../middleware/auth.js';
+import { requireRole, requireClinicalRole } from '../middleware/auth.js';
+import { resolveCriticalNotifyTargets } from '../lib/criticalNotify.js';
 
 // Radiology orders (/api/Radiology/*) and code events (/api/CodeEvent/*).
 export const clinicalOpsRouter = Router();
 const orderer = requireRole('physician');
 const clinical = requireRole('physician', 'nurse');
+// SEC-17: flagging/clearing a critical radiology value is a clinical attestation, same bucket as
+// acknowledging a critical lab result — an admin account cannot do this on someone else's behalf.
+const criticalFlaggers = requireClinicalRole('physician', 'nurse');
 
 const ts = (v) => (v ? v.toISOString() : undefined);
 const optText = (max = 500) => z.string().trim().max(max).optional().nullable();
@@ -36,6 +40,8 @@ const radOut = (o) => ({
     icd10Codes: o.icd10_codes,
     priority: o.priority,
     specialInstructions: o.special_instructions ?? undefined,
+    pregnancyStatus: o.pregnancy_status ?? undefined,
+    contrastAllergy: o.contrast_allergy ?? undefined,
     transportRequired: o.transport_required,
     scheduledFor: ts(o.scheduled_for) ?? null,
     orderedBy: o.ordered_by ?? '',
@@ -77,6 +83,10 @@ clinicalOpsRouter.post('/api/Radiology/order', orderer, h(async (req, res) => {
             icd10Codes: z.array(z.string().trim().min(1).max(12)).max(20).default([]),
             priority: z.enum(['Routine', 'Urgent', 'STAT']).default('Routine'),
             specialInstructions: optText(1000),
+            // Imaging safety: structured fields instead of flattened into specialInstructions — the
+            // UI already collects pregnancy status as a dropdown, it just never reached a real column.
+            pregnancyStatus: z.enum(['Not applicable', 'Unknown', 'No', 'Yes']).optional().nullable(),
+            contrastAllergy: z.enum(['none', 'unknown', 'confirmed']).optional().nullable(),
             transportRequired: z.boolean().default(false),
             scheduledFor: isoTs.optional().nullable(),
         }),
@@ -85,10 +95,10 @@ clinicalOpsRouter.post('/api/Radiology/order', orderer, h(async (req, res) => {
     await assertEncounter(req, b.encounterId, b.patientId);
     const r = await query(
         `INSERT INTO radiology_orders (tenant_id, patient_id, encounter_id, modality, body_region, laterality, contrast, clinical_indication, icd10_codes,
-                                       priority, special_instructions, transport_required, scheduled_for, ordered_by, ordered_by_name)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+                                       priority, special_instructions, pregnancy_status, contrast_allergy, transport_required, scheduled_for, ordered_by, ordered_by_name)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
         [req.user.tenantId, b.patientId, b.encounterId, b.modality, b.bodyRegion, b.laterality || null, b.contrast || null, b.clinicalIndication, JSON.stringify(b.icd10Codes),
-         b.priority, b.specialInstructions || null, b.transportRequired, b.scheduledFor ?? null, req.user.id, req.user.name || req.user.email],
+         b.priority, b.specialInstructions || null, b.pregnancyStatus || null, b.contrastAllergy || null, b.transportRequired, b.scheduledFor ?? null, req.user.id, req.user.name || req.user.email],
     );
     created(res, radOut(r.rows[0]));
 }));
@@ -150,6 +160,9 @@ clinicalOpsRouter.put('/api/Radiology/order/:orderId/result', orderer, h(async (
             [b.impression ?? null, b.findings ?? null, b.radiologistName || req.user.name || null, b.radiologistId || req.user.id, b.performedAt ?? null, b.dicomStudyUid ?? null,
              b.dicomViewerUrl ?? null, b.resultedAt ?? null, amending ? 'Amended' : 'Final', b.amendmentReason ?? null, o.id],
         );
+        // SAF-19: a Final/Amended radiology result never closed its CPOE ledger row, leaving the
+        // order dashboard showing it as perpetually active.
+        await db.query(`UPDATE orders SET status = 'completed' WHERE ref_table = 'radiology_orders' AND ref_id = $1`, [o.id]);
         return r.rows[0];
     });
     ok(res, radOut(out));
@@ -159,18 +172,21 @@ clinicalOpsRouter.put('/api/Radiology/order/:orderId/cancel', orderer, h(async (
     const out = await withTx(async (db) => {
         const o = await loadRad(req, req.params.orderId, db);
         if (CLOSED.includes(o.status)) throw conflict(`Order is already ${o.status}`);
-        return (await db.query(`UPDATE radiology_orders SET status = 'Cancelled', amendment_reason = 'Order cancelled' WHERE id = $1 RETURNING *`, [o.id])).rows[0];
+        const r = (await db.query(`UPDATE radiology_orders SET status = 'Cancelled', amendment_reason = 'Order cancelled' WHERE id = $1 RETURNING *`, [o.id])).rows[0];
+        // SAF-19: same ledger-closure gap as the result route above.
+        await db.query(`UPDATE orders SET status = 'cancelled' WHERE ref_table = 'radiology_orders' AND ref_id = $1`, [o.id]);
+        return r;
     });
     ok(res, radOut(out));
 }));
 
-clinicalOpsRouter.put('/api/Radiology/order/:orderId/critical', clinical, h(async (req, res) => {
+clinicalOpsRouter.put('/api/Radiology/order/:orderId/critical', criticalFlaggers, h(async (req, res) => {
     const b = parse(z.object({ criticalValue: z.boolean(), criticalValueNotifiedTo: optText(200) }), req.body);
     if (b.criticalValue && !b.criticalValueNotifiedTo) throw badRequest('criticalValueNotifiedTo is required when flagging a critical value');
     const out = await withTx(async (db) => {
         const o = await loadRad(req, req.params.orderId, db);
         if (o.status === 'Cancelled') throw conflict('Order is cancelled');
-        return (
+        const r = (
             await db.query(
                 `UPDATE radiology_orders SET critical_value = $1, critical_value_notified_to = $2, critical_value_notified_at = CASE WHEN $1 THEN now() ELSE NULL END,
                         status = CASE WHEN status = 'Ordered' THEN 'Preliminary' ELSE status END
@@ -178,6 +194,37 @@ clinicalOpsRouter.put('/api/Radiology/order/:orderId/critical', clinical, h(asyn
                 [b.criticalValue, b.criticalValue ? b.criticalValueNotifiedTo : null, o.id],
             )
         ).rows[0];
+        // SAF-06: imaging criticals previously only recorded a free-text "who was told" string with
+        // no actual in-app notification created — nothing showed up for anyone in the system. Now it
+        // creates a real notification, routed the same way as a critical lab result.
+        if (b.criticalValue) {
+            const encounter = (await db.query('SELECT attending_physician_id FROM encounters WHERE id = $1', [o.encounter_id])).rows[0];
+            const targets = await resolveCriticalNotifyTargets({
+                tenantId: req.user.tenantId,
+                patientId: o.patient_id,
+                orderingUserId: o.ordered_by,
+                attendingUserId: encounter?.attending_physician_id ?? null,
+            });
+            const p = (await db.query('SELECT first_name, last_name, mrn FROM patients WHERE id = $1', [o.patient_id])).rows[0];
+            const who = p ? `${p.first_name} ${p.last_name} (${p.mrn})` : 'Patient';
+            const msg = `CRITICAL imaging finding — ${o.modality} ${o.body_region} for ${who} — acknowledgement required`;
+            const metadata = JSON.stringify({ radiologyOrderId: o.id, patientId: o.patient_id });
+            if (targets) {
+                for (const userId of targets) {
+                    await db.query(
+                        `INSERT INTO notifications (tenant_id, user_id, type, action, message, metadata, created_by) VALUES ($1,$2,'radiology','critical_result',$3,$4::jsonb,$5)`,
+                        [req.user.tenantId, userId, msg, metadata, req.user.id],
+                    );
+                }
+            } else {
+                await db.query(
+                    `INSERT INTO notifications (tenant_id, user_id, type, action, message, metadata, created_by)
+                     SELECT $1, id, 'radiology', 'critical_result', $2, $3::jsonb, $4 FROM users WHERE tenant_id = $1 AND is_active AND role IN ('physician','nurse')`,
+                    [req.user.tenantId, msg, metadata, req.user.id],
+                );
+            }
+        }
+        return r;
     });
     ok(res, radOut(out));
 }));
@@ -258,10 +305,12 @@ clinicalOpsRouter.post('/api/CodeEvent/activate', clinical, h(async (req, res) =
     created(res, ceOut(await loadCe({ query }, req, id)));
 }));
 
-// `all` (and the frontend's default placeholder `unit-1`) means every unit of the tenant.
+// `all` means every unit of the tenant. (SAF-26: used to also special-case the literal string
+// 'unit-1' — a frontend placeholder default, not a real unit id — removed now that the frontend
+// sends 'all' directly instead of that magic value.)
 clinicalOpsRouter.get('/api/CodeEvent/active/:unitId', h(async (req, res) => {
     const u = req.params.unitId;
-    const all = u === 'all' || u === 'unit-1';
+    const all = u === 'all';
     const r = await query(`${CE_SELECT} WHERE ce.tenant_id = $1 AND ce.status = 'active' ${all ? '' : 'AND ce.unit_id = $2'} ORDER BY ce.called_at DESC`, all ? [req.user.tenantId] : [req.user.tenantId, u]);
     ok(res, r.rows.map(ceOut).map(({ id, patientId, patientName, patientMrn, eventType, location, status, calledAt, teamLeadName }) => ({ id, patientId, patientName, patientMrn, eventType, location, status, calledAt, teamLeadName })));
 }));
@@ -350,8 +399,7 @@ clinicalOpsRouter.put('/api/CodeEvent/:id/close', clinical, h(async (req, res) =
     ok(res, ceOut(out));
 }));
 
-clinicalOpsRouter.get('/api/CodeEvent/:id/generate-note', h(async (req, res) => {
-    const e = ceOut(await loadCe({ query }, req, req.params.id));
+function buildCodeEventNoteText(e) {
     const lines = [
         `CODE EVENT DOCUMENTATION — ${e.eventType}`,
         `Patient: ${e.patientName} · MRN ${e.patientMrn ?? '—'}`,
@@ -370,5 +418,29 @@ clinicalOpsRouter.get('/api/CodeEvent/:id/generate-note', h(async (req, res) => 
             : 'Event still active.',
         e.debriefNotes ? `\nDebrief:\n${e.debriefNotes}` : '',
     ];
-    ok(res, { noteText: lines.join('\n').replace(/\n{3,}/g, '\n\n') });
+    return lines.join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
+// Preview only — a GET must not have a side effect. Use POST .../save-note to actually persist it.
+clinicalOpsRouter.get('/api/CodeEvent/:id/generate-note', h(async (req, res) => {
+    const e = ceOut(await loadCe({ query }, req, req.params.id));
+    ok(res, { noteText: buildCodeEventNoteText(e) });
+}));
+
+// SAF-26: this used to be the only way to get the generated text, and it was never saved anywhere —
+// the real clinical_notes persistence path existed (clinicalNotes.js) and was simply never called
+// from here. Creates a real, signable 'code_event' note instead of a one-off string the UI discarded
+// the moment the page was closed.
+clinicalOpsRouter.post('/api/CodeEvent/:id/save-note', clinical, h(async (req, res) => {
+    const e = ceOut(await loadCe({ query }, req, req.params.id));
+    if (!e.encounterId) throw badRequest('Code event has no encounter to file the note against');
+    const noteText = buildCodeEventNoteText(e);
+    const title = `Code event — ${e.eventType} (${new Date(e.calledAt).toISOString().slice(0, 10)})`;
+    const version = [{ version: 1, content: { note: noteText }, richText: noteText, title, checksum: null, editedBy: req.user.id, editedAt: new Date().toISOString() }];
+    const r = await query(
+        `INSERT INTO clinical_notes (tenant_id, patient_id, encounter_id, note_type, title, content, rich_text, version_history, linked_order_ids, created_by)
+         VALUES ($1,$2,$3,'code_event',$4,$5,$6,$7,'[]'::jsonb,$8) RETURNING id`,
+        [req.user.tenantId, e.patientId, e.encounterId, title, JSON.stringify({ note: noteText }), noteText, JSON.stringify(version), req.user.id],
+    );
+    created(res, { noteId: r.rows[0].id, noteText });
 }));

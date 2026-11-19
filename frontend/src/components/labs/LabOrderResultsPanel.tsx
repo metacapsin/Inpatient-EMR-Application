@@ -12,6 +12,7 @@ import {
     type LabResultInput,
     type LabResultRow,
 } from '../../services/labs.service';
+import { ReadBackAcknowledgeDialog } from './ReadBackAcknowledgeDialog';
 
 type Props = {
     orderId: string;
@@ -43,6 +44,8 @@ export function LabOrderResultsPanel({ orderId, orderStatus, labTests, accession
     const [entering, setEntering] = useState(false);
     const [busy, setBusy] = useState(false);
     const [draft, setDraft] = useState<LabResultInput[]>([]);
+    const [ackTarget, setAckTarget] = useState<LabResultRow | null>(null);
+    const [ackBusy, setAckBusy] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -88,10 +91,14 @@ export function LabOrderResultsPanel({ orderId, orderStatus, labTests, accession
         await onChanged();
     }
 
-    async function ack(row: LabResultRow) {
-        const r = await acknowledgeResult(row.id);
+    async function ack(readBackValue: string) {
+        if (!ackTarget) return;
+        setAckBusy(true);
+        const r = await acknowledgeResult(ackTarget.id, readBackValue);
+        setAckBusy(false);
         if (!r.ok) return toast.error(r.message);
-        toast.success(`${row.testName} acknowledged`);
+        toast.success(`${ackTarget.testName} acknowledged`);
+        setAckTarget(null);
         await load();
         await onChanged();
     }
@@ -173,7 +180,7 @@ export function LabOrderResultsPanel({ orderId, orderStatus, labTests, accession
                                     <td className="px-1 py-1.5">
                                         {r.isCritical ? (
                                             r.acknowledgedAt ? <span className="text-emerald-700" title={r.acknowledgedAt}><FaCheck className="inline h-3 w-3" /> {r.acknowledgedByName ?? 'acknowledged'}</span>
-                                            : canAcknowledge ? <button type="button" className="btn btn-sm btn-danger py-0.5" onClick={() => void ack(r)}>Acknowledge</button>
+                                            : canAcknowledge ? <button type="button" className="btn btn-sm btn-danger py-0.5" onClick={() => setAckTarget(r)}>Acknowledge</button>
                                             : <span className="text-red-700">unacknowledged</span>
                                         ) : '—'}
                                     </td>
@@ -183,6 +190,14 @@ export function LabOrderResultsPanel({ orderId, orderStatus, labTests, accession
                     </table>
                 </div>
             )}
+            <ReadBackAcknowledgeDialog
+                open={Boolean(ackTarget)}
+                testName={ackTarget?.testName ?? ''}
+                value={ackTarget ? `${ackTarget.value} ${ackTarget.unit ?? ''}`.trim() : ''}
+                busy={ackBusy}
+                onCancel={() => setAckTarget(null)}
+                onConfirm={(readBackValue) => void ack(readBackValue)}
+            />
         </div>
     );
 }

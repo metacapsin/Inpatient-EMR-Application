@@ -7,10 +7,15 @@ import { boss, QUEUES } from '../db/queue.js';
 import { deliverAdt } from '../lib/adtTransport.js';
 import { buildAdtMessage } from '../lib/hl7Adt.js';
 import { processAdtNotificationJob } from '../lib/adtNotify.js';
+import { encryptSecret } from '../lib/crypto.js';
 
 /** Recipient directory (admin) + delivery log / retry for CMS CoP ADT notifications (#65). */
 export const adtNotificationsRouter = Router();
 const admin = requireRole();
+// SEC-05: admin passes any requireRole() call already, so this just adds 'staff' alongside it —
+// matching the original finding's "admin/staff gate on ADT log" (the recipient directory gets the
+// same gate for consistency, since it's the same sensitivity of operational/PHI-adjacent data).
+const adminOrStaff = requireRole('staff');
 const iso = (d) => (d instanceof Date ? d.toISOString() : d ?? null);
 
 const recipientOut = (r) => ({
@@ -26,8 +31,12 @@ const recipientFields = {
     enabled: z.boolean().optional(),
 };
 const refineEndpoint = (b, ctx) => {
-    if (b.transport === 'https_webhook' && !/^https?:\/\//.test(b.endpoint ?? '')) ctx.addIssue({ code: 'custom', path: ['endpoint'], message: 'Webhook transport needs an http(s) URL' });
-    if (b.transport === 'mllp' && !/^(mllp:\/\/)?[^:/\s]+:\d+$/.test(b.endpoint ?? '')) ctx.addIssue({ code: 'custom', path: ['endpoint'], message: 'MLLP transport needs host:port' });
+    // SEC-12: https-only — this transport carries HL7 ADT messages (patient name, MRN, diagnosis) in
+    // the request body, so plain http:// would send PHI in cleartext.
+    if (b.transport === 'https_webhook' && !/^https:\/\//.test(b.endpoint ?? '')) ctx.addIssue({ code: 'custom', path: ['endpoint'], message: 'Webhook transport needs an https:// URL' });
+    // mllps:// (TLS) is the encrypted option; plain mllp:// still parses here but is rejected at
+    // send time in adtTransport.js unless ALLOW_PLAINTEXT_MLLP=true (SEC-12).
+    if (b.transport === 'mllp' && !/^(mllps?:\/\/)?[^:/\s]+:\d+$/.test(b.endpoint ?? '')) ctx.addIssue({ code: 'custom', path: ['endpoint'], message: 'MLLP transport needs host:port (optionally mllps://host:port for TLS)' });
     if (b.transport === 'email' && !/^[^@\s]+@[^@\s]+$/.test(b.endpoint ?? '')) ctx.addIssue({ code: 'custom', path: ['endpoint'], message: 'Email transport needs an email address' });
 };
 // Zod v4: .partial() cannot be used on schemas with refinements — keep create vs patch separate.
@@ -43,28 +52,33 @@ const recipientPatch = z.object({
     if (b.transport !== undefined) refineEndpoint(b, ctx);
 });
 
-adtNotificationsRouter.get('/api/notification-recipients', h(async (req, res) => {
+adtNotificationsRouter.get('/api/notification-recipients', adminOrStaff, h(async (req, res) => {
     const r = await query('SELECT * FROM notification_recipients WHERE tenant_id = $1 ORDER BY kind, name', [req.user.tenantId]);
     ok(res, r.rows.map(recipientOut));
 }));
 
 adtNotificationsRouter.post('/api/notification-recipients', admin, h(async (req, res) => {
     const b = parse(recipientBody, req.body);
+    // SEC-12: encrypted at rest — see lib/crypto.js and deliverAdt()'s decryption at send time.
+    const secret = b.authHeaderSecret ? encryptSecret(b.authHeaderSecret) : null;
     const r = await query(
         `INSERT INTO notification_recipients (tenant_id, name, kind, transport, endpoint, auth_header_secret, enabled) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [req.user.tenantId, b.name, b.kind, b.transport, b.endpoint ?? null, b.authHeaderSecret || null, b.enabled ?? true],
+        [req.user.tenantId, b.name, b.kind, b.transport, b.endpoint ?? null, secret, b.enabled ?? true],
     );
     created(res, recipientOut(r.rows[0]));
 }));
 
 adtNotificationsRouter.put('/api/notification-recipients/:id', admin, h(async (req, res) => {
     const b = parse(recipientPatch, req.body);
+    // authHeaderSecret: undefined/null = leave unchanged, '' = clear it, a real value = re-encrypt it
+    // (SEC-12) — encrypting here, ahead of the CASE, keeps that three-way semantic intact.
+    const secretParam = b.authHeaderSecret ? encryptSecret(b.authHeaderSecret) : (b.authHeaderSecret ?? null);
     const r = await query(
         `UPDATE notification_recipients SET name = COALESCE($1, name), kind = COALESCE($2, kind), transport = COALESCE($3, transport),
                 endpoint = COALESCE($4, endpoint), auth_header_secret = CASE WHEN $5::text IS NULL THEN auth_header_secret WHEN $5 = '' THEN NULL ELSE $5 END,
                 enabled = COALESCE($6, enabled), updated_at = now()
          WHERE id = $7 AND tenant_id = $8 RETURNING *`,
-        [b.name ?? null, b.kind ?? null, b.transport ?? null, b.endpoint ?? null, b.authHeaderSecret ?? null, b.enabled ?? null, req.params.id, req.user.tenantId],
+        [b.name ?? null, b.kind ?? null, b.transport ?? null, b.endpoint ?? null, secretParam, b.enabled ?? null, req.params.id, req.user.tenantId],
     );
     if (!r.rowCount) throw notFound('Recipient not found');
     ok(res, recipientOut(r.rows[0]));
@@ -101,7 +115,7 @@ const logOut = (l) => ({
 });
 
 // GET /api/adt-notifications?encounterId=&patientId=&status=&limit=
-adtNotificationsRouter.get('/api/adt-notifications', h(async (req, res) => {
+adtNotificationsRouter.get('/api/adt-notifications', adminOrStaff, h(async (req, res) => {
     const q = parse(z.object({ encounterId: z.string().optional(), patientId: z.string().optional(), status: z.enum(['queued', 'sent', 'failed']).optional(), limit: z.coerce.number().int().min(1).max(500).default(100) }), req.query);
     const params = [req.user.tenantId];
     let where = 'l.tenant_id = $1';

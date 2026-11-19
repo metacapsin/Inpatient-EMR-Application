@@ -37,7 +37,8 @@ function consentOut(c) {
 const nullableStr = (n = 500) => z.string().max(n).nullable().optional();
 const consentBody = z.object({
     patientId: z.string().min(1),
-    encounterId: z.string().min(1),
+    // Registration-time consent (e.g. HIPAA NPP, General Treatment) has no encounter yet — omit it.
+    encounterId: z.string().min(1).optional().nullable(),
     consentType: z.enum(CONSENT_TYPES),
     procedureName: nullableStr(300),
     templateVersion: z.string().max(50).default('v1'),
@@ -74,15 +75,21 @@ async function encounterBelongs(req, encounterId, patientId) {
     if (r.rows[0].patient_id !== patientId) throw badRequest('patientId does not match the encounter');
 }
 
+async function assertPatient(req, patientId) {
+    const r = await query('SELECT 1 FROM patients WHERE id = $1 AND tenant_id = $2', [patientId, req.user.tenantId]);
+    if (!r.rowCount) throw notFound('Patient not found');
+}
+
 consentRouter.post('/api/Consent/create', clinical, h(async (req, res) => {
     const b = parse(consentBody, req.body);
-    await encounterBelongs(req, b.encounterId, b.patientId);
+    if (b.encounterId) await encounterBelongs(req, b.encounterId, b.patientId);
+    else await assertPatient(req, b.patientId);
     if (b.status === 'Signed' && !b.signedAt) b.signedAt = new Date().toISOString();
     const data = Object.fromEntries(Object.entries(b).filter(([k]) => !COLUMN_KEYS.includes(k)));
     const r = await query(
         `INSERT INTO consents (tenant_id, patient_id, encounter_id, consent_type, status, signed_at, expiry_date, revoked_at, revoked_reason, data)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-        [req.user.tenantId, b.patientId, b.encounterId, b.consentType, b.status, b.signedAt || null, b.expiryDate || null, b.revokedAt || null, b.revokedReason || null, JSON.stringify(data)],
+        [req.user.tenantId, b.patientId, b.encounterId || null, b.consentType, b.status, b.signedAt || null, b.expiryDate || null, b.revokedAt || null, b.revokedReason || null, JSON.stringify(data)],
     );
     res.status(201).json(consentOut(r.rows[0]));
 }));
@@ -100,6 +107,13 @@ consentRouter.get('/api/Consent/completeness/:encounterId', h(async (req, res) =
 
 consentRouter.get('/api/Consent/encounter/:encounterId', h(async (req, res) => {
     const r = await query(`SELECT * FROM consents WHERE tenant_id = $1 AND encounter_id = $2 ORDER BY created_at DESC`, [req.user.tenantId, req.params.encounterId]);
+    ok(res, r.rows.map(consentOut));
+}));
+
+// All of a patient's consents regardless of encounter — the only way to see a registration-time
+// consent (encounter_id IS NULL), since /encounter/:encounterId can't surface those.
+consentRouter.get('/api/Consent/patient/:patientId', h(async (req, res) => {
+    const r = await query(`SELECT * FROM consents WHERE tenant_id = $1 AND patient_id = $2 ORDER BY created_at DESC`, [req.user.tenantId, req.params.patientId]);
     ok(res, r.rows.map(consentOut));
 }));
 

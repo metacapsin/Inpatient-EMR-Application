@@ -175,6 +175,7 @@ export function ImagingOrdersTable({
                                 <th className={TH_CLASS}>Priority</th>
                                 <th className={TH_CLASS}>Status</th>
                                 <th className={TH_CLASS}>Radiologist</th>
+                                <th className={TH_CLASS}>Contrast Allergy</th>
                                 <th className={TH_CLASS}>Critical</th>
                                 <th className={TH_CLASS}>Actions</th>
                             </tr>
@@ -182,13 +183,13 @@ export function ImagingOrdersTable({
                         <tbody>
                             {loading ? (
                                 <tr>
-                                    <td colSpan={8} className="px-3 py-8 text-center text-xs text-gray-500">
+                                    <td colSpan={9} className="px-3 py-8 text-center text-xs text-gray-500">
                                         <Loader2 className="mx-auto h-6 w-6 animate-spin" aria-hidden />
                                     </td>
                                 </tr>
                             ) : pageRows.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="px-3 py-6 text-center text-xs text-gray-500">
+                                    <td colSpan={9} className="px-3 py-6 text-center text-xs text-gray-500">
                                         No imaging orders for this encounter.
                                     </td>
                                 </tr>
@@ -209,6 +210,19 @@ export function ImagingOrdersTable({
                                                 <RadiologyStatusBadge status={status} />
                                             </td>
                                             <td className={TD_CLASS}>{order.radiologistName?.trim() || '—'}</td>
+                                            <td className={TD_CLASS}>
+                                                {order.contrastAllergy === 'confirmed' ? (
+                                                    <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase text-red-800 dark:bg-red-950/50 dark:text-red-200">
+                                                        Confirmed
+                                                    </span>
+                                                ) : order.contrastAllergy === 'unknown' ? (
+                                                    <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                                                        Unknown
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-gray-400">—</span>
+                                                )}
+                                            </td>
                                             <td className={TD_CLASS}>
                                                 {order.criticalValue ? (
                                                     <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase text-red-800 dark:bg-red-950/50 dark:text-red-200">

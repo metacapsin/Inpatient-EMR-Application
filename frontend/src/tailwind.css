@@ -252,6 +252,22 @@
         @apply lg:w-[calc(100%-200px)] lg:ltr:ml-[200px] lg:rtl:mr-[200px];
     }
 
+    /*
+     * Facesheet chart drawer is 260px wide (the main sidebar is 200px). The layout rules above
+     * (`.horizontal .sidebar`, `.vertical .sidebar`, `.collapsible-vertical .sidebar`) would otherwise
+     * win on specificity and park it at -200px, leaving a 60px strip over the chart on small screens.
+     */
+    .horizontal .sidebar.facesheet-chart-nav,
+    .vertical .sidebar.facesheet-chart-nav,
+    .collapsible-vertical .sidebar.facesheet-chart-nav {
+        @apply w-[260px] ltr:-left-[260px] rtl:-right-[260px] lg:hidden;
+    }
+    .horizontal.toggle-sidebar .sidebar.facesheet-chart-nav,
+    .vertical.toggle-sidebar .sidebar.facesheet-chart-nav,
+    .collapsible-vertical.toggle-sidebar .sidebar.facesheet-chart-nav {
+        @apply w-[260px] ltr:left-0 rtl:right-0;
+    }
+
     .collapsible-vertical .sidebar .sub-menu {
         @apply lg:hidden;
     }

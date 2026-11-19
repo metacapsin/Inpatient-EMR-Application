@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { DialogShell } from '../../components/shared/DialogShell';
 import { toast } from 'react-hot-toast';
-import { patientDataAPI, aiHealthInsightsAPI } from '../../services/api';
+import { patientDataAPI } from '../../services/api';
+import { ModuleErrorState } from '../../components/facesheet/ModuleErrorState';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
 import { FaEye, FaDownload,FaTimes  } from 'react-icons/fa';
-import { FaWandMagicSparkles } from 'react-icons/fa6';
 import IconSearch from '../../components/Icon/IconSearch';
 
 interface DocumentRecord {
@@ -27,15 +28,13 @@ const Documents: React.FC = () => {
   const [paginatedCardList, setPaginatedCardList] = useState<DocumentRecord[]>([]);
   const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage] = useState(2);
   const [previewDocument, setPreviewDocument] = useState<DocumentRecord | null>(null);
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewIsImage, setPreviewIsImage] = useState(true);
-  const [aiExplanation, setAiExplanation] = useState<string | null>(null);
-  const [aiLoadingId, setAiLoadingId] = useState<string | null>(null);
-  const [showAiModal, setShowAiModal] = useState(false);
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [selectedNotes, setSelectedNotes] = useState<string>('');
 
@@ -56,6 +55,7 @@ const Documents: React.FC = () => {
     }
 
     setLoading(true);
+    setLoadError(null);
     try {
       const response = await patientDataAPI.getAllDocument(patientId);
       if (response.data?.data || Array.isArray(response.data)) {
@@ -119,7 +119,7 @@ const Documents: React.FC = () => {
         updatePaginatedList(formattedData, 1);
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to fetch documents');
+      setLoadError(error.response?.data?.message || 'Failed to fetch documents');
     } finally {
       setLoading(false);
     }
@@ -217,19 +217,6 @@ const Documents: React.FC = () => {
     setPreviewBlobUrl(null);
   };
 
-  const handleAiExplain = async (documentId: string) => {
-    setAiLoadingId(documentId);
-    try {
-      const response = await aiHealthInsightsAPI.explainPatientDocument(documentId);
-      const explanation = response.data?.data?.explanations?.[0]?.plainLanguageExplanation || 'No explanation available';
-      setAiExplanation(explanation);
-      setShowAiModal(true);
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to get AI explanation');
-    } finally {
-      setAiLoadingId(null);
-    }
-  };
 
   const openNotesModal = (notes: string) => {
     setSelectedNotes(notes);
@@ -264,7 +251,7 @@ const Documents: React.FC = () => {
         <input
           type="text"
           className="form-input pl-10 w-full"
-          placeholder="Search here"
+          aria-label="Search documents" placeholder="Search here"
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
         />
@@ -281,7 +268,9 @@ const Documents: React.FC = () => {
         {/* Card View */}
         <div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {loading ? (
+            {loadError ? (
+              <ModuleErrorState message={loadError} onRetry={() => void getPatientDocuments()} retrying={loading} />
+            ) : loading ? (
               <div className="col-span-full text-center py-4">Loading...</div>
             ) : filteredCardList.length === 0 ? (
               <div className="col-span-full text-center mt-2">
@@ -297,19 +286,6 @@ const Documents: React.FC = () => {
                       {document.documentName || 'Document Record'}
                     </h5>
                     <div className="flex gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleAiExplain(document._id)}
-                        className="btn btn-sm btn-outline-info p-2"
-                        disabled={aiLoadingId === document._id}
-                        aria-label="AI Explain"
-                      >
-                        {aiLoadingId === document._id ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-info border-t-transparent" />
-                        ) : (
-                          <FaWandMagicSparkles  className="w-4 h-4" />
-                        )}
-                      </button>
                       {document.fileURL && (
                         <button
                           type="button"
@@ -393,18 +369,16 @@ const Documents: React.FC = () => {
         </div>
 
       {/* Preview modal */}
-      {previewDocument && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
-          onClick={closePreview}
-        >
-          <div
-            className="bg-primary text-white rounded-lg shadow-xl max-w-5xl w-full flex flex-col"
-            style={{ maxHeight: '92vh' }}
-            onClick={(e) => e.stopPropagation()}
-          >
+      <DialogShell
+        open={Boolean(previewDocument)}
+        onClose={closePreview}
+        title={previewDocument?.documentName || 'Document preview'}
+        panelClassName="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-lg bg-primary text-white shadow-xl"
+      >
+        {({ titleId }) => previewDocument && (
+          <>
             <div className="flex items-center justify-between p-4 border-b border-white-light dark:border-[#191e3a] shrink-0">
-              <h5 className="text-lg font-semibold text-gray-900 text-white truncate pr-4">
+              <h5 id={titleId} className="text-lg font-semibold text-white truncate pr-4">
                 {previewDocument.documentName || 'Preview'}
               </h5>
               <button
@@ -441,56 +415,22 @@ const Documents: React.FC = () => {
                 <p className="text-gray-500">Unable to load preview.</p>
               )}
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </DialogShell>
 
-      {/* AI Explanation Modal */}
-      {showAiModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
-          onClick={() => setShowAiModal(false)}
-        >
-          <div
-            className="bg-white dark:bg-[#0e1726] rounded-lg shadow-xl max-w-3xl w-full"
-            style={{ maxHeight: '90vh' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between p-4 border-b border-white-light dark:border-[#191e3a]">
-              <h5 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
-                <FaWandMagicSparkles  className="mr-2" />
-                AI Document Explanation
-              </h5>
-              <button
-                type="button"
-                onClick={() => setShowAiModal(false)}
-                className="btn btn-sm btn-outline-danger"
-              >
-                <FaTimes />
-              </button>
-            </div>
-            <div className="p-6 overflow-auto" style={{ maxHeight: 'calc(90vh - 80px)' }}>
-              <div className="prose dark:prose-invert max-w-none whitespace-pre-wrap">
-                {aiExplanation}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Notes Modal */}
-      {showNotesModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
-          onClick={() => setShowNotesModal(false)}
-        >
-          <div
-            className="bg-white dark:bg-[#0e1726] rounded-lg shadow-xl max-w-2xl w-full"
-            style={{ maxHeight: '90vh' }}
-            onClick={(e) => e.stopPropagation()}
-          >
+      <DialogShell
+        open={showNotesModal}
+        onClose={() => setShowNotesModal(false)}
+        title="Notes"
+        panelClassName="w-full max-w-2xl max-h-[90vh] rounded-lg bg-white shadow-xl dark:bg-[#0e1726]"
+      >
+        {({ titleId }) => (
+          <>
             <div className="flex items-center justify-between p-4 border-b border-white-light dark:border-[#191e3a]">
-              <h5 className="text-lg font-semibold text-gray-900 dark:text-white">
+              <h5 id={titleId} className="text-lg font-semibold text-gray-900 dark:text-white">
                 Notes
               </h5>
               <button
@@ -506,9 +446,9 @@ const Documents: React.FC = () => {
                 {selectedNotes}
               </p>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </DialogShell>
     </div>
   );
 };

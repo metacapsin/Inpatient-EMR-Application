@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildEligibilityRequest, summarizeEligibilityResponse, resolvePayerId, formatDob, flattenPayerHit } from '../src/lib/eligibilityMapper.js';
+import { redactPhi, summarize270, sanitizeStediErrors } from '../src/lib/stedi.js';
 
 const patient = { firstName: 'Jane', lastName: 'Doe', dOB: '1990-04-12', sex: 'F' };
 const practice = { organizationName: 'Codavia Health', npi: '1234567893' };
@@ -92,4 +93,21 @@ test('mapper: flattens Stedi payer search hits', () => {
     const row = flattenPayerHit({ payer: { stediId: 'AETNA', displayName: 'Aetna', primaryPayerId: '60054', aliases: ['AETNA INC'], transactionSupport: { eligibilityCheck: 'SUPPORTED' } }, score: 9 });
     assert.deepEqual(row, { stediId: 'AETNA', displayName: 'Aetna', primaryPayerId: '60054', aliases: ['AETNA INC'], transactions: { eligibilityCheck: 'SUPPORTED' } });
     assert.deepEqual(flattenPayerHit(row), row);
+});
+
+test('stedi logging: 270 summary and redaction never carry names, ids or dates', () => {
+    const req = buildEligibilityRequest({
+        patient, practice,
+        insurance: { insuranceCompany: 'Aetna', tradingPartnerServiceId: '60054', subscriberId: 'W123', groupNumber: 'G1' },
+    });
+    const summary = JSON.stringify(summarize270(req));
+    for (const leak of ['Jane', 'Doe', 'W123', '1990', 'G1']) assert.ok(!summary.includes(leak), `summary leaked ${leak}`);
+    assert.equal(summarize270(req).tradingPartnerServiceId, '60054');
+    assert.equal(summarize270(req).correlationId.length, 12);
+
+    const red = JSON.stringify(redactPhi(req));
+    for (const leak of ['Jane', 'Doe', 'W123', '1990']) assert.ok(!red.includes(leak), `redactPhi leaked ${leak}`);
+
+    assert.deepEqual(sanitizeStediErrors({ errors: [{ code: '72', description: 'Invalid/Missing Subscriber ID', followupAction: 'x', subscriber: { firstName: 'Jane' } }] }), { errors: [{ code: '72', message: 'Invalid/Missing Subscriber ID' }] });
+    assert.equal(sanitizeStediErrors(null), undefined);
 });

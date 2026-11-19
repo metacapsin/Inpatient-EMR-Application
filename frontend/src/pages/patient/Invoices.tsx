@@ -1,4 +1,5 @@
 import React from 'react';
+import { DemoDataBanner } from '../../components/shared/DemoDataBanner';
 import { Link } from 'react-router-dom';
 import usePatientId from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
@@ -23,6 +24,7 @@ const Invoices: React.FC = () => {
                 </p>
             </div>
             <div className="min-h-0 flex-1 overflow-auto p-4">
+                <DemoDataBanner feature="Patient invoices" reason="no-backend" />
                 <div className="mb-3 flex flex-wrap gap-2">
                     <Link
                         to={billingDenialsPath()}

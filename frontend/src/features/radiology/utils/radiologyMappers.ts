@@ -17,16 +17,12 @@ export function formatRadiologyDateTime(iso: string | undefined | null): string 
     });
 }
 
-export function buildSpecialInstructionsPayload(
-    specialInstructions: string,
-    relevantLabValues: string,
-    pregnancyStatus: string
-): string | undefined {
+/** Pregnancy status and contrast allergy are structured order fields now — see
+ * {@link import('../types/radiologyOrder.types').CreateRadiologyOrderPayload} — not flattened here. */
+export function buildSpecialInstructionsPayload(specialInstructions: string, relevantLabValues: string): string | undefined {
     const parts: string[] = [];
     const labs = relevantLabValues.trim();
-    const preg = pregnancyStatus.trim();
     if (labs) parts.push(`Relevant lab values: ${labs}`);
-    if (preg && preg !== 'Not applicable') parts.push(`Pregnancy status: ${preg}`);
     const base = specialInstructions.trim();
     if (base) parts.push(base);
     const combined = parts.join('\n');

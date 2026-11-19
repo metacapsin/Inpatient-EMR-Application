@@ -9,7 +9,6 @@ import { Skeleton } from 'primereact/skeleton';
 import { Slider } from 'primereact/slider';
 import { Tag } from 'primereact/tag';
 import type { FacesheetPatient } from '../../../services/patient.service';
-import { getPatientPlacement } from '../../../services/rooms.service';
 import {
     flowsheetShiftLabelForType,
     formatShiftOptionLabel,
@@ -138,8 +137,8 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
         setSelectedScheduleShiftId('');
         void (async () => {
             try {
-                const placement = patient?.id ? await getPatientPlacement(String(patient.id)) : null;
-                const wardId = placement?.wardId ?? '2';
+                // Ward comes from the active admission (facesheet patient record), never from a client-side store.
+                const wardId = patient?.location?.wardId?.trim() || '2';
                 setScheduleWardId(wardId);
                 const { getWards } = await import('../../../services/rooms.service');
                 const wards = await getWards();
@@ -1265,7 +1264,7 @@ export function NursingFlowsheetWorksurface({ patient, encounterId, loadingPatie
                                 </div>
                                 <div className="col-span-12 md:col-span-8 flex items-end">
                                     <p className="text-[10px] leading-snug text-gray-500 dark:text-gray-400">
-                                        Co-sign and break-glass policies are enforced server-side in production. This UI captures intent only.
+                                        Electronic signature is recorded. Co-sign and break-glass controls are not yet enforced server-side.
                                     </p>
                                 </div>
                             </div>

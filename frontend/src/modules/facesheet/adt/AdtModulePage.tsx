@@ -18,6 +18,7 @@ import { LabeledDropdown } from '../../../components/shared/LabeledDropdown';
 import { bedOptionsForSelect, bedStatusIndicatorClass } from '../../../lib/adtBedPicker';
 import { AdtPatientQuickSearch } from '../../../components/adt/AdtPatientQuickSearch';
 import { BedHoldPanel } from '../../../components/adt/BedHoldPanel';
+import { AdmissionChecklistPanel } from '../../../components/adt/AdmissionChecklistPanel';
 import { PlacementWarningsBanner } from '../../../components/adt/PlacementWarningsBanner';
 import { TransferRequestForm } from '../../../components/adt/TransferRequestForm';
 import { listReservations } from '../../../services/bedManagement.service';
@@ -529,6 +530,10 @@ const AdtModulePage = () => {
 
                     <section className={sectionClass}>
                         <BedHoldPanel patientId={patientId.trim()} encounterId={adtSession.encounterId} beds={beds} disabled={busy || adtSession.dischargeInitiated} />
+                    </section>
+
+                    <section className={sectionClass}>
+                        <AdmissionChecklistPanel encounterId={adtSession.encounterId} />
                     </section>
 
                     <section className={sectionClass}>

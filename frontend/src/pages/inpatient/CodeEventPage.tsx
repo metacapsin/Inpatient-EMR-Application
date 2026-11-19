@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
+import { MockFlagBanner } from '../../components/shared/MockFlagBanner';
 import { toast } from 'react-hot-toast';
 import { useCodeEvent } from '../../features/code-event/hooks/useCodeEvent';
 import { CodeEventLiveHeader } from '../../features/code-event/components/CodeEventLiveHeader';
@@ -12,7 +13,7 @@ import AppButton from '../../components/ui/AppButton';
 export default function CodeEventPage() {
     const { eventId } = useParams<{ eventId: string }>();
     const navigate = useNavigate();
-    const { event, loading, error, appendTimelineEntry, saveTeam, closeEvent, generateNote } = useCodeEvent(eventId);
+    const { event, loading, error, appendTimelineEntry, saveTeam, closeEvent, generateNote, saveNote } = useCodeEvent(eventId);
 
     if (loading && !event) {
         return (
@@ -42,6 +43,7 @@ export default function CodeEventPage() {
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
+            <MockFlagBanner flag="codeEvent" feature="Code events" />
             <CodeEventLiveHeader event={event} />
 
             <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-3 overflow-y-auto p-3 sm:gap-4 sm:p-4">
@@ -88,6 +90,7 @@ export default function CodeEventPage() {
                                 await closeEvent(payload);
                             }}
                             onGenerateNote={generateNote}
+                            onSaveNote={saveNote}
                         />
                     </div>
                 </div>

@@ -1,6 +1,7 @@
 import { lazy, type ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import ProtectedRoute from '../components/auth/ProtectedRoute';
+import RoleGuard from '../components/auth/RoleGuard';
 import PlatformProtectedRoute from '../components/platform/PlatformProtectedRoute';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 
@@ -179,8 +180,14 @@ const routes = [
         layout: 'default' as const,
     },
     {
+        // SEC-05: matches the backend's `billing = requireRole('billing', 'physician')` gate on
+        // GET /api/CDI/query/inbox/:physicianId.
         path: '/app/billing/cdi',
-        element: guard(<CDIWorklistPage />),
+        element: guard(
+            <RoleGuard roles={['billing', 'physician']}>
+                <CDIWorklistPage />
+            </RoleGuard>,
+        ),
         layout: 'default' as const,
     },
     {

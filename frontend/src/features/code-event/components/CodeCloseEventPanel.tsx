@@ -13,18 +13,21 @@ type Props = {
     calledAt: string;
     onClose: (payload: CloseCodeEventPayload) => Promise<void>;
     onGenerateNote: () => Promise<string>;
+    /** SAF-26: actually files the note in the chart — generate-note above is preview-only. */
+    onSaveNote: () => Promise<{ noteId: string; noteText: string } | null>;
     readOnly?: boolean;
     closed?: boolean;
     initial?: Partial<CloseCodeEventPayload>;
 };
 
-export function CodeCloseEventPanel({ calledAt, onClose, onGenerateNote, readOnly, closed, initial }: Props) {
+export function CodeCloseEventPanel({ calledAt, onClose, onGenerateNote, onSaveNote, readOnly, closed, initial }: Props) {
     const [endTime, setEndTime] = useState(initial?.endTime ?? new Date().toISOString());
     const [outcome, setOutcome] = useState<CodeEventOutcome>(initial?.outcome ?? 'ROSC');
     const [disposition, setDisposition] = useState<CodePostEventDisposition>(initial?.postEventDisposition ?? 'ICU');
     const [debrief, setDebrief] = useState(initial?.debriefNotes ?? '');
     const [busy, setBusy] = useState(false);
     const [notePreview, setNotePreview] = useState('');
+    const [noteSaved, setNoteSaved] = useState(false);
 
     const totalMinutes = useMemo(() => durationMinutesBetween(calledAt, endTime), [calledAt, endTime]);
 
@@ -56,9 +59,26 @@ export function CodeCloseEventPanel({ calledAt, onClose, onGenerateNote, readOnl
         try {
             const text = await onGenerateNote();
             setNotePreview(text);
+            setNoteSaved(false);
             toast.success('Clinical note generated');
         } catch {
             toast.error('Could not generate note');
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function handleSaveNote() {
+        setBusy(true);
+        try {
+            const result = await onSaveNote();
+            if (result) {
+                setNotePreview(result.noteText);
+                setNoteSaved(true);
+                toast.success('Note saved to the chart');
+            }
+        } catch {
+            toast.error('Could not save note');
         } finally {
             setBusy(false);
         }
@@ -142,9 +162,18 @@ export function CodeCloseEventPanel({ calledAt, onClose, onGenerateNote, readOnl
             )}
 
             {notePreview ? (
-                <pre className="mt-4 max-h-48 overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-[11px] leading-relaxed text-gray-800 dark:border-white/10 dark:bg-black/20 dark:text-gray-200">
-                    {notePreview}
-                </pre>
+                <>
+                    <pre className="mt-4 max-h-48 overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-[11px] leading-relaxed text-gray-800 dark:border-white/10 dark:bg-black/20 dark:text-gray-200">
+                        {notePreview}
+                    </pre>
+                    {noteSaved ? (
+                        <p className="mt-2 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">Saved to the chart.</p>
+                    ) : (
+                        <AppButton type="button" className="mt-2 !bg-white dark:!bg-gray-900" disabled={busy} onClick={() => void handleSaveNote()}>
+                            Save as note
+                        </AppButton>
+                    )}
+                </>
             ) : null}
         </section>
     );

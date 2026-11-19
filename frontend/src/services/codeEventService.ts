@@ -12,6 +12,7 @@ export {
     generateCodeEventNote,
     getLastCodeEventDataSource,
     listOnShiftStaffForCodeEvent,
+    saveCodeEventNote,
     updateCodeEventTeam,
     updateCodeEventTimeline,
 } from '../features/code-event/api/codeEventWithFallback';

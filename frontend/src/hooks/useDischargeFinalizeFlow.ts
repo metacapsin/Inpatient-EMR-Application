@@ -6,22 +6,16 @@ import {
     type UseMutationResult,
     type UseQueryResult,
 } from '@tanstack/react-query';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch } from 'react-redux';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import type { AppDispatch, IRootState } from '../store';
-import { selectAdtEncounter } from '../store/adtEncounterSlice';
-import type { DischargeReadinessView } from '../types/dischargeReadiness';
+import type { AppDispatch } from '../store';
+import type { DischargeReadinessView, ReadinessGate } from '../types/dischargeReadiness';
 import { fetchDischargeFinalizeReadiness } from '../services/dischargeFinalizeReadiness.service';
 import type { DischargeFinalizeReadiness } from '../types/dischargeFinalizeReadiness';
-import {
-    confirmDischarge,
-    formatAdtUserMessage,
-    initiateDischarge,
-} from '../services/adtWorkflowService';
-import { useDischargeReadinessOptional } from '../contexts/DischargeReadinessContext';
-import { computeReadinessSnapshot, getDischargeWorkspaceBlockingMessages } from '../utils/dischargeReadinessValidation';
-import { getDischargeBlockingFriendlyMessages } from '../utils/dischargeReadinessUi';
+import { confirmDischarge, formatAdtUserMessage, initiateDischarge } from '../services/adtWorkflowService';
+import { dischargeBlockingGates } from '../services/adt.service';
+import { serverGateBlockingMessages } from '../utils/dischargeReadinessValidation';
 
 type FetchDischargeFinalizeReadinessOk = {
     ok: true;
@@ -35,16 +29,19 @@ export type DischargeFinalizeFlowState = {
     readinessQuery: UseQueryResult<FetchDischargeFinalizeReadinessOk, Error>;
     finalizeMutation: UseMutationResult<void, unknown, void, unknown>;
     gatesForUi: DischargeFinalizeReadiness | null;
+    /** Unresolved server gates (hard first). */
     blockingReasons: string[];
     canFinalize: boolean;
     derivedFromClinical: boolean;
     finalizeDischarge: () => void;
 };
 
-export function useDischargeFinalizeFlow(
-    encounterId: string,
-    view: DischargeReadinessView,
-): DischargeFinalizeFlowState {
+/**
+ * Finalize flow driven entirely by the server: `GET /api/discharges/readiness/:id` supplies the gate list,
+ * `POST /api/discharges` initiate (when the encounter is still `admitted`) and `POST /api/discharges/confirm`
+ * enforce them. No client-side gate can block or unblock a discharge.
+ */
+export function useDischargeFinalizeFlow(encounterId: string, view: DischargeReadinessView): DischargeFinalizeFlowState {
     const eid = encounterId.trim();
     const patientId = view.context.patientId?.trim() ?? '';
     const navigate = useNavigate();
@@ -52,20 +49,14 @@ export function useDischargeFinalizeFlow(
     const dispatch = useDispatch<AppDispatch>();
     const queryClient = useQueryClient();
     const ctx = { dispatch, queryClient };
-    const adt = useSelector((s: IRootState) => (patientId ? selectAdtEncounter(s, patientId) : null));
 
-    const dischargeCtx = useDischargeReadinessOptional();
-    const snapshot = useMemo(
-        () => dischargeCtx?.snapshot ?? computeReadinessSnapshot(view),
-        [dischargeCtx?.snapshot, view],
-    );
     const readinessQuery = useQuery({
         queryKey: [
             'dischargeFinalizeReadiness',
             eid,
             view.summary.status,
             view.checklist.map((t) => `${t.id}:${t.completed}`).join('|'),
-            view.eligibilityHistory.map((x) => `${x.id}:${x.status}`).join('|'),
+            view.medRecComplete ?? '',
         ],
         queryFn: async (): Promise<FetchDischargeFinalizeReadinessOk> => {
             const r = await fetchDischargeFinalizeReadiness(eid, view);
@@ -75,27 +66,35 @@ export function useDischargeFinalizeFlow(
         enabled: Boolean(eid),
     });
 
+    const finReady = readinessQuery.data?.ok === true ? readinessQuery.data : null;
+    const gatesForUi = finReady?.data ?? null;
+
+    // Prefer the finalize endpoint's gates (freshest); fall back to the readiness view's gates.
+    const serverGates: ReadinessGate[] = useMemo(() => {
+        const fromApi = gatesForUi?.gates;
+        if (Array.isArray(fromApi) && fromApi.length) return fromApi;
+        return view.gates;
+    }, [gatesForUi?.gates, view.gates]);
+
+    const blockingReasons = useMemo(() => serverGateBlockingMessages(serverGates), [serverGates]);
+    const hardBlocked = useMemo(
+        () => (typeof gatesForUi?.blocked === 'boolean' ? gatesForUi.blocked : serverGates.some((g) => g.severity === 'hard' && !g.resolved)),
+        [gatesForUi?.blocked, serverGates],
+    );
+
     const finalizeMutation = useMutation({
         mutationFn: async () => {
-            const fin = readinessQuery.data;
-            if (!fin?.ok) throw new Error('Discharge readiness is not available.');
-            const snap = dischargeCtx?.snapshot ?? computeReadinessSnapshot(view);
-            const blockers = getDischargeWorkspaceBlockingMessages(snap);
-            if (blockers.length > 0) {
-                throw new Error('Discharge readiness gates are not satisfied.');
-            }
-            if (!adt?.dischargeInitiated) {
-                const init = await initiateDischarge(ctx, {
-                    encounterId: eid,
-                    patientId: patientId || undefined,
-                });
+            if (view.context.encounterStatus === 'discharged') throw new Error('This encounter is already discharged.');
+            // Initiate only when the server says the encounter has not entered discharge yet.
+            if (view.context.encounterStatus !== 'discharge_initiated') {
+                const init = await initiateDischarge(ctx, { encounterId: eid, patientId: patientId || undefined });
                 if (!init.ok) throw new Error(formatAdtUserMessage(init));
             }
-            const conf = await confirmDischarge(ctx, {
-                encounterId: eid,
-                patientId: patientId || undefined,
-            });
-            if (!conf.ok) throw new Error(formatAdtUserMessage(conf));
+            const conf = await confirmDischarge(ctx, { encounterId: eid, patientId: patientId || undefined });
+            if (!conf.ok) {
+                const gates = dischargeBlockingGates(conf);
+                throw new Error(gates.length ? `Discharge blocked: ${gates.map((g) => g.message).join('; ')}` : formatAdtUserMessage(conf));
+            }
         },
         onSuccess: () => {
             toast.success('Patient successfully discharged');
@@ -104,22 +103,11 @@ export function useDischargeFinalizeFlow(
         },
         onError: (err: unknown) => {
             toast.error(err instanceof Error ? err.message : 'Finalize discharge failed');
+            void queryClient.invalidateQueries({ queryKey: ['dischargeFinalizeReadiness', eid] });
         },
     });
 
-    const finReady = readinessQuery.data?.ok === true ? readinessQuery.data : null;
-    const gatesForUi = finReady?.data ?? null;
-
-    const blockingReasons = useMemo(
-        () => getDischargeBlockingFriendlyMessages(view, snapshot),
-        [view, snapshot],
-    );
-
-    const canFinalize = Boolean(
-        getDischargeWorkspaceBlockingMessages(snapshot).length === 0 &&
-            !finalizeMutation.isPending &&
-            !readinessQuery.isLoading,
-    );
+    const canFinalize = Boolean(!hardBlocked && !finalizeMutation.isPending && !readinessQuery.isLoading && finReady);
 
     return {
         encounterId: eid,

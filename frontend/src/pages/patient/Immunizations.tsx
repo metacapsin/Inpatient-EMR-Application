@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { patientDataAPI } from '../../services/api';
+import { ModuleErrorState } from '../../components/facesheet/ModuleErrorState';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
@@ -42,6 +43,7 @@ const Immunizations: React.FC = () => {
   const [filteredCardList, setFilteredCardList] = useState<ImmunizationRecord[]>([]);
   const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage] = useState(2);
 
@@ -148,6 +150,7 @@ const Immunizations: React.FC = () => {
       return;
     }
     setLoading(true);
+    setLoadError(null);
     try {
       const response = await patientDataAPI.getPatientImmunizationList(pid);
       if (response.data?.data || Array.isArray(response.data)) {
@@ -159,7 +162,7 @@ const Immunizations: React.FC = () => {
         setImmunizationsList([]);
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to fetch immunizations');
+      setLoadError(error.response?.data?.message || 'Failed to fetch immunizations');
       setImmunizationsList([]);
     } finally {
       setLoading(false);
@@ -259,7 +262,7 @@ const Immunizations: React.FC = () => {
         <input
           type="text"
           className="form-input pl-10 w-full"
-          placeholder="Search immunizations..."
+          aria-label="Search immunizations" placeholder="Search immunizations..."
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
         />
@@ -276,7 +279,9 @@ const Immunizations: React.FC = () => {
         {/* Card View */}
         <div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {loading ? (
+            {loadError ? (
+              <ModuleErrorState message={loadError} onRetry={() => void getPatientImmunizations()} retrying={loading} />
+            ) : loading ? (
               <div className="col-span-full flex flex-col items-center justify-center py-16 gap-3 text-gray-500">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 <span>Loading immunizations...</span>

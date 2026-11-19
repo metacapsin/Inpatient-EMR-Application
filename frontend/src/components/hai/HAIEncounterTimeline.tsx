@@ -19,7 +19,7 @@ export function HAIEncounterTimeline({ encounterId }: Props) {
 
     const events = timelineQuery.data?.events ?? [];
     const loading = timelineQuery.isLoading && !timelineQuery.data;
-    const usingMock = timelineQuery.isSuccess && import.meta.env.VITE_HAI_EVENT_MOCK !== 'false';
+    const usingMock = timelineQuery.isSuccess && import.meta.env.VITE_HAI_EVENT_MOCK === 'true';
 
     if (!id) {
         return (

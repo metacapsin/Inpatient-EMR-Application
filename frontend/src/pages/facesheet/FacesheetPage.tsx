@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import type { AppDispatch, IRootState } from '../../store';
 import { fetchFacesheetPatient } from '../../store/facesheetSlice';
@@ -11,6 +11,7 @@ import { ModuleContainer } from '../../components/facesheet/ModuleContainer';
 import { FacesheetModuleTabs } from '../../components/facesheet/FacesheetModuleTabs';
 import { FacesheetEmptyState } from '../../components/facesheet/FacesheetEmptyState';
 import { FacesheetChartNav } from '../../components/Layouts/FacesheetChartNav';
+import { isFacesheetModuleEnabled } from '../../facesheet/facesheetModules';
 
 const Demographic = lazy(() => import('../patient/Demographic'));
 const Vitals = lazy(() => import('../patient/Vitals'));
@@ -98,23 +99,43 @@ const FacesheetPage = () => {
                         className="shrink-0 border-b border-emr-border bg-emr-sidebar px-2 py-2 dark:border-white/10 lg:hidden"
                     />
                 </div>
-            ) : error ? (
-                <div className="shrink-0 border-b border-amber-200/80 bg-amber-50 px-4 py-2.5 dark:border-amber-800/40 dark:bg-amber-950/30">
-                    <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">
-                        Patient header unavailable
+            ) : null}
+
+            {!patient && error ? (
+                <div
+                    className="m-4 rounded-xl border border-red-200/80 bg-red-50 px-4 py-4 dark:border-red-900/40 dark:bg-red-950/30"
+                    role="alert"
+                >
+                    <p className="text-sm font-semibold text-red-950 dark:text-red-100">Patient record could not be loaded</p>
+                    <p className="mt-1 text-xs text-red-900/90 dark:text-red-200/90">{error}</p>
+                    <p className="mt-1 text-xs text-red-800/80 dark:text-red-300/80">
+                        Chart modules are hidden until the patient identity is confirmed, so clinical data is never shown
+                        without a verified header.
                     </p>
-                    <p className="mt-0.5 text-xs text-amber-900/90 dark:text-amber-200/90">{error}</p>
-                    <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-300/80">
-                        Chart modules below are still available (e.g. lab orders, radiology).
-                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            onClick={() => dispatch(fetchFacesheetPatient(id.trim()))}
+                            className="inline-flex items-center rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-95"
+                        >
+                            Retry
+                        </button>
+                        <Link
+                            to="/app/patients/list"
+                            className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 hover:bg-gray-50 dark:border-white/15 dark:bg-transparent dark:text-gray-100"
+                        >
+                            Back to patient list
+                        </Link>
+                    </div>
                 </div>
-            ) : (
+            ) : !patient ? (
                 <FacesheetEmptyState
                     title="No patient data"
-                    description="We could not display a header for this record. You can still open chart modules from the sidebar."
+                    description="We could not display a header for this record. Return to the patient list and open the chart again."
                 />
-            )}
+            ) : null}
 
+            {patient ? (
             <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden border-t border-emr-border dark:border-white/10">
                 <FacesheetChartNav />
                 <ModuleContainer>
@@ -122,12 +143,12 @@ const FacesheetPage = () => {
                     <Routes>
                         <Route index element={<Navigate to="demographic" replace />} />
                         <Route path="demographic" element={<Demographic />} />
-                        <Route path="dietary" element={<DietaryTab />} />
+                        {isFacesheetModuleEnabled('dietary') ? <Route path="dietary" element={<DietaryTab />} /> : null}
                         <Route path="vitals" element={<Vitals />} />
                         <Route path="location" element={<PatientLocation />} />
                         <Route path="adt" element={<Adt />} />
-                        <Route path="prior-auth" element={<PriorAuth />} />
-                        <Route path="invoices" element={<Invoices />} />
+                        {isFacesheetModuleEnabled('prior-auth') ? <Route path="prior-auth" element={<PriorAuth />} /> : null}
+                        {isFacesheetModuleEnabled('invoices') ? <Route path="invoices" element={<Invoices />} /> : null}
                         <Route path="history" element={<History />} />
                         <Route path="diagnoses" element={<Diagnoses />} />
                         <Route path="medications" element={<Medications />} />
@@ -145,13 +166,14 @@ const FacesheetPage = () => {
                         <Route path="documents" element={<Documents />} />
                         <Route path="consents" element={<Consents />} />
                         <Route path="notes" element={<Notes />} />
-                        <Route path="preventive-screening" element={<PreventiveScreening />} />
+                        {isFacesheetModuleEnabled('preventive-screening') ? <Route path="preventive-screening" element={<PreventiveScreening />} /> : null}
                         <Route path="visitors-contacts" element={<VisitorsContacts />} />
                         <Route path="*" element={<Navigate to="demographic" replace />} />
                     </Routes>
                 </Suspense>
                 </ModuleContainer>
             </div>
+            ) : null}
         </div>
     );
 };

@@ -149,7 +149,7 @@ const Demographic: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-[240px] py-10" role="status" aria-live="polite">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
           <p className="mt-4 text-gray-600 dark:text-gray-400">Loading demographic data...</p>
@@ -395,6 +395,15 @@ const Demographic: React.FC = () => {
               </div>
                 <div className="mt-6">
                   <PatientPortalAccessBlock patientId={routePatientId || getLegacyPatientId()} defaultEmail={demographics.email || demographics.emailAddress || ''} />
+                </div>
+                <div className="mt-4">
+                  <Link
+                    to={`/app/settings?tab=auditTrail&patientId=${encodeURIComponent(routePatientId || getLegacyPatientId())}`}
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                  >
+                    <FaShieldAlt className="h-3.5 w-3.5" aria-hidden />
+                    View this patient's audit trail
+                  </Link>
                 </div>
               </>
             ) : (

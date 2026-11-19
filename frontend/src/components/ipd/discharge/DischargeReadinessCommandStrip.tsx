@@ -9,24 +9,15 @@ import {
 import { ConfirmDialog } from '../../shared/ConfirmDialog';
 
 export function DischargeReadinessCommandStrip() {
-    const { encounterId, view, snapshot } = useDischargeReadiness();
+    const { encounterId, view } = useDischargeReadiness();
     const flow = useDischargeFinalizeFlow(encounterId, view);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [scrollCompact, setScrollCompact] = useState(false);
 
-    const dischargeSummarySigned = view.summary.status === 'signed';
-    const progress = useMemo(
-        () => dischargeWorkspaceProgressPercent(snapshot, dischargeSummarySigned),
-        [snapshot, dischargeSummarySigned],
-    );
-    const tabDone = useMemo(() => computeDischargeTabCompletion(view, snapshot), [view, snapshot]);
+    const progress = useMemo(() => dischargeWorkspaceProgressPercent(view), [view]);
+    const tabDone = useMemo(() => computeDischargeTabCompletion(view), [view]);
     const allTabsComplete = useMemo(
-        () =>
-            tabDone.summary &&
-            tabDone.checklist &&
-            tabDone.charges &&
-            tabDone.insurance &&
-            tabDone.billing,
+        () => tabDone.summary === 'done' && tabDone.checklist === 'done',
         [tabDone],
     );
     const completionCompact = progress >= 100 || allTabsComplete;
@@ -58,8 +49,7 @@ export function DischargeReadinessCommandStrip() {
         .filter(Boolean)
         .join(' · ');
 
-    const progressHelp =
-        'Tracks signed discharge summary, clinical discharge readiness, and billing readiness (same as header and Billing tab).';
+    const progressHelp = 'Share of server discharge gates resolved (signed summary, medication reconciliation, nursing checklist, encounter status).';
 
     return (
         <>
@@ -214,9 +204,8 @@ export function DischargeReadinessCommandStrip() {
                 }}
             >
                 <ul className="list-inside list-disc space-y-1.5 text-sm text-gray-600 dark:text-gray-400">
-                    <li>Release bed</li>
-                    <li>Close encounter</li>
-                    <li>Lock billing</li>
+                    <li>Release bed to housekeeping</li>
+                    <li>Close encounter and send the ADT discharge notification</li>
                     <li>Complete patient discharge</li>
                 </ul>
             </ConfirmDialog>

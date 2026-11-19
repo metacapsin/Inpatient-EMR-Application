@@ -5,14 +5,16 @@ import { IRootState } from "../../store";
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const token = useSelector((state: IRootState) => state.auth.token);
-  const loading = useSelector((state: IRootState) => state.auth.loading);
+  const bootstrapped = useSelector((state: IRootState) => state.auth.bootstrapped);
 
-  if (loading) {
-    // Optionally, render a loading spinner or placeholder while auth state is being resolved
+  // The access token is never persisted across reloads (SEC-09), so a genuinely still-logged-in
+  // user starts every page load with token === null until App.tsx's bootstrapAuth() silently
+  // restores it from the httpOnly refresh cookie. Wait for that first attempt to resolve before
+  // deciding to redirect — otherwise every reload would bounce straight to /login.
+  if (!bootstrapped) {
     return <div>Loading...</div>;
   }
 
-  // If no token and not loading, redirect to login
   return token ? <>{children}</> : <Navigate to="/login" replace />;
 };
 

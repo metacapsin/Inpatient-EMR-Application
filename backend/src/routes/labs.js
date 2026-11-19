@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { query, withTx } from '../db/pool.js';
 import { ApiError, badRequest, conflict, h, notFound, ok, created, parse } from '../lib/http.js';
-import { requireRole } from '../middleware/auth.js';
+import { requireRole, requireClinicalRole } from '../middleware/auth.js';
+import { resolveCriticalNotifyTargets } from '../lib/criticalNotify.js';
 
 /**
  * Lab orders #20 — specimen collection, structured results, critical values, acknowledgement.
@@ -10,7 +11,11 @@ import { requireRole } from '../middleware/auth.js';
  */
 export const labsRouter = Router();
 const clinical = requireRole('physician', 'nurse', 'staff');
-const acknowledgers = requireRole('physician', 'nurse');
+// Reads additionally allow pharmacist (drug-lab monitoring — e.g. INR, renal function for dosing).
+const readers = requireRole('physician', 'nurse', 'pharmacist', 'staff');
+// SEC-17: acknowledging a critical result is a clinical attestation — an admin account cannot do
+// this on someone else's behalf, unlike every other requireRole() gate in this file.
+const acknowledgers = requireClinicalRole('physician', 'nurse');
 const iso = (d) => (d instanceof Date ? d.toISOString() : d ?? null);
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 
@@ -50,6 +55,8 @@ export const labResultOut = (r) => ({
     acknowledgedBy: r.acknowledged_by,
     acknowledgedByName: r.acknowledged_by_name ?? null,
     acknowledgedAt: iso(r.acknowledged_at),
+    readBackValue: r.read_back_value ?? '',
+    escalatedAt: iso(r.escalated_at),
     comment: r.comment ?? '',
     ...(r.patient_name ? { patientName: r.patient_name, mrn: r.mrn, locationLabel: [r.ward_name, r.room_number, r.bed_label].filter(Boolean).join(' / ') || '', orderStatus: r.order_status, accessionNumber: r.accession_number } : {}),
 });
@@ -101,38 +108,77 @@ export function computeFlags({ valueNum, refLow, refHigh, abnormalFlag, isCritic
     return { abnormalFlag: 'N', isCritical: Boolean(isCritical) };
 }
 
+// SAF-06: routed to the ordering clinician + encounter attending + the nurse currently assigned to
+// the patient's bed, instead of broadcasting PHI to every physician/nurse in the tenant. Falls back
+// to the broadcast only when none of those can be resolved (unstaffed ward, no attending on file,
+// etc.) — missing a critical alert is worse than over-notifying.
 async function notifyCritical(db, req, order, results) {
     const p = (await db.query('SELECT first_name, last_name, mrn FROM patients WHERE id = $1', [order.patient_id])).rows[0];
     const who = p ? `${p.first_name} ${p.last_name} (${p.mrn})` : 'Patient';
+    const encounter = order.encounter_id
+        ? (await db.query('SELECT attending_physician_id FROM encounters WHERE id = $1', [order.encounter_id])).rows[0]
+        : null;
+    const targets = await resolveCriticalNotifyTargets({
+        tenantId: req.user.tenantId,
+        patientId: order.patient_id,
+        orderingUserId: order.created_by,
+        attendingUserId: encounter?.attending_physician_id ?? null,
+    });
     for (const r of results) {
         const msg = `CRITICAL ${r.test_name}: ${r.value_num ?? r.value_text ?? ''} ${r.unit ?? ''} for ${who} — acknowledgement required`.replace(/\s+/g, ' ').trim();
-        await db.query(
-            `INSERT INTO notifications (tenant_id, user_id, type, action, message, metadata, created_by)
-             SELECT $1, id, 'lab', 'critical_result', $2, $3::jsonb, $4 FROM users WHERE tenant_id = $1 AND is_active AND role IN ('physician','nurse')`,
-            [req.user.tenantId, msg, JSON.stringify({ labOrderId: order.id, labResultId: r.id, patientId: order.patient_id }), req.user.id],
-        );
+        const metadata = JSON.stringify({ labOrderId: order.id, labResultId: r.id, patientId: order.patient_id });
+        if (targets) {
+            for (const userId of targets) {
+                await db.query(
+                    `INSERT INTO notifications (tenant_id, user_id, type, action, message, metadata, created_by) VALUES ($1,$2,'lab','critical_result',$3,$4::jsonb,$5)`,
+                    [req.user.tenantId, userId, msg, metadata, req.user.id],
+                );
+            }
+        } else {
+            await db.query(
+                `INSERT INTO notifications (tenant_id, user_id, type, action, message, metadata, created_by)
+                 SELECT $1, id, 'lab', 'critical_result', $2, $3::jsonb, $4 FROM users WHERE tenant_id = $1 AND is_active AND role IN ('physician','nurse')`,
+                [req.user.tenantId, msg, metadata, req.user.id],
+            );
+        }
     }
 }
 
+/** Next accession number, race-safe via the per-tenant counter row lock. */
+async function nextAccession(db, tenantId) {
+    const n = (await db.query(
+        `INSERT INTO lab_accession_counters (tenant_id, last_value) VALUES ($1, 1)
+         ON CONFLICT (tenant_id) DO UPDATE SET last_value = lab_accession_counters.last_value + 1 RETURNING last_value`,
+        [tenantId],
+    )).rows[0].last_value;
+    return `ACC${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(n).padStart(5, '0')}`;
+}
+
 // POST /lab-orders/:id/collect
+// SAF-25: an order's tests can need more than one specimen type (e.g. blood + urine in one order) —
+// one accession number is generated per distinct specimen type the order's own tests ask for, not
+// one for the whole order. `specimenType`/`collectedAt` in the body apply only when the caller wants
+// to override every specimen's collection time/type at once (the common single-specimen case); the
+// legacy scalar columns are kept in sync with the first specimen for any reader that only looks there.
 labsRouter.post('/lab-orders/:id/collect', clinical, h(async (req, res) => {
     const b = parse(z.object({ specimenType: z.string().trim().max(100).optional().nullable(), collectedAt: z.string().datetime({ offset: true }).optional().nullable() }), req.body ?? {});
     const order = await withTx(async (db) => {
         const o = await loadOrder(db, req, req.params.id);
         if (o.order_status !== 'Ordered') throw conflict(`Specimen can only be collected for an 'Ordered' lab order (status: ${o.order_status})`);
-        const n = (await db.query(
-            `INSERT INTO lab_accession_counters (tenant_id, last_value) VALUES ($1, 1)
-             ON CONFLICT (tenant_id) DO UPDATE SET last_value = lab_accession_counters.last_value + 1 RETURNING last_value`,
-            [req.user.tenantId],
-        )).rows[0].last_value;
-        const accession = `ACC${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(n).padStart(5, '0')}`;
-        const specimen = b.specimenType ?? (o.lab_tests.find((t) => t.specimen)?.specimen ?? null);
+        const neededTypes = [...new Set(o.lab_tests.map((t) => t.specimen).filter(Boolean))];
+        const types = b.specimenType ? [b.specimenType] : neededTypes.length ? neededTypes : [null];
+        const collectedAt = b.collectedAt ?? new Date().toISOString();
+        const specimens = [];
+        for (const specimenType of types) {
+            specimens.push({ specimenType, accessionNumber: await nextAccession(db, req.user.tenantId), collectedAt, collectedBy: req.user.id });
+        }
+        const first = specimens[0];
         return (await db.query(
-            `UPDATE lab_orders SET order_status = 'Collected', accession_number = $1, specimen_type = $2, collected_at = COALESCE($3::timestamptz, now()), collected_by = $4, updated_at = now() WHERE id = $5 RETURNING *`,
-            [accession, specimen, b.collectedAt ?? null, req.user.id, o.id],
+            `UPDATE lab_orders SET order_status = 'Collected', accession_number = $1, specimen_type = $2, collected_at = $3::timestamptz, collected_by = $4, specimens = $5::jsonb, updated_at = now() WHERE id = $6 RETURNING *`,
+            [first.accessionNumber, first.specimenType, collectedAt, req.user.id, JSON.stringify(specimens), o.id],
         )).rows[0];
     });
-    ok(res, { id: order.id, orderStatus: order.order_status, accessionNumber: order.accession_number, specimenType: order.specimen_type, collectedAt: iso(order.collected_at), collectedBy: order.collected_by });
+    ok(res, { id: order.id, orderStatus: order.order_status, accessionNumber: order.accession_number, specimenType: order.specimen_type, specimens: order.specimens, collectedAt: iso(order.collected_at), collectedBy: order.collected_by });
 }));
 
 const resultBody = z.object({
@@ -168,10 +214,17 @@ labsRouter.post('/lab-orders/:id/results', clinical, h(async (req, res) => {
                 [req.user.tenantId, o.id, o.patient_id, r.testCode ?? null, r.testName, r.loincCode ?? null, r.valueNum, r.valueText ?? null, r.unit ?? null, r.refLow, r.refHigh, flags.abnormalFlag, flags.isCritical, r.status, r.resultedAt ?? null, req.user.id, r.comment ?? null],
             )).rows[0]);
         }
-        // Resulted once every ordered test has a final result; otherwise In Progress.
-        const finals = (await db.query(`SELECT DISTINCT lower(test_name) AS n FROM lab_results WHERE lab_order_id = $1 AND status IN ('final','corrected')`, [o.id])).rows.map((x) => x.n);
-        const ordered = o.lab_tests.map((t) => String(t.name ?? '').toLowerCase()).filter(Boolean);
-        const allDone = ordered.length > 0 && ordered.every((n) => finals.includes(n));
+        // SAF-25: matched by stable catalog code when the ordered test and a final result both carry
+        // one — falling back to the lowercased-name match for anything not in the catalog, exactly as
+        // before. Resulted once every ordered test is accounted for this way; otherwise In Progress.
+        const finalResults = (await db.query(`SELECT DISTINCT test_code, lower(test_name) AS name FROM lab_results WHERE lab_order_id = $1 AND status IN ('final','corrected')`, [o.id])).rows;
+        const finalCodes = new Set(finalResults.map((r) => r.test_code).filter(Boolean));
+        const finalNames = new Set(finalResults.map((r) => r.name));
+        const allDone = o.lab_tests.length > 0 && o.lab_tests.every((t) => {
+            if (t.code && finalCodes.has(t.code)) return true;
+            const name = String(t.name ?? '').toLowerCase();
+            return Boolean(name) && finalNames.has(name);
+        });
         const next = allDone ? 'Resulted' : 'In Progress';
         const upd = (await db.query(`UPDATE lab_orders SET order_status = $1, resulted_at = CASE WHEN $1 = 'Resulted' THEN now() ELSE resulted_at END, updated_at = now() WHERE id = $2 RETURNING *`, [next, o.id])).rows[0];
         await db.query(`UPDATE orders SET status = CASE WHEN $1 = 'Resulted' THEN 'completed' ELSE status END WHERE ref_table = 'lab_orders' AND ref_id = $2`, [next, o.id]);
@@ -183,20 +236,20 @@ labsRouter.post('/lab-orders/:id/results', clinical, h(async (req, res) => {
 }));
 
 // GET /lab-orders/:id/results
-labsRouter.get('/lab-orders/:id/results', h(async (req, res) => {
+labsRouter.get('/lab-orders/:id/results', readers, h(async (req, res) => {
     await loadOrder({ query }, req, req.params.id);
     const r = await query(`${RESULT_SELECT} WHERE lr.lab_order_id = $1 ORDER BY lr.resulted_at, lr.test_name`, [req.params.id]);
     ok(res, r.rows.map(labResultOut));
 }));
 
 // GET /lab-results/by-patient/:patientId
-labsRouter.get('/lab-results/by-patient/:patientId', h(async (req, res) => {
+labsRouter.get('/lab-results/by-patient/:patientId', readers, h(async (req, res) => {
     const r = await query(`${RESULT_SELECT} JOIN lab_orders lo ON lo.id = lr.lab_order_id WHERE lr.tenant_id = $1 AND lr.patient_id = $2 ORDER BY lr.resulted_at DESC, lr.test_name LIMIT 500`, [req.user.tenantId, req.params.patientId]);
     ok(res, r.rows.map(labResultOut));
 }));
 
 // GET /lab-results/critical?unitId= — unacknowledged critical worklist
-labsRouter.get('/lab-results/critical', h(async (req, res) => {
+labsRouter.get('/lab-results/critical', readers, h(async (req, res) => {
     const q = parse(z.object({ unitId: z.string().optional(), limit: z.coerce.number().int().min(1).max(200).default(50) }), req.query);
     const params = [req.user.tenantId];
     let where = 'lr.tenant_id = $1 AND lr.is_critical AND lr.acknowledged_at IS NULL';
@@ -231,29 +284,44 @@ labsRouter.put('/lab-orders/:id/results/:rid', clinical, h(async (req, res) => {
         const flags = computeFlags({ valueNum, refLow, refHigh, abnormalFlag: b.abnormalFlag ?? null, isCritical: b.isCritical ?? undefined, testCode: r.test_code, testName: r.test_name });
         const prior = `Corrected ${new Date().toISOString()} by ${req.user.name ?? req.user.id}: previous value ${r.value_num ?? r.value_text ?? ''} ${r.unit ?? ''}`.trim();
         const comment = [r.comment, prior, b.comment].filter(Boolean).join('\n');
+        // SAF-06: a correction must require a fresh acknowledgement whenever the result both stays/
+        // becomes critical AND the actual value changed — not just when it newly became critical.
+        // Otherwise a critical value corrected to a *different* critical value (e.g. K+ 6.0 -> 7.5,
+        // both critical) kept the old acknowledgement, showing "acknowledged" for a value nobody
+        // actually acknowledged.
+        const valueChanged = valueNum !== num(r.value_num) || (valueText ?? null) !== (r.value_text ?? null);
+        const clearAck = flags.isCritical && (!r.is_critical || valueChanged);
         const upd = (await db.query(
             `UPDATE lab_results SET value_num = $1, value_text = $2, unit = COALESCE($3, unit), ref_low = $4, ref_high = $5, abnormal_flag = $6, is_critical = $7,
-                    status = 'corrected', comment = $8, resulted_at = now(), resulted_by = $9, acknowledged_by = CASE WHEN $7 AND NOT is_critical THEN NULL ELSE acknowledged_by END,
-                    acknowledged_at = CASE WHEN $7 AND NOT is_critical THEN NULL ELSE acknowledged_at END
+                    status = 'corrected', comment = $8, resulted_at = now(), resulted_by = $9, acknowledged_by = CASE WHEN $11 THEN NULL ELSE acknowledged_by END,
+                    acknowledged_at = CASE WHEN $11 THEN NULL ELSE acknowledged_at END, escalated_at = CASE WHEN $11 THEN NULL ELSE escalated_at END
              WHERE id = $10 RETURNING *`,
-            [valueNum, valueText ?? null, b.unit ?? null, refLow, refHigh, flags.abnormalFlag, flags.isCritical, comment, req.user.id, r.id],
+            [valueNum, valueText ?? null, b.unit ?? null, refLow, refHigh, flags.abnormalFlag, flags.isCritical, comment, req.user.id, r.id, clearAck],
         )).rows[0];
-        if (upd.is_critical && !r.is_critical) await notifyCritical(db, req, o, [upd]);
+        if (upd.is_critical && clearAck) await notifyCritical(db, req, o, [upd]);
         return upd;
     });
     ok(res, labResultOut(out));
 }));
 
-// POST /lab-results/:rid/acknowledge
+// POST /lab-results/:rid/acknowledge — SAF-06: requires a read-back of the value, verified against
+// what's actually stored, before the acknowledgement is accepted. This is a real, automatically-
+// checked confirmation (not a checkbox) that the acknowledging clinician has the correct value.
 labsRouter.post('/lab-results/:rid/acknowledge', acknowledgers, h(async (req, res) => {
+    const b = parse(z.object({ readBackValue: z.string().trim().min(1, 'Read back the value to confirm it before acknowledging') }), req.body ?? {});
+    const existing = await query('SELECT * FROM lab_results WHERE id = $1 AND tenant_id = $2', [req.params.rid, req.user.tenantId]);
+    if (!existing.rowCount) throw notFound('Lab result not found');
+    const row = existing.rows[0];
+    if (row.acknowledged_at) throw conflict('Result is already acknowledged');
+    const matches =
+        row.value_num !== null
+            ? Number.isFinite(Number(b.readBackValue)) && Number(b.readBackValue) === Number(row.value_num)
+            : b.readBackValue.trim().toLowerCase() === String(row.value_text ?? '').trim().toLowerCase();
+    if (!matches) throw badRequest("Read-back value doesn't match the result on file — confirm the value with the reporting lab before acknowledging");
     const r = await query(
-        `UPDATE lab_results SET acknowledged_by = $1, acknowledged_at = now() WHERE id = $2 AND tenant_id = $3 AND acknowledged_at IS NULL RETURNING *`,
-        [req.user.id, req.params.rid, req.user.tenantId],
+        `UPDATE lab_results SET acknowledged_by = $1, acknowledged_at = now(), read_back_value = $2 WHERE id = $3 AND tenant_id = $4 AND acknowledged_at IS NULL RETURNING *`,
+        [req.user.id, b.readBackValue, req.params.rid, req.user.tenantId],
     );
-    if (!r.rowCount) {
-        const exists = await query('SELECT 1 FROM lab_results WHERE id = $1 AND tenant_id = $2', [req.params.rid, req.user.tenantId]);
-        if (!exists.rowCount) throw notFound('Lab result not found');
-        throw conflict('Result is already acknowledged');
-    }
+    if (!r.rowCount) throw conflict('Result is already acknowledged');
     ok(res, labResultOut(r.rows[0]));
 }));

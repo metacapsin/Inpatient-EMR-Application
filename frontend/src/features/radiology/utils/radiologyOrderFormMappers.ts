@@ -12,6 +12,7 @@ export const EMPTY_RADIOLOGY_ORDER_FORM: RadiologyOrderFormValues = {
     priority: 'Routine',
     relevantLabValues: '',
     pregnancyStatus: 'Not applicable',
+    contrastAllergy: 'none',
     transportRequired: 'false',
     scheduledForIso: null,
     specialInstructions: '',
@@ -40,11 +41,9 @@ export function formValuesToCreatePayload(
         clinicalIndication: form.clinicalIndication.trim(),
         icd10Codes: form.icd10Codes,
         priority: form.priority,
-        specialInstructions: buildSpecialInstructionsPayload(
-            form.specialInstructions,
-            form.relevantLabValues,
-            form.pregnancyStatus
-        ),
+        specialInstructions: buildSpecialInstructionsPayload(form.specialInstructions, form.relevantLabValues),
+        pregnancyStatus: form.pregnancyStatus,
+        contrastAllergy: form.contrastAllergy,
         transportRequired: form.transportRequired === 'true',
         scheduledFor: form.scheduledForIso ?? undefined,
         orderedBy: ctx.orderedBy,

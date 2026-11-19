@@ -372,7 +372,7 @@ const Diagnoses: React.FC = () => {
                     <input
                         type="text"
                         className="form-input h-9 w-full py-2 pl-10 text-sm"
-                        placeholder="Search by code or description..."
+                        aria-label="Search problems" placeholder="Search by code or description..."
                         value={searchText}
                         onChange={(e) => setSearchText(e.target.value)}
                     />

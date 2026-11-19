@@ -3,11 +3,12 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { config } from '../config.js';
+import { config, devTokensAllowed } from '../config.js';
 import { q } from '../lib/sql.js';
 import { conflict, created, h, notFound, ok, parse } from '../lib/http.js';
 import { sendEmail } from '../lib/email.js';
 import { requireRole } from '../middleware/auth.js';
+import { recordAuditEvent } from '../lib/audit.js';
 
 export const patientAccountsRouter = Router();
 
@@ -109,20 +110,19 @@ patientAccountsRouter.post(
     '/api/patients/:id/portal-invite',
     portalStaff,
     route(async (req, res) => {
-        const b = parse(
-            z.object({
-                email: z.string().trim().email().optional(),
-            }),
-            req.body || {},
-        );
+        // SEC-06: no caller-supplied email — always the patient's email on file. A free-text override
+        // here was an account-takeover vector: anyone with chart access could redirect an existing,
+        // *active* account's invite to an address they control, which also nulled that account's
+        // password (see the UPDATE below used to do before this fix). The only legitimate way to get
+        // a new password onto an already-active account is the patient's own self-service
+        // /patient-auth/forgot-password, which only ever emails the address already on file.
         const patient = (await q('SELECT * FROM patients WHERE id = $1 AND tenant_id = $2', [req.params.id, req.user?.tenantId]))
             .rows[0];
         if (!patient) throw notFound('Patient not found');
 
-        const email = (b.email || patient.email || '').trim().toLowerCase();
-        if (!email) throw conflict('Patient has no email; provide one in the invite request');
+        const email = (patient.email || '').trim().toLowerCase();
+        if (!email) throw conflict('Patient has no email on file; add one in Demographics before sending a portal invite');
 
-        const inviteToken = crypto.randomBytes(32).toString('hex');
         const existing = (
             await q('SELECT * FROM patient_accounts WHERE patient_id = $1 AND tenant_id = $2', [
                 patient.id,
@@ -130,14 +130,25 @@ patientAccountsRouter.post(
             ])
         ).rows[0];
 
+        if (existing && accountStatus(existing) === 'active') {
+            await recordAuditEvent({
+                tenantId: req.user?.tenantId ?? null,
+                actorType: 'staff',
+                actorId: req.user?.id,
+                actorRole: req.user?.role,
+                action: 'update',
+                resource: 'patient_account',
+                resourceId: existing.id,
+                patientId: patient.id,
+                details: { outcome: 'blocked_active_account_reinvite' },
+            });
+            throw conflict(
+                'This patient already has an active portal account. To set a new password, have them use "Forgot password" on the portal login page — portal invites cannot reset an active account.',
+            );
+        }
+
+        const inviteToken = crypto.randomBytes(32).toString('hex');
         if (existing) {
-            const emailTaken = (
-                await q(
-                    `SELECT 1 FROM patient_accounts WHERE tenant_id = $1 AND lower(email) = lower($2) AND patient_id <> $3`,
-                    [req.user?.tenantId, email, patient.id],
-                )
-            ).rowCount;
-            if (emailTaken) throw conflict('Another patient portal account already uses this email');
             await q(
                 `UPDATE patient_accounts
                  SET email = $1, invite_token_hash = $2, invite_expires_at = now() + interval '7 days',
@@ -169,11 +180,24 @@ patientAccountsRouter.post(
             ])
         ).rows[0];
 
+        await recordAuditEvent({
+            tenantId: req.user?.tenantId ?? null,
+            actorType: 'staff',
+            actorId: req.user?.id,
+            actorRole: req.user?.role,
+            action: existing ? 'update' : 'create',
+            resource: 'patient_account',
+            resourceId: updated?.id ?? null,
+            patientId: patient.id,
+            details: { outcome: existing ? 'reinvited' : 'invited', emailSent: sent },
+        });
+
         ok(res, {
             ...publicAccount(updated),
             emailSent: sent,
             status: accountStatus(updated),
-            ...(config.env === 'production' ? {} : { inviteToken }),
+            // Gated on an explicit flag (SEC-20), not NODE_ENV — see config.js's allowDevTokens.
+            ...(devTokensAllowed() ? { inviteToken } : {}),
         });
     }),
 );

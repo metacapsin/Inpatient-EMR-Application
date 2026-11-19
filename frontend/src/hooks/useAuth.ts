@@ -1,6 +1,6 @@
 import { useSelector, useDispatch } from 'react-redux';
 import { IRootState, AppDispatch } from '../store';
-import { logout, loginUser, registerUser, fetchCloudSubscriptions, User } from '../store/authSlice';
+import { logoutUser, loginUser, registerUser, fetchCloudSubscriptions, User } from '../store/authSlice';
 
 export const useAuth = () => {
     const dispatch = useDispatch<AppDispatch>();
@@ -19,7 +19,7 @@ export const useAuth = () => {
         login: (email: string, password: string) => dispatch(loginUser({ email, password })),
         register: (username: string, email: string, password: string, address?: string, industry?: string, subdomain?: string) =>
             dispatch(registerUser({ username, email, password, address, industry, subdomain })),
-        logout: () => dispatch(logout()),
+        logout: () => dispatch(logoutUser()),
         fetchCloudSubscriptions: () => dispatch(fetchCloudSubscriptions()),
     };
 };

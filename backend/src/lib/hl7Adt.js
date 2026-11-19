@@ -1,10 +1,25 @@
+import crypto from 'node:crypto';
+
 /**
  * HL7 v2.5 ADT message builder (CMS CoP 42 CFR 482.24(d) admission / transfer / discharge notifications).
  * Segments: MSH, EVN, PID, PV1 (PV1-3 assigned location, PV1-6 prior location on A02, PV1-36 discharge
- * disposition and PV1-45 discharge time on A03), plus PD1-4 for the PCP when known.
+ * disposition and PV1-45 discharge time on A03), DG1 for the diagnosis when known, plus PD1-4 for the PCP.
  */
 const ts = (d) => (d ? new Date(d) : new Date()).toISOString().replace(/[-:T]/g, '').slice(0, 14);
-const esc = (v) => (v === null || v === undefined ? '' : String(v).replace(/[|^~\\&\r\n]/g, ' ').trim());
+// SAF-24: real HL7 escape sequences instead of replacing delimiter characters with a space, which
+// silently mangled any name/diagnosis that happened to contain one. Backslash must be escaped first
+// so the sequences this introduces aren't themselves re-escaped by the later replacements.
+const esc = (v) => {
+    if (v === null || v === undefined) return '';
+    return String(v)
+        .replace(/\r\n|\r|\n/g, ' ')
+        .replace(/\\/g, '\\E\\')
+        .replace(/\|/g, '\\F\\')
+        .replace(/\^/g, '\\S\\')
+        .replace(/&/g, '\\T\\')
+        .replace(/~/g, '\\R\\')
+        .trim();
+};
 const dob = (d) => (d ? String(d).slice(0, 10).replace(/-/g, '') : '');
 
 export const EVENT_LABELS = { A01: 'Admission', A02: 'Transfer', A03: 'Discharge', A08: 'Update' };
@@ -21,12 +36,20 @@ export const EVENT_LABELS = { A01: 'Admission', A02: 'Transfer', A03: 'Discharge
  */
 export function buildAdtMessage(o) {
     const now = ts();
-    const controlId = `${o.encounter.id}-${o.eventType}-${now}`.slice(0, 199);
+    // SAF-24: MSH-10 (Message Control ID) is capped at 20 chars by the spec; the old scheme embedded
+    // the full encounter UUID and just truncated at 199, which (a) violated the cap and (b) would have
+    // collided across messages for the same encounter once actually truncated to 20. A short hash of
+    // the same inputs plus randomness stays well under the cap and is effectively unique.
+    const controlId = crypto.createHash('sha1').update(`${o.encounter.id}:${o.eventType}:${now}:${Math.random()}`).digest('hex').slice(0, 20);
     const loc = (l) => (l ? [esc(l.ward), esc(l.room), esc(l.bed)].join('^') : '');
     const msh = ['MSH', '^~\\&', 'EMR', esc(o.sendingFacility), esc(o.receivingApp || 'PCP'), 'RECIPIENT', now, '', `ADT^${o.eventType}^ADT_${o.eventType === 'A02' ? 'A02' : o.eventType === 'A03' ? 'A03' : 'A01'}`, controlId, 'P', '2.5'].join('|');
     const evn = ['EVN', o.eventType, now, '', '', '', ts(o.eventType === 'A03' ? o.encounter.dischargedAt : o.encounter.admittedAt)].join('|');
     const pid = ['PID', '1', '', `${esc(o.patient.mrn)}^^^EMR^MR`, '', `${esc(o.patient.lastName)}^${esc(o.patient.firstName)}`, '', dob(o.patient.dob), esc(o.patient.sex)].join('|');
     const pd1 = o.patient.pcpName ? ['PD1', '', '', '', `${esc(o.patient.pcpNpi)}^${esc(o.patient.pcpName)}^^^^^^^NPI`].join('|') : null;
+    // SAF-24: diagnosis belongs in DG1, not PV1-10 (which is Hospital Service). No coded diagnosis is
+    // tracked yet, so DG1-3 (coded value) is left blank and the free text goes in DG1-4; DG1-6 'A' =
+    // Admitting diagnosis, which is what encounter.diagnosis actually represents in this app.
+    const dg1 = o.encounter.diagnosis ? ['DG1', '1', '', '', esc(o.encounter.diagnosis), ts(o.encounter.admittedAt), 'A'].join('|') : null;
     const pv1Fields = new Array(45).fill('');
     pv1Fields[0] = 'PV1';
     pv1Fields[1] = '1';
@@ -35,13 +58,12 @@ export function buildAdtMessage(o) {
     pv1Fields[4] = esc(o.encounter.admissionType);
     pv1Fields[6] = o.eventType === 'A02' ? loc(o.priorLocation) : '';
     pv1Fields[7] = o.encounter.attendingName ? `${esc(o.encounter.attendingPhysicianId)}^${esc(o.encounter.attendingName)}` : esc(o.encounter.attendingPhysicianId);
-    pv1Fields[10] = esc(o.encounter.diagnosis);
     pv1Fields[19] = esc(o.encounter.id);
     pv1Fields[36] = o.eventType === 'A03' ? esc(o.encounter.disposition) : '';
     pv1Fields[44] = ts(o.encounter.admittedAt);
     pv1Fields[45] = o.eventType === 'A03' ? ts(o.encounter.dischargedAt) : '';
     const pv1 = pv1Fields.join('|').replace(/\|+$/, '');
-    return [msh, evn, pid, pd1, pv1].filter(Boolean).join('\r');
+    return [msh, evn, pid, pd1, dg1, pv1].filter(Boolean).join('\r');
 }
 
 /** Parses an HL7 ACK and returns MSA-1 (AA/CA = accepted). */

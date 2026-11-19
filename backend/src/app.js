@@ -6,6 +6,7 @@ import { config, isProd } from './config.js';
 import { pool } from './db/pool.js';
 import { requireAuth } from './middleware/auth.js';
 import { requireModuleGate } from './middleware/moduleGate.js';
+import { auditMiddleware } from './middleware/audit.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { authRouter, publicAuthRouter } from './routes/auth.js';
 import { publicPlatformAuthRouter } from './routes/platformAuth.js';
@@ -16,6 +17,7 @@ import { facilityRouter } from './routes/facility.js';
 import { tenantProfileRouter } from './routes/tenantProfile.js';
 import { patientsRouter } from './routes/patients.js';
 import { adtRouter } from './routes/adt.js';
+import { admissionChecklistRouter } from './routes/admissionChecklist.js';
 import { patientDataRouter } from './routes/patientData.js';
 import { inpatientDocsRouter } from './routes/inpatientDocs.js';
 import { consentRouter } from './routes/consent.js';
@@ -40,6 +42,8 @@ import { adtNotificationsRouter } from './routes/adtNotifications.js';
 import { cdsRouter } from './routes/cds.js';
 import { drugsRouter } from './routes/drugs.js';
 import { patientAccountsRouter } from './routes/patientAccounts.js';
+import { aiRouter } from './routes/ai.js';
+import { auditEventsRouter, platformAuditEventsRouter } from './routes/auditEvents.js';
 
 export function createApp() {
     const app = express();
@@ -54,7 +58,11 @@ export function createApp() {
                 if (!origin || config.corsOrigins.includes(origin)) return cb(null, true);
                 cb(null, false);
             },
-            allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'X-Client-Route'],
+            // credentials: true + an explicit (never wildcard) origin list above is what lets the
+            // browser send/receive the httpOnly refresh-token cookie across the frontend/backend
+            // origin pair (SEC-09).
+            credentials: true,
+            allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID'],
             maxAge: 600,
         }),
     );
@@ -88,14 +96,18 @@ export function createApp() {
     // Platform (Super Admin) branch: its own credential space, gated by requirePlatformAuth on each
     // of its routes — deliberately NOT behind the tenant-scoped requireAuth below.
     app.use(platformAdminRouter);
+    app.use(platformAuditEventsRouter);
     // SMART App Launch + patient portal auth (public; patient JWT / SMART JWT, not staff JWT).
     app.use(smartAuthRouter);
     // FHIR R4 patient-access API (public mount; each resource route uses requireSmartAuth).
     app.use(fhirRouter);
     app.use(authRouter); // authenticates itself
     app.use(requireAuth);
+    // Mounted before requireModuleGate so a request rejected by a disabled module still gets logged
+    // (its final status, captured on res.finish, will be the gate's 403 — see middleware/audit.js).
+    app.use(auditMiddleware);
     app.use(requireModuleGate);
-    for (const r of [facilityRouter, tenantProfileRouter, patientsRouter, adtRouter, patientDataRouter, inpatientDocsRouter, consentRouter, medicationRouter, revenueRouter, dashboardRouter, appointmentsRouter, recordsRouter, staffingRouter, clinicalOpsRouter, ordersRouter, bedReservationsRouter, evsRouter, transferRequestsRouter, eligibilityRouter, problemsRouter, clinicalNotesRouter, dischargeReadinessRouter, medReconciliationRouter, labsRouter, adtNotificationsRouter, cdsRouter, drugsRouter, patientAccountsRouter]) {
+    for (const r of [facilityRouter, tenantProfileRouter, patientsRouter, adtRouter, admissionChecklistRouter, patientDataRouter, inpatientDocsRouter, consentRouter, medicationRouter, revenueRouter, dashboardRouter, appointmentsRouter, recordsRouter, staffingRouter, clinicalOpsRouter, ordersRouter, bedReservationsRouter, evsRouter, transferRequestsRouter, eligibilityRouter, problemsRouter, clinicalNotesRouter, dischargeReadinessRouter, medReconciliationRouter, labsRouter, adtNotificationsRouter, cdsRouter, drugsRouter, patientAccountsRouter, aiRouter, auditEventsRouter]) {
         app.use(r);
     }
 

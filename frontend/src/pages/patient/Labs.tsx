@@ -1,26 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { toast } from 'react-hot-toast';
-import { patientDataAPI, aiHealthInsightsAPI } from '../../services/api';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { format } from 'date-fns';
-import { FaFlask, FaDownload, FaTimes, FaEye } from 'react-icons/fa';
-import { FaWandMagicSparkles } from 'react-icons/fa6';
+import { FaFlask } from 'react-icons/fa';
 import IconSearch from '../../components/Icon/IconSearch';
+import { ModuleErrorState } from '../../components/facesheet/ModuleErrorState';
 import { flagClass, flagLabel, listPatientResults } from '../../services/labs.service';
 
 interface LabRecord {
   _id: string;
-  name?: string;
-  notes?: string;
-  result?: string;
-  status?: boolean;
-  statusDisplay?: string;
   testName?: string;
   testDate?: string;
   labName?: string;
-  date?: string;
-  createdOn?: string;
+  result?: string;
+  abnormalFlag?: string;
+  isCritical?: boolean;
+  acknowledgedAt?: string;
+  comment?: string;
   [key: string]: any;
 }
 
@@ -33,16 +29,9 @@ const Labs: React.FC = () => {
   const [filteredCardList, setFilteredCardList] = useState<LabRecord[]>([]);
   const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage] = useState(2);
-
-  const [labDetail, setLabDetail] = useState<LabRecord | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-
-  const [showExplanationPopup, setShowExplanationPopup] = useState(false);
-  const [explanationLoading, setExplanationLoading] = useState(false);
-  const [explanation, setExplanation] = useState('');
-  const [selectedLabName, setSelectedLabName] = useState('');
 
   const formatDate = (dateString: string) => {
     try {
@@ -52,18 +41,8 @@ const Labs: React.FC = () => {
     }
   };
 
-  const normalizeRecord = (item: any): LabRecord => ({
-    ...item,
-    _id: item.id ?? item._id ?? 'unknown',
-    testName: item.name || '—',
-    testDate: item.date ? formatDate(item.date) : '—',
-    labName: item.labName || '—',
-    result: item.value ? `${item.value}${item.unit ? ` ${item.unit}` : ''}` : item.notes || '—',
-    statusDisplay: item.status ? 'Active' : 'Inactive',
-    kind: 'document',
-  });
-
-  /** Structured results entered against lab orders (lab_results table). */
+  /** Structured results entered against lab orders (lab_results table) — the only lab store now;
+   * BUG-13 retired the separate free-text `lab_documents` store this tab used to also display. */
   const normalizeStructured = (r: any): LabRecord => ({
     ...r,
     _id: r.id,
@@ -71,8 +50,6 @@ const Labs: React.FC = () => {
     testDate: r.resultedAt ? formatDate(r.resultedAt) : '—',
     labName: r.accessionNumber ? `Accession ${r.accessionNumber}` : 'In-house',
     result: `${r.value ?? ''}${r.unit ? ` ${r.unit}` : ''}${r.referenceRange ? ` (ref ${r.referenceRange})` : ''}`,
-    statusDisplay: r.status,
-    kind: 'result',
     abnormalFlag: r.abnormalFlag,
     isCritical: r.isCritical,
     acknowledgedAt: r.acknowledgedAt,
@@ -89,18 +66,13 @@ const Labs: React.FC = () => {
     if (!patientId) return;
 
     setLoading(true);
+    setLoadError(null);
 
     try {
-      const [structured, response] = await Promise.all([
-        listPatientResults(patientId).catch(() => []),
-        patientDataAPI.getAllLabDocuments(patientId),
-      ]);
-      const raw = response.data?.data ?? response.data;
-      const formatted = [...structured.map(normalizeStructured), ...(Array.isArray(raw) ? raw : []).map((item: any) => normalizeRecord(item))];
-
-      setLabsList(formatted);
-    } catch {
-      toast.error('Failed to fetch lab documents');
+      const structured = await listPatientResults(patientId);
+      setLabsList(structured.map(normalizeStructured));
+    } catch (error: any) {
+      setLoadError(error?.response?.data?.message || 'Failed to fetch lab results');
     } finally {
       setLoading(false);
     }
@@ -135,60 +107,6 @@ const Labs: React.FC = () => {
     updatePaginatedList(paginatedCardList, page);
   };
 
-  const handleViewDetail = async (id: string) => {
-    if (!patientId) return;
-
-    setLoadingDetail(true);
-
-    try {
-      const res = await patientDataAPI.getLabDocumentById(id);
-      const raw = res.data?.data ?? res.data;
-
-      setLabDetail(normalizeRecord(raw));
-    } catch {
-      toast.error('Failed to load lab result details');
-    } finally {
-      setLoadingDetail(false);
-    }
-  };
-
-  const handleDownload = async (id: string) => {
-    try {
-      const res = await patientDataAPI.downloadLabDocument(id);
-
-      const blob = res.data as Blob;
-      const url = window.URL.createObjectURL(blob);
-
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `lab-${id}.pdf`;
-      a.click();
-
-      window.URL.revokeObjectURL(url);
-    } catch {
-      toast.error('Download failed');
-    }
-  };
-
-  const handleExplainLab = async (labId: string, labName: string) => {
-    setSelectedLabName(labName);
-    setShowExplanationPopup(true);
-    setExplanationLoading(true);
-
-    try {
-      const res = await aiHealthInsightsAPI.explainLabReport({ labId });
-
-      setExplanation(
-        res.data?.data?.explanations?.[0]?.plainLanguageExplanation ||
-          'No explanation available.'
-      );
-    } catch {
-      toast.error('Failed to generate explanation');
-    } finally {
-      setExplanationLoading(false);
-    }
-  };
-
   return (
     <div className={moduleSurfaceClass}>
        {/* Breadcrumb */}
@@ -204,10 +122,10 @@ const Labs: React.FC = () => {
       {/* Page Header */}
 <div className="mb-5">
   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-    
+
     {/* Left Section */}
     <div className="flex flex-col md:flex-row md:items-center gap-3 flex-1">
-      
+
       {/* Icon + Title */}
       <div className="flex items-center gap-2">
         <div className="p-2 rounded-lg bg-primary/10">
@@ -223,7 +141,7 @@ const Labs: React.FC = () => {
         <input
           type="text"
           className="form-input pl-10 w-full"
-          placeholder="Search labs..."
+          aria-label="Search lab results" placeholder="Search labs..."
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
         />
@@ -239,7 +157,9 @@ const Labs: React.FC = () => {
 
       <div className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start auto-rows-min">
-        {loading ? (
+        {loadError ? (
+          <ModuleErrorState message={loadError} onRetry={() => void getPatientLabs()} retrying={loading} />
+        ) : loading ? (
           <div className="col-span-full text-center py-4">Loading...</div>
         ) : filteredCardList.length === 0 ? (
           <div className="col-span-full text-center mt-2">
@@ -258,33 +178,14 @@ const Labs: React.FC = () => {
                 </div>
 
                 <div className="flex gap-2">
-                  {lab.kind === 'result' ? (
-                    <span className={`inline-flex h-fit rounded-full px-2 py-0.5 text-xs font-semibold ${flagClass(lab.abnormalFlag, lab.isCritical)}`}>
-                      {lab.isCritical ? 'CRITICAL · ' : ''}{flagLabel(lab.abnormalFlag)}
-                    </span>
-                  ) : (
-                    <>
-                      <button className="btn btn-sm btn-outline-primary" onClick={() => handleViewDetail(lab._id)}>
-                        <FaEye />
-                      </button>
-                      <button className="btn btn-sm btn-primary" onClick={() => handleDownload(lab._id)}>
-                        <FaDownload />
-                      </button>
-                    </>
-                  )}
-                  <button
-                    className="btn btn-sm btn-primary"
-                    onClick={() =>
-                      handleExplainLab(lab._id, lab.testName || '')
-                    }
-                  >
-                    <FaWandMagicSparkles />
-                  </button>
+                  <span className={`inline-flex h-fit rounded-full px-2 py-0.5 text-xs font-semibold ${flagClass(lab.abnormalFlag ?? 'N', lab.isCritical)}`}>
+                    {lab.isCritical ? 'CRITICAL · ' : ''}{flagLabel(lab.abnormalFlag ?? 'N')}
+                  </span>
                 </div>
               </div>
 
               <p className="text-sm font-medium">{lab.result}</p>
-              {lab.kind === 'result' && lab.isCritical ? (
+              {lab.isCritical ? (
                 <p className={`mt-1 text-xs ${lab.acknowledgedAt ? 'text-emerald-700' : 'text-red-700'}`}>{lab.acknowledgedAt ? `Acknowledged ${formatDate(lab.acknowledgedAt)}` : 'Critical value — not yet acknowledged'}</p>
               ) : null}
               {lab.comment ? <p className="mt-1 whitespace-pre-wrap text-xs text-gray-500">{lab.comment}</p> : null}
@@ -318,26 +219,6 @@ const Labs: React.FC = () => {
         )}
       </div>
 
-      {showExplanationPopup && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center">
-          <div className="bg-white p-6 max-w-2xl rounded-lg">
-            <div className="flex justify-between mb-3">
-              <h4 className="font-semibold">
-                AI Explanation — {selectedLabName}
-              </h4>
-              <button onClick={() => setShowExplanationPopup(false)}>
-                <FaTimes />
-              </button>
-            </div>
-
-            {explanationLoading ? (
-              <p>Generating explanation...</p>
-            ) : (
-              <p>{explanation}</p>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 };

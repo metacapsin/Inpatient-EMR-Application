@@ -12,6 +12,7 @@ import { AdtPatientWorkflowModal } from '../adt/AdtPatientWorkflowModal';
 import { EncounterStatusBadge } from './EncounterStatusBadge';
 import { EncounterActionButtons } from './EncounterActionButtons';
 import { IoHeaderBadge } from './IoHeaderBadge';
+import { ChartSafetyBanners } from './ChartSafetyBanners';
 import type { EncounterHeaderAdtModalState, EncounterStatusVariant } from './encounterHeaderTypes';
 
 const HEADER_VALUE_BADGE_CLASS =
@@ -57,9 +58,9 @@ export function EncounterHeader({ patient }: EncounterHeaderProps) {
     const bedsQuery = useQuery({
         queryKey: ['beds', 'emr-list'],
         queryFn: fetchEmrBedList,
-        staleTime: 0,
-        refetchOnMount: 'always',
-        refetchOnWindowFocus: true,
+        // The header only needs the bed label; ADT mutations invalidate this key explicitly.
+        staleTime: 30_000,
+        refetchOnWindowFocus: false,
     });
 
     const availableBeds = useMemo(
@@ -162,6 +163,7 @@ export function EncounterHeader({ patient }: EncounterHeaderProps) {
                     />
                 </div>
             </header>
+            <ChartSafetyBanners patientId={patient.id} encounterId={session?.encounterId?.trim() || undefined} />
 
             {adtModal ? (
                 <AdtPatientWorkflowModal

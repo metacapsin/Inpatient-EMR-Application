@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import IconSparkles from '../Icon/IconSparkles';
-import { IRootState } from '../../store';
+import { IRootState, AppDispatch } from '../../store';
 import { toggleTheme } from '../../store/themeConfigSlice';
-import { logout } from '../../store/authSlice';
+import { logoutUser } from '../../store/authSlice';
 import Dropdown from '../Dropdown';
 import { notificationsAPI } from '../../services/api';
 import IconXCircle from '../Icon/IconXCircle';
@@ -23,9 +23,12 @@ import { cn } from '@/lib/utils';
 const Header = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const dispatch = useDispatch();
+    const dispatch = useDispatch<AppDispatch>();
     const user = useSelector((state: IRootState) => state.auth.user);
     const patientData = useSelector((state: IRootState) => state.auth.patientData);
+    // The AI assistant works on a chart; carry the currently open patient so staff land on the right context.
+    const facesheetPatientId = useSelector((state: IRootState) => state.facesheet.activePatientId);
+    const aiAssistantHref = facesheetPatientId ? `/app/ai-assistant?patientId=${encodeURIComponent(facesheetPatientId)}` : '/app/ai-assistant';
 
     const patient = patientData?.data ?? patientData;
     const displayName =
@@ -48,7 +51,9 @@ const Header = () => {
         null;
 
     const handleLogout = () => {
-        dispatch(logout());
+        // Revokes the refresh-token cookie server-side (SEC-07) — a plain dispatch(logout())
+        // only ever forgot the session locally, leaving the server-side token valid for 7 more days.
+        dispatch(logoutUser());
         navigate('/login');
     };
 
@@ -414,7 +419,7 @@ const Header = () => {
                             </Dropdown>
                         </div>
                         <NavLink
-                            to="/app/ai-assistant"
+                            to={aiAssistantHref}
                             className={emrHeaderUtilityBtnClass}
                             title="AI Assistant"
                             aria-label="AI Assistant"

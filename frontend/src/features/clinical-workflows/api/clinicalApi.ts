@@ -3,6 +3,7 @@ import type {
     ClinicalAlertRow,
     ClinicalApiResponse,
     CpoeOrderRow,
+    HpWorklistRow,
     InpatientVitalRow,
     NursingNoteRow,
     PhysicianNote,
@@ -34,6 +35,16 @@ export async function signPhysicianNote(id: string) {
 
 export async function addPhysicianNoteAddendum(id: string, text: string) {
     const { data } = await api.post<ClinicalApiResponse<PhysicianNote>>(`${BASE}/notes/addendum/${id}`, { text });
+    return data;
+}
+
+export async function cosignPhysicianNote(id: string) {
+    const { data } = await api.post<ClinicalApiResponse<PhysicianNote>>(`${BASE}/notes/cosign/${id}`, {});
+    return data;
+}
+
+export async function fetchHpWorklist() {
+    const { data } = await api.get<ClinicalApiResponse<HpWorklistRow[]>>(`${BASE}/hp-worklist`);
     return data;
 }
 

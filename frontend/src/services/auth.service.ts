@@ -67,7 +67,6 @@ export function parseLoginResponse(data: unknown): {
 export const authService = {
   login: (body: LoginCredentials): Promise<AxiosResponse<unknown>> => {
     const payload = { username: body.username.trim(), password: body.password.trim() };
-    console.log('[login] POST /login payload:', payload);
     return api.post('/login', payload, {
       headers: { 'Content-Type': 'application/json' },
     });

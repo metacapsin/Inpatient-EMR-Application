@@ -94,7 +94,11 @@ bedReservationsRouter.post('/api/beds/:bedId/reserve', clinical, h(async (req, r
             const existing = (await db.query(`SELECT * FROM bed_reservations WHERE bed_id = $1 AND status = 'active'`, [bed.id])).rows[0];
             throw conflict(existing ? `Bed is already held for another patient until ${iso(existing.expires_at)}` : 'Bed is on manual hold');
         }
-        if (!['available', 'dirty'].includes(fresh.status)) throw conflict(`Bed is ${fresh.status} and cannot be reserved`);
+        // SAF-22: reserving a 'dirty' bed used to be allowed — the bed moved to 'hold' but its EVS
+        // job stayed open, so assertBedFree() would always refuse the eventual admission anyway. That
+        // produced a hold nobody could ever actually consume, locking the bed out of normal use for
+        // nothing. Only an already-clean, available bed can be put on hold now.
+        if (fresh.status !== 'available') throw conflict(`Bed is ${fresh.status} and cannot be reserved`);
         const occ = await db.query(`SELECT 1 FROM encounters WHERE bed_id = $1 AND status <> 'discharged'`, [bed.id]);
         if (occ.rowCount) throw conflict('That bed is occupied');
 

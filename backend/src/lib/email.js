@@ -16,9 +16,9 @@ function getTransporter() {
             port: config.smtp.port,
             secure: config.smtp.port === 465,
             auth: config.smtp.user ? { user: config.smtp.user, pass: config.smtp.pass } : undefined,
-            // Matches the known-working Gmail SMTP config already used elsewhere in this project
-            // (EMR-Backend's api/services/sendemail.js) — harmless for other providers too.
-            tls: { rejectUnauthorized: false },
+            // SEC-12: real certificate verification (nodemailer's default) — this used to disable it
+            // outright, which let anyone on the network path between here and the SMTP server read or
+            // alter invite/reset emails undetected.
         });
     } catch (e) {
         transporterInitFailed = true;

@@ -2,13 +2,20 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { config } from '../config.js';
+import { config, devTokensAllowed } from '../config.js';
 import { query, withTx } from '../db/pool.js';
 import { badRequest, conflict, created, h, notFound, ok, parse, row, rows } from '../lib/http.js';
 import { requirePlatformAuth } from '../middleware/platformAuth.js';
+import { auditMiddleware } from '../middleware/audit.js';
+import { recordAuditEvent } from '../lib/audit.js';
 import { sendEmail } from '../lib/email.js';
 
 export const platformAdminRouter = Router();
+// Every platform-admin route below takes auditMiddleware as its own handler-chain entry (never
+// platformAdminRouter.use(...) — this router, like every router in app.js, is mounted at "/" with
+// no prefix, so an unprefixed .use() here would run for every request in the whole app, not just
+// this router's own routes; see memory note backend_router_middleware_gotcha). The handlers below
+// additionally call recordAuditEvent() for the specific, higher-value events (plan item 3).
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
@@ -49,6 +56,7 @@ async function sendInviteEmail(email, tenantName, resetToken) {
 platformAdminRouter.get(
     '/api/platform/tenants',
     requirePlatformAuth,
+    auditMiddleware,
     h(async (req, res) => {
         const r = await query(
             `SELECT t.*, (SELECT count(*)::int FROM users u WHERE u.tenant_id = t.id) AS user_count
@@ -62,12 +70,13 @@ platformAdminRouter.get(
 platformAdminRouter.post(
     '/api/platform/tenants',
     requirePlatformAuth,
+    auditMiddleware,
     h(async (req, res) => {
         const b = parse(
             z.object({
                 name: z.string().trim().min(1).max(200),
                 plan: z.string().trim().max(100).optional(),
-                enabledModules: z.array(z.string().trim().min(1).max(100)).default(['adt', 'patients', 'medication', 'billing', 'staffing']),
+                enabledModules: z.array(z.string().trim().min(1).max(100)).default(['adt', 'patients', 'medication', 'billing', 'staffing', 'ai']),
             }),
             req.body,
         );
@@ -78,6 +87,15 @@ platformAdminRouter.post(
                 [b.name, b.plan ?? null, stripeSubscriptionId, JSON.stringify(b.enabledModules)],
             )
         ).rows[0];
+        await recordAuditEvent({
+            tenantId: t.id,
+            actorType: 'platform_admin',
+            actorId: req.platformAdmin.id,
+            action: 'create',
+            resource: 'tenant',
+            resourceId: t.id,
+            details: { name: b.name, plan: b.plan ?? null, enabledModules: b.enabledModules },
+        });
         created(res, row(t));
     }),
 );
@@ -86,6 +104,7 @@ platformAdminRouter.post(
 platformAdminRouter.post(
     '/api/platform/tenants/:id/invite-admin',
     requirePlatformAuth,
+    auditMiddleware,
     h(async (req, res) => {
         const b = parse(
             z.object({
@@ -114,6 +133,15 @@ platformAdminRouter.post(
             return u;
         });
         const { sent } = await sendInviteEmail(user.email, tenant.name, resetToken);
+        await recordAuditEvent({
+            tenantId: tenant.id,
+            actorType: 'platform_admin',
+            actorId: req.platformAdmin.id,
+            action: 'create',
+            resource: 'user',
+            resourceId: user.id,
+            details: { email: user.email, role: user.role, emailSent: sent },
+        });
         created(res, {
             id: user.id,
             _id: user.id,
@@ -121,9 +149,9 @@ platformAdminRouter.post(
             tenantId: user.tenant_id,
             role: user.role,
             emailSent: sent,
-            // Never leak the raw token in production, even when SMTP isn't configured there. Outside
-            // production, hand it back so the invite link is usable without digging through server logs.
-            ...(config.env === 'production' ? {} : { devSetPasswordToken: resetToken }),
+            // Gated on an explicit flag (SEC-20), not NODE_ENV: a deployment that forgets to set
+            // NODE_ENV=production would otherwise leak this. Off by default; on in dev/test.
+            ...(devTokensAllowed() ? { devSetPasswordToken: resetToken } : {}),
         });
     }),
 );
@@ -132,6 +160,7 @@ platformAdminRouter.post(
 platformAdminRouter.patch(
     '/api/platform/tenants/:id',
     requirePlatformAuth,
+    auditMiddleware,
     h(async (req, res) => {
         const b = parse(
             z.object({
@@ -148,6 +177,15 @@ platformAdminRouter.patch(
             [b.status ?? null, b.plan ?? null, b.enabledModules ? JSON.stringify(b.enabledModules) : null, req.params.id],
         );
         if (!r.rowCount) throw notFound('Tenant not found');
+        await recordAuditEvent({
+            tenantId: r.rows[0].id,
+            actorType: 'platform_admin',
+            actorId: req.platformAdmin.id,
+            action: 'update',
+            resource: 'tenant',
+            resourceId: r.rows[0].id,
+            details: { status: b.status ?? undefined, plan: b.plan ?? undefined, enabledModules: b.enabledModules ?? undefined },
+        });
         ok(res, row(r.rows[0]));
     }),
 );
@@ -156,6 +194,7 @@ platformAdminRouter.patch(
 platformAdminRouter.get(
     '/api/platform/tenants/:id/deletion-impact',
     requirePlatformAuth,
+    auditMiddleware,
     h(async (req, res) => {
         const tenant = (await query('SELECT id, name FROM tenants WHERE id = $1', [req.params.id])).rows[0];
         if (!tenant) throw notFound('Tenant not found');
@@ -179,12 +218,32 @@ platformAdminRouter.get(
 platformAdminRouter.delete(
     '/api/platform/tenants/:id',
     requirePlatformAuth,
+    auditMiddleware,
     h(async (req, res) => {
         const { confirmName } = parse(z.object({ confirmName: z.string().trim().min(1) }), req.body);
         const tenant = (await query('SELECT id, name FROM tenants WHERE id = $1', [req.params.id])).rows[0];
         if (!tenant) throw notFound('Tenant not found');
         if (confirmName !== tenant.name) throw badRequest('Tenant name does not match — type the exact tenant name to confirm deletion');
+        const counts = (
+            await query(
+                `SELECT
+                    (SELECT count(*)::int FROM patients WHERE tenant_id = $1) AS patients,
+                    (SELECT count(*)::int FROM users WHERE tenant_id = $1) AS users,
+                    (SELECT count(*)::int FROM encounters WHERE tenant_id = $1) AS encounters`,
+                [tenant.id],
+            )
+        ).rows[0];
         await query('DELETE FROM tenants WHERE id = $1', [tenant.id]);
+        // tenantId is null, not tenant.id — the row (and its FK) no longer exists once the tenant is gone.
+        await recordAuditEvent({
+            tenantId: null,
+            actorType: 'platform_admin',
+            actorId: req.platformAdmin.id,
+            action: 'delete',
+            resource: 'tenant',
+            resourceId: tenant.id,
+            details: { name: tenant.name, patientCount: counts.patients, userCount: counts.users, encounterCount: counts.encounters },
+        });
         ok(res, { id: tenant.id, deleted: true });
     }),
 );

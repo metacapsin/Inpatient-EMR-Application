@@ -1,4 +1,5 @@
 import { medRecComplete } from './medRec.js';
+import { AMA_CODE, EXPIRED_CODE } from './dispositionCodes.js';
 
 export const DEFAULT_CHECKLIST = [
     { label: 'Medication reconciliation completed', blocksDischarge: true, ownerRole: 'nursing' },
@@ -24,8 +25,14 @@ export async function ensureChecklist(db, tenantId, encounterId) {
  */
 export async function computeDischargeGates(db, tenantId, encounterId) {
     const enc = (await db.query('SELECT id, status FROM encounters WHERE id = $1 AND tenant_id = $2', [encounterId, tenantId])).rows[0];
-    const summary = (await db.query('SELECT status FROM discharge_summaries WHERE encounter_id = $1', [encounterId])).rows[0];
+    const summary = (await db.query('SELECT status, disposition FROM discharge_summaries WHERE encounter_id = $1', [encounterId])).rows[0];
     const signed = summary?.status === 'signed';
+    // SAF-12/Bucket C: AMA and deceased are structured, gated discharges — if the disposition says
+    // AMA or Expired, the matching structured record must exist before the encounter can be confirmed.
+    const needsAma = summary?.disposition === AMA_CODE;
+    const needsDeath = summary?.disposition === EXPIRED_CODE;
+    const hasAma = needsAma ? Boolean((await db.query('SELECT 1 FROM ama_discharges WHERE encounter_id = $1', [encounterId])).rowCount) : true;
+    const hasDeath = needsDeath ? Boolean((await db.query('SELECT 1 FROM death_records WHERE encounter_id = $1', [encounterId])).rowCount) : true;
     const medRec = await medRecComplete(db, encounterId, 'discharge');
     const openTasks = (await db.query(
         `SELECT label FROM discharge_checklist_tasks WHERE encounter_id = $1 AND blocks_discharge AND NOT completed ORDER BY sort_order`,
@@ -48,6 +55,15 @@ export async function computeDischargeGates(db, tenantId, encounterId) {
             id: 'gate-encounter-status', category: 'operational', severity: 'hard', ownerRole: 'nursing', resolved: Boolean(enc) && enc.status !== 'discharged',
             message: !enc ? 'Encounter not found' : enc.status === 'discharged' ? 'Encounter is already discharged' : 'Encounter is active',
         },
+        // Only surfaced when the disposition actually requires them — not relevant to an ordinary discharge.
+        ...(needsAma ? [{
+            id: 'gate-ama-record', category: 'clinical', severity: 'hard', ownerRole: 'provider', resolved: hasAma,
+            message: hasAma ? 'AMA record on file' : 'Disposition is "Left against medical advice" — record the AMA discharge (reason, witness, signature) first',
+        }] : []),
+        ...(needsDeath ? [{
+            id: 'gate-death-record', category: 'clinical', severity: 'hard', ownerRole: 'provider', resolved: hasDeath,
+            message: hasDeath ? 'Death record on file' : 'Disposition is "Expired" — record the death (time, pronouncing physician) first',
+        }] : []),
     ];
     const blocking = gates.filter((g) => g.severity === 'hard' && !g.resolved);
     return { gates, blocking, blocked: blocking.length > 0, summarySigned: signed, medRecComplete: medRec, encounter: enc ?? null };

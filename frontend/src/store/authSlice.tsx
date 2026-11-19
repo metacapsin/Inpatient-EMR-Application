@@ -1,15 +1,13 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import axios from 'axios';
 import type { PremiumStatus } from '../types/premium';
 import api from '../services/api';
 import { parseLoginResponse } from '../services/auth.service';
 import {
-    getStoredRefreshToken,
+    clearStoredTokens,
     isAccessTokenExpired,
     persistAuthPair,
+    refreshAccessToken,
 } from '../services/auth-tokens';
-
-const BASE_URL = 'https://devapi.mdcareproviders.com';
 
 // Define types
 export interface User {
@@ -39,31 +37,26 @@ interface AuthState {
     premiumSubscription: PremiumStatus | null;
     patientData: Record<string, any> | null;
     loading: boolean;
+    /** Set when /login answers `mfa_required` — the user must submit a TOTP/backup code to finish. */
+    mfaChallenge: { mfaToken: string } | null;
+    /** True once the first bootstrapAuth() attempt (success or failure) has resolved. ProtectedRoute
+     *  waits for this instead of redirecting to /login on the render before it's had a chance to run
+     *  — otherwise a genuinely still-logged-in user would flash through the login page on every
+     *  reload, since the access token itself is never persisted across reloads (SEC-09). */
+    bootstrapped: boolean;
 }
 
+// SEC-09: the access token is in-memory only now (see auth-tokens.ts), so there is nothing to read
+// back out of localStorage on a fresh page load — any old 'token' value left over from before this
+// change is stale and cleared. bootstrapAuth() (below) re-derives a session from the httpOnly
+// refresh cookie instead.
 const getInitialToken = (): string | null => {
-    const token = localStorage.getItem('token');
-    if (!token) return null;
-    if (!isAccessTokenExpired(token)) {
-        return token;
+    const stale = localStorage.getItem('token');
+    if (stale) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
     }
-    if (getStoredRefreshToken()) {
-        return token;
-    }
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('role');
-    localStorage.removeItem('patientData');
     return null;
-};
-
-const getInitialPatientData = (): Record<string, any> | null => {
-    try {
-        const raw = localStorage.getItem('patientData');
-        return raw ? JSON.parse(raw) : null;
-    } catch {
-        return null;
-    }
 };
 
 const getInitialPremiumStatus = (): PremiumStatus | null => {
@@ -84,17 +77,12 @@ const initialState: AuthState = {
     role: localStorage.getItem('role'),
     cloudSubscriptions: null,
     premiumSubscription: getInitialPremiumStatus(),
-    patientData: getInitialPatientData(),
+    // SEC-09: no longer cached in localStorage — repopulated from the server after bootstrap/login.
+    patientData: null,
     loading: false,
+    mfaChallenge: null,
+    bootstrapped: false,
 };
-
-// Configure Axios base URL
-axios.defaults.baseURL = BASE_URL;
-
-// Set initial auth header if token exists
-if (initialState.token) {
-    axios.defaults.headers.common['Authorization'] = `Bearer ${initialState.token}`;
-}
 
 /** EMR-Backend login only returns tokens; staff profile (incl. role) comes from GET /Users/getUserProfile. */
 function roleFromProfilePayload(raw: unknown): string | null {
@@ -167,6 +155,29 @@ export const hydrateStaffSession = createAsyncThunk(
     }
 );
 
+async function finishLoginResponse(email: string, data: unknown) {
+    const parsed = parseLoginResponse(data);
+    if (!parsed) return null;
+
+    let userPayload: User = parsed.user
+        ? ({ ...parsed.user, email: String((parsed.user as User).email ?? email) } as User)
+        : ({ email } as User);
+    let role: string | null = parsed.role;
+
+    persistAuthPair(parsed.token);
+
+    if (!role || !userPayload.role) {
+        const hydrated = await fetchStaffProfileAfterAuth(email, userPayload);
+        userPayload = hydrated.user;
+        role = hydrated.role ?? role;
+    } else {
+        localStorage.setItem('user', JSON.stringify(userPayload));
+        if (role) localStorage.setItem('role', role);
+    }
+
+    return { mfaRequired: false as const, token: parsed.token, user: userPayload, role, data };
+}
+
 // Async thunks
 export const loginUser = createAsyncThunk(
     'auth/login',
@@ -176,38 +187,17 @@ export const loginUser = createAsyncThunk(
                 username: email.trim(),
                 password: password.trim(),
             };
-            console.log('[login] POST /login payload:', payload);
             const response = await api.post('/login', payload, {
                 headers: { 'Content-Type': 'application/json' },
             });
-            const parsed = parseLoginResponse(response.data);
-            if (!parsed) {
-                return rejectWithValue('Invalid login response from server');
+            const body = response.data as { status?: string; mfaToken?: string };
+            if (body?.status === 'mfa_required' && body.mfaToken) {
+                return { mfaRequired: true as const, mfaToken: body.mfaToken };
             }
 
-            let userPayload: User = parsed.user
-                ? ({ ...parsed.user, email: String((parsed.user as User).email ?? email) } as User)
-                : ({ email } as User);
-            let role: string | null = parsed.role;
-
-            persistAuthPair(parsed.token, parsed.refreshToken);
-            axios.defaults.headers.common['Authorization'] = `Bearer ${parsed.token}`;
-
-            if (!role || !userPayload.role) {
-                const hydrated = await fetchStaffProfileAfterAuth(email, userPayload);
-                userPayload = hydrated.user;
-                role = hydrated.role ?? role;
-            } else {
-                localStorage.setItem('user', JSON.stringify(userPayload));
-                if (role) localStorage.setItem('role', role);
-            }
-
-            return {
-                token: parsed.token,
-                user: userPayload,
-                role,
-                data: response.data,
-            };
+            const result = await finishLoginResponse(email, response.data);
+            if (!result) return rejectWithValue('Invalid login response from server');
+            return result;
         } catch (error: any) {
             const message =
                 error.response?.data?.message ||
@@ -218,6 +208,46 @@ export const loginUser = createAsyncThunk(
         }
     }
 );
+
+/** Second step after /login answers mfa_required — submits a TOTP code or a backup code. */
+export const verifyMfaCode = createAsyncThunk(
+    'auth/verifyMfaCode',
+    async (
+        { email, mfaToken, code, backupCode }: { email: string; mfaToken: string; code?: string; backupCode?: string },
+        { rejectWithValue },
+    ) => {
+        try {
+            const response = await api.post('/auth/mfa/verify', { mfaToken, code, backupCode });
+            const result = await finishLoginResponse(email, response.data);
+            if (!result) return rejectWithValue('Invalid login response from server');
+            return result;
+        } catch (error: any) {
+            const message = error.response?.data?.message || error.message || 'Invalid code';
+            return rejectWithValue(typeof message === 'string' ? message : 'Invalid code');
+        }
+    },
+);
+
+/** Silently restores a session from the httpOnly refresh cookie on app load (SEC-09 — the access
+ *  token itself is never persisted, so a fresh page load has none until this succeeds). */
+export const bootstrapAuth = createAsyncThunk('auth/bootstrap', async (_, { rejectWithValue }) => {
+    const token = await refreshAccessToken();
+    if (!token) return rejectWithValue('No session');
+    const hydrated = await fetchStaffProfileAfterAuth('', { email: '' } as User);
+    return { token, user: hydrated.user, role: hydrated.role };
+});
+
+/** User-initiated sign-out: revokes the refresh-token cookie server-side (POST /auth/logout) before
+ *  clearing client state. The `logout()` reducer alone only ever forgot the session locally — the
+ *  server-side token stayed valid until its own 7-day expiry, which was itself part of SEC-07. */
+export const logoutUser = createAsyncThunk('auth/logoutUser', async (_, { dispatch }) => {
+    try {
+        await api.post('/auth/logout');
+    } catch {
+        // Best-effort — still clear the local session even if the network call fails.
+    }
+    dispatch(logout());
+});
 
 export const registerUser = createAsyncThunk(
     'auth/register',
@@ -233,7 +263,10 @@ export const registerUser = createAsyncThunk(
         { rejectWithValue }
     ) => {
         try {
-            const response = await axios.post('/auth/register', {
+            // Previously a bare `axios.post`, which only worked because of the now-removed
+            // axios.defaults.baseURL hardcoded to a third-party domain (SEC-19) — `api` is
+            // correctly configured against this app's own backend and carries the interceptors.
+            const response = await api.post('/auth/register', {
                 username,
                 email,
                 password,
@@ -241,17 +274,15 @@ export const registerUser = createAsyncThunk(
                 industry,
                 subdomain,
             });
-            const { token, user, role, refreshToken } = response.data as {
+            const { token, user, role } = response.data as {
                 token: string;
                 user: User;
                 role: string;
-                refreshToken?: string;
             };
 
-            persistAuthPair(token, refreshToken ?? null);
+            persistAuthPair(token);
             localStorage.setItem('role', role);
             localStorage.setItem('user', JSON.stringify(user));
-            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
             return { token, user, role };
         } catch (error: any) {
@@ -281,16 +312,13 @@ const authSlice = createSlice({
     name: 'auth',
     initialState,
     reducers: {
+        // Pure Redux state now — auth-tokens.ts owns the actual token storage (in-memory, SEC-09)
+        // and the `api` interceptor reads it fresh on every request, so there's nothing else to do
+        // here. This is also what registerAccessTokenSync (main.tsx) dispatches after a background
+        // silent refresh, to keep this state in sync with the token auth-tokens.ts just rotated.
         setToken: (state, action: PayloadAction<string | null>) => {
             state.token = action.payload;
-            if (action.payload) {
-                localStorage.setItem('token', action.payload);
-                axios.defaults.headers.common['Authorization'] = `Bearer ${action.payload}`;
-            } else {
-                localStorage.removeItem('token');
-                localStorage.removeItem('refreshToken');
-                delete axios.defaults.headers.common['Authorization'];
-            }
+            if (!action.payload) clearStoredTokens();
         },
         setUser: (state, action: PayloadAction<User | null>) => {
             state.user = action.payload;
@@ -308,13 +336,10 @@ const authSlice = createSlice({
                 localStorage.removeItem('role');
             }
         },
+        // SEC-09: no longer mirrored to localStorage — this is Redux-only state, refetched from the
+        // server as needed rather than cached across reloads.
         setPatientData: (state, action: PayloadAction<Record<string, any> | null>) => {
             state.patientData = action.payload;
-            if (action.payload) {
-                localStorage.setItem('patientData', JSON.stringify(action.payload));
-            } else {
-                localStorage.removeItem('patientData');
-            }
         },
         setPremiumSubscription: (state, action: PayloadAction<PremiumStatus | null>) => {
             state.premiumSubscription = action.payload;
@@ -331,13 +356,16 @@ const authSlice = createSlice({
             state.cloudSubscriptions = null;
             state.premiumSubscription = null;
             state.patientData = null;
+            state.mfaChallenge = null;
+            clearStoredTokens();
+            // 'token'/'refreshToken'/'patientData' are no longer written anywhere (SEC-09), but a
+            // browser that still has them from before this change gets cleaned up here regardless.
             localStorage.removeItem('token');
             localStorage.removeItem('refreshToken');
             localStorage.removeItem('role');
             localStorage.removeItem('user');
             localStorage.removeItem('patientData');
             localStorage.removeItem('premiumSubscription');
-            delete axios.defaults.headers.common['Authorization'];
         },
         updateTenantSubscriptionStatus: (state, action: PayloadAction<string>) => {
             if (state.user) {
@@ -351,25 +379,26 @@ const authSlice = createSlice({
                 localStorage.setItem('user', JSON.stringify(state.user));
             }
         },
+        // There's no stored refresh token to check for anymore (httpOnly) before deciding whether to
+        // clear state — the `api` interceptor already attempts a silent refresh proactively before
+        // every request, so by the time this ever sees an expired token, a refresh has already been
+        // tried and failed. Simply clearing state here is correct, not a behavior regression.
         checkTokenExpiration: (state) => {
             if (!state.token) return;
             if (!isAccessTokenExpired(state.token)) return;
-            if (getStoredRefreshToken()) {
-                return;
-            }
             state.token = null;
             state.user = null;
             state.role = null;
             state.cloudSubscriptions = null;
             state.premiumSubscription = null;
             state.patientData = null;
+            clearStoredTokens();
             localStorage.removeItem('token');
             localStorage.removeItem('refreshToken');
             localStorage.removeItem('role');
             localStorage.removeItem('user');
             localStorage.removeItem('patientData');
             localStorage.removeItem('premiumSubscription');
-            delete axios.defaults.headers.common['Authorization'];
         },
     },
     extraReducers: (builder) => {
@@ -379,12 +408,39 @@ const authSlice = createSlice({
             })
             .addCase(loginUser.fulfilled, (state, action) => {
                 state.loading = false;
+                if (action.payload.mfaRequired) {
+                    state.mfaChallenge = { mfaToken: action.payload.mfaToken };
+                    return;
+                }
+                state.mfaChallenge = null;
                 state.token = action.payload.token;
                 state.user = action.payload.user;
                 state.role = action.payload.role;
             })
             .addCase(loginUser.rejected, (state) => {
                 state.loading = false;
+            })
+            .addCase(verifyMfaCode.pending, (state) => {
+                state.loading = true;
+            })
+            .addCase(verifyMfaCode.fulfilled, (state, action) => {
+                state.loading = false;
+                state.mfaChallenge = null;
+                state.token = action.payload.token;
+                state.user = action.payload.user;
+                state.role = action.payload.role;
+            })
+            .addCase(verifyMfaCode.rejected, (state) => {
+                state.loading = false;
+            })
+            .addCase(bootstrapAuth.fulfilled, (state, action) => {
+                state.bootstrapped = true;
+                state.token = action.payload.token;
+                state.user = action.payload.user;
+                state.role = action.payload.role;
+            })
+            .addCase(bootstrapAuth.rejected, (state) => {
+                state.bootstrapped = true;
             })
             .addCase(registerUser.pending, (state) => {
                 state.loading = true;

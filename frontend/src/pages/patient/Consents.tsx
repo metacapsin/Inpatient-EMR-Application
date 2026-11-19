@@ -1,4 +1,5 @@
 import { useSelector } from 'react-redux';
+import { MockFlagBanner } from '../../components/shared/MockFlagBanner';
 import usePatientId from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import type { IRootState } from '../../store';
@@ -22,6 +23,7 @@ export default function Consents() {
 
     return (
         <div className={`${moduleRootClass} flex min-h-0 flex-1 flex-col overflow-hidden`}>
+            <MockFlagBanner flag="consent" feature="Consent management" />
             <ConsentsModule patientId={patientId.trim()} patientName={patientName} patientMrn={patientMrn} />
         </div>
     );

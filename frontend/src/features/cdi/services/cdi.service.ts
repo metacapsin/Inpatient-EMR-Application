@@ -12,7 +12,7 @@ import {
 } from '../mock/cdiMockStore';
 
 /** Set `VITE_CDI_DENIAL_MOCK=false` to use the Express/PostgreSQL backend instead of the in-memory mock store. */
-const USE_MOCK = import.meta.env.VITE_CDI_DENIAL_MOCK !== 'false';
+const USE_MOCK = import.meta.env.VITE_CDI_DENIAL_MOCK === 'true';
 
 async function viaApi<T>(call: () => Promise<{ data: { data?: T } }>): Promise<ServiceResult<T>> {
     try {

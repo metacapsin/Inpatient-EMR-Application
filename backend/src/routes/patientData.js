@@ -47,7 +47,7 @@ patientDataRouter.post('/api/health/metrics/add', clinical, h(async (req, res) =
     created(res, metricOut(r.rows[0]));
 }));
 
-patientDataRouter.get('/api/health/metrics/patient/:patientId', h(async (req, res) => {
+patientDataRouter.get('/api/health/metrics/patient/:patientId', clinical, h(async (req, res) => {
     const r = await query(
         `SELECT * FROM health_metrics WHERE tenant_id = $1 AND patient_id = $2 ORDER BY recorded_at DESC LIMIT 1000`,
         [req.user.tenantId, req.params.patientId],
@@ -56,7 +56,7 @@ patientDataRouter.get('/api/health/metrics/patient/:patientId', h(async (req, re
 }));
 
 // Latest reading per metric type, keyed by metric type.
-patientDataRouter.get('/api/health/metrics/latest', h(async (req, res) => {
+patientDataRouter.get('/api/health/metrics/latest', clinical, h(async (req, res) => {
     const { patientId } = parse(z.object({ patientId: z.string().min(1) }), req.query);
     const r = await query(
         `SELECT DISTINCT ON (metric_type) * FROM health_metrics
@@ -66,7 +66,7 @@ patientDataRouter.get('/api/health/metrics/latest', h(async (req, res) => {
     ok(res, Object.fromEntries(r.rows.map((m) => [m.metric_type, metricOut(m)])));
 }));
 
-patientDataRouter.get('/api/health/metrics/trend', h(async (req, res) => {
+patientDataRouter.get('/api/health/metrics/trend', clinical, h(async (req, res) => {
     const q = parse(
         z.object({ patientId: z.string().min(1), metricType: z.enum(METRICS), period: z.coerce.number().int().min(1).max(365).default(30) }),
         req.query,
@@ -109,7 +109,7 @@ const visitorBody = z.object({
     status: z.string().trim().max(30).default('scheduled'),
 });
 
-patientDataRouter.get('/Visitors/getVisitorList', h(async (req, res) => {
+patientDataRouter.get('/Visitors/getVisitorList', clinical, h(async (req, res) => {
     const pid = req.query.patientId ?? req.query.PatientId;
     const params = [req.user.tenantId];
     let sql = 'SELECT * FROM visitors WHERE tenant_id = $1';
@@ -174,7 +174,7 @@ const familyBody = z.object({
     status: z.boolean().default(true),
 });
 
-patientDataRouter.get('/PatientFamily/getFamilyContactList', h(async (req, res) => {
+patientDataRouter.get('/PatientFamily/getFamilyContactList', clinical, h(async (req, res) => {
     const pid = req.query.patientId ?? req.query.PatientId;
     const params = [req.user.tenantId];
     let sql = 'SELECT * FROM family_contacts WHERE tenant_id = $1 AND is_active';

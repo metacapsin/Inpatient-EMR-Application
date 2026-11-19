@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useState } from 'react';
+import { MockFlagBanner } from '../../components/shared/MockFlagBanner';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { ClipboardList } from 'lucide-react';
@@ -229,6 +230,7 @@ export default function CarePlanPage() {
 
     return (
         <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
+            <MockFlagBanner flag="carePlan" feature="Care plan" />
             <header className={CARE_PLAN_PAGE_HEADER_CLASS}>
                 <div className="flex items-start gap-2.5">
                     <div

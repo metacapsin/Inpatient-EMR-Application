@@ -18,6 +18,7 @@ const base = (over: Partial<PatientProblem>): PatientProblem => ({
     icd10Code: 'E11.9',
     icd10Description: 'Type 2 diabetes mellitus without complications',
     status: 'active',
+    isPrincipal: false,
     ...over,
 });
 

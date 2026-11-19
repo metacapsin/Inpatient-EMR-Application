@@ -15,16 +15,11 @@ import {
 import { getPatientsList, type PatientListItem } from '../../services/patient.service';
 import { listActiveEncounters, type ActiveEncounterRow } from '../../services/adt.service';
 import {
-    addChargeLine,
-    deleteChargeLine,
     fetchDischargeReadiness,
     runEligibilityCheck,
     saveDischargeSummaryDraft,
     signDischargeSummary,
-    submitClaimPrep,
-    updateChargeLine,
     updateChecklistTask,
-    updateClaimPrep,
 } from '../../services/dischargeReadiness.service';
 import type { DischargeReadinessView } from '../../types/dischargeReadiness';
 import { DischargeReadinessProvider } from '../../contexts/DischargeReadinessContext';
@@ -107,8 +102,8 @@ function DischargeReadinessLoaded({
                         <div className="min-w-0">
                             <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Discharge workspace</h2>
                             <p className="mt-0.5 max-w-3xl text-[11px] leading-snug text-gray-600 dark:text-gray-400">
-                                Review documentation, operational tasks, charges, eligibility, and billing. Finalize only when all gates are
-                                satisfied.
+                                Review documentation, nursing tasks and insurance eligibility. Finalize is enabled only when the server's
+                                discharge gates are satisfied; charges and claims are not part of this version.
                             </p>
                         </div>
                     </div>
@@ -180,39 +175,7 @@ function DischargeReadinessLoaded({
                         </div>
 
                         <div className={tab === 'charges' ? '' : 'hidden'} aria-hidden={tab !== 'charges'}>
-                            <ChargeCaptureTab
-                                charges={view.charges}
-                                canEdit={canBilling}
-                                onUpdateCharge={async (chargeId, patch) => {
-                                    const res = await updateChargeLine(eid, chargeId, patch);
-                                    if (!res.ok) {
-                                        toast.error(res.message);
-                                        return false;
-                                    }
-                                    setView(res.data);
-                                    return true;
-                                }}
-                                onAddCharge={async (line) => {
-                                    const res = await addChargeLine(eid, line);
-                                    if (!res.ok) {
-                                        toast.error(res.message);
-                                        return false;
-                                    }
-                                    setView(res.data);
-                                    toast.success('Charge added');
-                                    return true;
-                                }}
-                                onDeleteCharge={async (chargeId) => {
-                                    const res = await deleteChargeLine(eid, chargeId);
-                                    if (!res.ok) {
-                                        toast.error(res.message);
-                                        return false;
-                                    }
-                                    setView(res.data);
-                                    toast.success('Charge removed');
-                                    return true;
-                                }}
-                            />
+                            <ChargeCaptureTab section={view.sections?.charges} />
                         </div>
 
                         <div className={tab === 'insurance' ? '' : 'hidden'} aria-hidden={tab !== 'insurance'}>
@@ -232,35 +195,7 @@ function DischargeReadinessLoaded({
                         </div>
 
                         <div className={tab === 'billing' ? '' : 'hidden'} aria-hidden={tab !== 'billing'}>
-                            <BillingTab
-                                claimPrep={view.claimPrep}
-                                canEdit={canBilling}
-                                onSaveClaimPrep={async (patch) => {
-                                    const res = await updateClaimPrep(eid, patch);
-                                    if (!res.ok) {
-                                        toast.error(res.message);
-                                        return false;
-                                    }
-                                    setView(res.data);
-                                    toast.success('Claim prep saved as draft');
-                                    return true;
-                                }}
-                                onSubmitClaim={async () => {
-                                    try {
-                                        const res = await submitClaimPrep(eid);
-                                        if (!res.ok) {
-                                            toast.error(res.message);
-                                            return false;
-                                        }
-                                        setView(res.data);
-                                        toast.success('Claim submitted');
-                                        return true;
-                                    } catch {
-                                        toast.error('Could not submit claim. Please try again.');
-                                        return false;
-                                    }
-                                }}
-                            />
+                            <BillingTab section={view.sections?.claimPrep} />
                         </div>
                     </div>
                 </div>
@@ -457,8 +392,7 @@ export default function DischargeReadinessPage() {
                     </div>
                     {patientId && !encountersLoading && encounters.length === 0 ? (
                         <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                            No active encounter for this patient. You can still open this page with an encounter id in the URL for demo mock
-                            data.
+                            No active encounter for this patient.
                         </p>
                     ) : null}
                 </div>
@@ -485,7 +419,7 @@ export default function DischargeReadinessPage() {
                     <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-600 dark:text-gray-400">
                         Choose a patient and an <strong>active</strong> inpatient encounter, or pass{' '}
                         <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs dark:bg-gray-800">encounterId</code> in the query string.
-                        This hub covers discharge summary, nursing checklist, charges, insurance eligibility, claim preparation, and the{' '}
+                        This hub covers the discharge summary, nursing checklist, insurance eligibility, and the{' '}
                         <strong>only</strong> authorized ADT discharge finalization for the encounter.
                     </p>
                     <div className="mt-8">{renderPatientEncounterForm()}</div>

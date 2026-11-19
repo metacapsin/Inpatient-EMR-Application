@@ -54,6 +54,12 @@ export const PREGNANCY_STATUS_OPTIONS = [
     { label: 'Yes', value: 'Yes' },
 ];
 
+export const CONTRAST_ALLERGY_OPTIONS = [
+    { label: 'None', value: 'none' },
+    { label: 'Unknown', value: 'unknown' },
+    { label: 'Confirmed', value: 'confirmed' },
+];
+
 export const TRANSPORT_OPTIONS = [
     { label: 'No', value: 'false' },
     { label: 'Yes', value: 'true' },

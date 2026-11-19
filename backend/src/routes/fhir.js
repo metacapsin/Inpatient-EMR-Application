@@ -313,11 +313,13 @@ async function readById(req, type, id) {
         }
         if (id.startsWith('lab-')) {
             const rawId = id.slice('lab-'.length);
-            const r = await q(`SELECT * FROM lab_results WHERE id = $1 AND tenant_id = $2 AND patient_id = $3`, [
-                rawId,
-                tenantId,
-                patientId,
-            ]);
+            // SAF-11: release hold — a preliminary result, or a critical one nobody's acknowledged
+            // yet, isn't exposed to the patient-facing API even by direct id.
+            const r = await q(
+                `SELECT * FROM lab_results WHERE id = $1 AND tenant_id = $2 AND patient_id = $3
+                 AND status <> 'preliminary' AND (NOT is_critical OR acknowledged_at IS NOT NULL)`,
+                [rawId, tenantId, patientId],
+            );
             return r.rows[0] ? toFhirLabObservation(r.rows[0]) : null;
         }
         return null;
@@ -403,8 +405,11 @@ async function searchType(req, type) {
         if (!category || category.includes('laboratory') || category.includes('lab')) {
             const params = /** @type {unknown[]} */ ([tenantId, patientId]);
             const lu = lastUpdatedClause(lastUpdated, 'resulted_at', params, 3);
+            // SAF-11: same release hold as the single-resource read above, applied to search too —
+            // otherwise a held result was still reachable via the search/bundle path.
             const r = await q(
-                `SELECT * FROM lab_results WHERE tenant_id = $1 AND patient_id = $2${lu.sql}
+                `SELECT * FROM lab_results WHERE tenant_id = $1 AND patient_id = $2
+                 AND status <> 'preliminary' AND (NOT is_critical OR acknowledged_at IS NOT NULL)${lu.sql}
                  ORDER BY resulted_at DESC LIMIT $${lu.nextIdx}`,
                 [...params, count],
             );
@@ -470,3 +475,34 @@ for (const type of SEARCHABLE) {
         }),
     );
 }
+
+/**
+ * First path segment after '/fhir/' that matches a known resource type, e.g. 'Patient' from '/fhir/Patient/123'.
+ * @param {string} path
+ * @returns {FhirType | null}
+ */
+function resourceTypeFromPath(path) {
+    const segment = path.replace(/^\/fhir\//, '').split('/')[0];
+    return /** @type {FhirType[]} */ (SEARCHABLE).includes(/** @type {FhirType} */ (segment)) ? /** @type {FhirType} */ (segment) : null;
+}
+
+// requireSmartAuth rejects a missing/invalid/expired bearer token (or an unscoped request) before
+// any fhirH-wrapped handler runs, so those errors never reach fhirH's own try/catch — without this,
+// an unauthenticated FHIR request was never written to fhir_access_log at all. Must be registered
+// after every route above: Express only routes an error to middleware declared later in the stack.
+fhirRouter.use(
+    /**
+     * @param {unknown} err
+     * @param {import('express').Request} req
+     * @param {import('express').Response} res
+     * @param {import('express').NextFunction} _next
+     */
+    (err, req, res, _next) => {
+        const status = err instanceof ApiError ? err.status : 500;
+        const message = err instanceof ApiError ? err.message : 'Internal server error';
+        if (!(err instanceof ApiError)) console.error('[fhir]', err);
+        logAccess(req, status, resourceTypeFromPath(req.path), null).finally(() => {
+            sendFhir(res, status, operationOutcome(status, message));
+        });
+    },
+);

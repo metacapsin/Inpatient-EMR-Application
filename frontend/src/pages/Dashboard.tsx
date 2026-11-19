@@ -18,7 +18,6 @@ import { useSelector } from 'react-redux';
 import type { IRootState } from '../store';
 import { canNursingActions, normalizeRoles } from '../features/clinical-workflows/clinicalRole';
 import { IpdPpeAlertStrip } from '../components/ipd/IpdPpeAlertStrip';
-import { IpdPriorAuthExpiringStrip } from '../components/ipd/IpdPriorAuthExpiringStrip';
 import { StaffCoverageWidget } from '../components/ipd/StaffCoverageWidget';
 import { IpdBedBoardTable } from '../components/ipd/IpdBedBoardTable';
 import { IpdKpiRow } from '../components/ipd/IpdKpiRow';
@@ -198,7 +197,6 @@ const Dashboard: React.FC = () => {
             <div className={ipdMetricsBandClass}>
                 <IpdKpiRow kpis={payload.kpis} loading={dashboardQuery.isFetching && !dashboardQuery.isLoading} />
                 <IpdPpeAlertStrip bedRows={payload.bedBoard} />
-                <IpdPriorAuthExpiringStrip bedRows={payload.bedBoard} />
                 <StaffCoverageWidget />
             </div>
 

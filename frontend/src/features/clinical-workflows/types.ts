@@ -12,6 +12,16 @@ export interface NoteCmsCompliance {
     rule: string;
 }
 
+export interface NoteVersion {
+    version: number;
+    content: Record<string, string>;
+    richText?: string | null;
+    title?: string | null;
+    checksum: string;
+    editedBy: string;
+    editedAt: string;
+}
+
 export interface PhysicianNote {
     id?: string;
     patientId: string;
@@ -28,9 +38,27 @@ export interface PhysicianNote {
     signedAt?: string | null;
     createdAt?: string;
     updatedAt?: string;
-    versionHistory?: unknown[];
+    versionHistory?: NoteVersion[];
     addenda?: { text: string; createdBy: string; createdByName?: string | null; createdAt: string }[];
     cmsCompliance?: NoteCmsCompliance | null;
+    // BUG-16b: a note touched after its encounter was discharged is a late entry, not an error.
+    isLateEntry?: boolean;
+    // Co-sign: set when a nurse signed her own progress note — a physician co-signature is required
+    // before the record is complete.
+    requiresCosign?: boolean;
+    cosignedBy?: string | null;
+    cosignedByName?: string | null;
+    cosignedAt?: string | null;
+}
+
+/** Row from GET /api/inpatient/clinical/hp-worklist — active encounters overdue for a signed H&P. */
+export interface HpWorklistRow {
+    encounterId: string;
+    patientId: string;
+    patientName: string;
+    mrn: string | null;
+    admittedAt: string;
+    hoursOverdue: number;
 }
 
 /** Inpatient shift nursing documentation (EMR-Backend `nursing_notes`). */

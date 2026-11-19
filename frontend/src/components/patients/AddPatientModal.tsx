@@ -22,6 +22,7 @@ const EMPTY = {
     city: '',
     state: '',
     zipCode: '',
+    unknownPatient: false,
 };
 
 type FormState = typeof EMPTY;
@@ -42,8 +43,12 @@ export default function AddPatientModal({ open, onClose, onCreated }: AddPatient
 
     const validate = (): boolean => {
         const next: Partial<Record<keyof FormState, string>> = {};
-        if (!form.firstName.trim()) next.firstName = 'First name is required.';
-        if (!form.lastName.trim()) next.lastName = 'Last name is required.';
+        // Unknown/unidentified patient (trauma, unresponsive arrival): name is a server-generated
+        // placeholder, not collected here.
+        if (!form.unknownPatient) {
+            if (!form.firstName.trim()) next.firstName = 'First name is required.';
+            if (!form.lastName.trim()) next.lastName = 'Last name is required.';
+        }
         if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) next.email = 'Enter a valid email.';
         if (form.dOB && new Date(form.dOB) > new Date()) next.dOB = 'Date of birth cannot be in the future.';
         setErrors(next);
@@ -62,9 +67,13 @@ export default function AddPatientModal({ open, onClose, onCreated }: AddPatient
         if (!validate()) return;
         setSaving(true);
         try {
+            const { unknownPatient, ...rest } = form;
             // createPatient() drops empty optional fields so the API stores NULL instead of empty strings.
-            await createPatient(form as unknown as PatientRegistrationPayload);
-            toast.success('Patient added.');
+            await createPatient({
+                ...rest,
+                registrationType: unknownPatient ? 'unknown' : 'standard',
+            } as unknown as PatientRegistrationPayload);
+            toast.success(unknownPatient ? 'Unidentified patient registered.' : 'Patient added.');
             setForm(EMPTY);
             setErrors({});
             onCreated();
@@ -76,7 +85,7 @@ export default function AddPatientModal({ open, onClose, onCreated }: AddPatient
         }
     };
 
-    const field = (key: keyof FormState, label: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
+    const field = (key: Exclude<keyof FormState, 'unknownPatient'>, label: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
         <div>
             <label className={LABEL} htmlFor={`add-patient-${key}`}>
                 {label}
@@ -108,10 +117,27 @@ export default function AddPatientModal({ open, onClose, onCreated }: AddPatient
                     </button>
                 </div>
 
+                <label className="mb-3 flex items-start gap-2 rounded-lg border border-dashed border-gray-200 p-3 text-sm text-gray-700 dark:border-white/10 dark:text-gray-200">
+                    <input
+                        type="checkbox"
+                        className="mt-0.5 accent-primary"
+                        checked={form.unknownPatient}
+                        onChange={(e) => setForm((prev) => ({ ...prev, unknownPatient: e.target.checked, firstName: '', lastName: '' }))}
+                    />
+                    <span>
+                        <span className="font-medium">Unidentified patient</span> — trauma or unresponsive arrival. A placeholder
+                        identity is generated; update the name once it's known.
+                    </span>
+                </label>
+
                 <div className="grid gap-3 sm:grid-cols-3">
-                    {field('firstName', 'First name *', { autoFocus: true, maxLength: 100 })}
-                    {field('middleName', 'Middle name', { maxLength: 100 })}
-                    {field('lastName', 'Last name *', { maxLength: 100 })}
+                    {!form.unknownPatient ? (
+                        <>
+                            {field('firstName', 'First name *', { autoFocus: true, maxLength: 100 })}
+                            {field('middleName', 'Middle name', { maxLength: 100 })}
+                            {field('lastName', 'Last name *', { maxLength: 100 })}
+                        </>
+                    ) : null}
                     {field('dOB', 'Date of birth', { type: 'date', max: new Date().toISOString().slice(0, 10) })}
                     <div>
                         <label className={LABEL} htmlFor="add-patient-sex">

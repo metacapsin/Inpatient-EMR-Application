@@ -67,7 +67,7 @@ const SetPasswordPage = () => {
             label="New password"
             type={showPassword ? 'text' : 'password'}
             required
-            minLength={8}
+            minLength={10}
             icon={<Lock className="h-4 w-4" />}
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
@@ -81,7 +81,7 @@ const SetPasswordPage = () => {
             label="Confirm password"
             type={showConfirmPassword ? 'text' : 'password'}
             required
-            minLength={8}
+            minLength={10}
             icon={<Lock className="h-4 w-4" />}
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}

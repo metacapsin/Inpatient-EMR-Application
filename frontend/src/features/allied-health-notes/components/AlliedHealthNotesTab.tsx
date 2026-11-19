@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { DemoDataBanner } from '../../../components/shared/DemoDataBanner';
 import { toast } from 'sonner';
 import AppButton from '../../../components/ui/AppButton';
 import { Button } from '../../../components/ui/button';
@@ -84,6 +85,7 @@ export function AlliedHealthNotesTab({ patientId, encounterId }: Props) {
 
     return (
         <div className="mt-4 space-y-4">
+            <DemoDataBanner feature="Allied health notes" reason="no-backend" />
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <div className="flex flex-wrap gap-3">
                     <div className="w-52">

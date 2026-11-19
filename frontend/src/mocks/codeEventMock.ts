@@ -183,6 +183,12 @@ export async function mockGenerateCodeEventNote(eventId: string): Promise<{ note
     return delay({ noteText: lines.filter(Boolean).join('\n') });
 }
 
+/** Mock has no real clinical_notes store to persist into — just echoes the text back with a fake id. */
+export async function mockSaveCodeEventNote(eventId: string): Promise<{ noteId: string; noteText: string }> {
+    const { noteText } = await mockGenerateCodeEventNote(eventId);
+    return delay({ noteId: `mock-note-${eventId}`, noteText });
+}
+
 /** On-shift staff options for activation modal (mock uses scheduling roster) */
 export async function mockListOnShiftStaff(): Promise<{ id: string; name: string; role: string }[]> {
     const staff = await listStaff();

@@ -15,6 +15,10 @@ import {
 } from '../../mock/quality/qualityMockStore';
 
 /** Set `VITE_QUALITY_MEASURE_MOCK=false` when backend routes are live. */
+/**
+ * Quality measures have NO backend yet, so the sample store is the only data source and the page
+ * always shows a Demo-data banner. Set VITE_QUALITY_MEASURE_MOCK=false only once /api/QualityMeasure/* exists.
+ */
 export const USE_QUALITY_MEASURE_MOCK = import.meta.env.VITE_QUALITY_MEASURE_MOCK !== 'false';
 
 const API_TIMEOUT_MS = 5_000;

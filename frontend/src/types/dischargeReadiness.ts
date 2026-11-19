@@ -124,21 +124,42 @@ export type DischargeReadinessEncounterContext = {
      * When omitted, the client falls back to `summary.status === 'signed'`.
      */
     dischargeSigned?: boolean;
+    /** Server encounter status (`admitted` | `discharge_initiated` | `discharged`) when the API provides it. */
+    encounterStatus?: string;
+};
+
+/** Server-declared availability of each financial section (charge capture is not built yet). */
+export type DischargeReadinessSectionAvailability = {
+    available: boolean;
+    reason?: string;
+};
+
+export type DischargeReadinessSections = {
+    charges?: DischargeReadinessSectionAvailability;
+    claimPrep?: DischargeReadinessSectionAvailability;
+    eligibility?: DischargeReadinessSectionAvailability;
 };
 
 export type DischargeReadinessPayload = {
     context: DischargeReadinessEncounterContext;
     summary: DischargeSummaryState;
     checklist: ChecklistTask[];
-    charges: ChargeLine[];
+    /** `null` until the charge-capture backend exists (`sections.charges.available === false`). */
+    charges: ChargeLine[] | null;
     eligibilityHistory: EligibilityRecord[];
-    claimPrep: ClaimPrepState;
+    /** `null` until the claim-prep backend exists (`sections.claimPrep.available === false`). */
+    claimPrep: ClaimPrepState | null;
+    sections?: DischargeReadinessSections;
 };
 
 export type DischargeReadinessView = DischargeReadinessPayload & {
+    /** Server discharge gates from `lib/dischargeGates.js`; the only gates that block finalize. */
     gates: ReadinessGate[];
+    /** Server: no hard gate unresolved. */
     clinicalReady: boolean;
+    /** Always false until charge capture / claims exist on the server. */
     billingReady: boolean;
+    medRecComplete?: boolean;
 };
 
 export type ServiceResult<T> = { ok: true; data: T } | { ok: false; message: string };

@@ -17,6 +17,8 @@ import {
 } from '../../../utils/dischargeReadinessValidation';
 import NewDropdown from '@/components/ui/NewDropdown';
 import AppButton from '@/components/ui/AppButton';
+import { AmaDeathRecordPanel } from './AmaDeathRecordPanel';
+import { fetchDischargeReadiness } from '../../../services/dischargeReadiness.service';
 
 export type DischargeSummaryTabHandle = {
     validate: () => Promise<boolean>;
@@ -31,15 +33,30 @@ type Props = {
     onSign: () => Promise<boolean>;
 };
 
-const dispositionOptions = ['Home', 'Skilled Nursing Facility', 'Acute Rehab', 'Hospice', 'Another acute hospital', 'AMA', 'Expired'];
+// UB-04 patient discharge status codes (public CMS code set) — must match backend/src/lib/dispositionCodes.js.
+const dispositionOptions = [
+    { code: '01', label: 'Home' },
+    { code: '06', label: 'Home health service' },
+    { code: '02', label: 'Another acute hospital' },
+    { code: '03', label: 'Skilled Nursing Facility' },
+    { code: '62', label: 'Acute Rehab' },
+    { code: '63', label: 'Long term care hospital' },
+    { code: '65', label: 'Psychiatric hospital' },
+    { code: '66', label: 'Critical access hospital' },
+    { code: '05', label: 'Another type of institution' },
+    { code: '50', label: 'Hospice — home' },
+    { code: '51', label: 'Hospice — medical facility' },
+    { code: '07', label: 'AMA (left against medical advice)' },
+    { code: '20', label: 'Expired' },
+];
 
 function normalizeDispositionForSelect(raw: string | undefined | null): string {
     const t = (raw ?? '').trim();
     if (!t) return '';
-    const exact = dispositionOptions.find((o) => o === t);
-    if (exact) return exact;
-    const ci = dispositionOptions.find((o) => o.toLowerCase() === t.toLowerCase());
-    return ci ?? t;
+    if (dispositionOptions.some((o) => o.code === t)) return t;
+    // Back-compat: older rows may still hold the pre-UB04 free-text label.
+    const byLabel = dispositionOptions.find((o) => o.label.toLowerCase() === t.toLowerCase() || o.label.toLowerCase().startsWith(t.toLowerCase()));
+    return byLabel?.code ?? t;
 }
 
 type FormState = {
@@ -261,8 +278,8 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
                                     value={form.disposition}
                                     placeholder="Select disposition"
                                     options={dispositionOptions.map((d) => ({
-                                        value: d,
-                                        label: d
+                                        value: d.code,
+                                        label: d.label
                                     }))}
                                     onChange={(v) =>
                                         setForm((prev) => ({ ...prev, disposition: String(v) }))
@@ -282,6 +299,18 @@ const DischargeSummaryTabInner = forwardRef<DischargeSummaryTabHandle, Props>(fu
                     </div>
                 </div>
             </div>
+
+            {ctx ? (
+                <AmaDeathRecordPanel
+                    encounterId={ctx.encounterId}
+                    disposition={form.disposition}
+                    gates={ctx.view.gates}
+                    onRecorded={async () => {
+                        const refreshed = await fetchDischargeReadiness(ctx.encounterId);
+                        if (refreshed.ok) ctx.setView(refreshed.data);
+                    }}
+                />
+            ) : null}
 
             <div data-discharge-field="hospitalCourse">
                 <label className="text-xs font-medium text-gray-600 dark:text-gray-400">

@@ -9,6 +9,9 @@ export interface MainNavLink {
     readonly end?: boolean;
     /** Tenant module that gates this link (see useTenantModules.ts). Omit for always-on links. */
     readonly module?: ModuleKey;
+    /** Roles that may see this link (admin always passes, matching the backend's requireRole()
+     *  default). Omit for links every role may see. */
+    readonly roles?: readonly string[];
 }
 
 export interface MainNavDropdownGroup {
@@ -71,7 +74,7 @@ export const CLINICAL_SUB_LINKS: readonly MainNavLink[] = [
     {
         to: '/app/inpatient/discharge-readiness',
         label: 'Discharge Readiness',
-        title: 'Discharge summary, checklist, charges, eligibility, claim prep',
+        title: 'Discharge summary, nursing checklist, insurance eligibility, finalize discharge',
         module: 'adt',
     },
     {
@@ -132,6 +135,8 @@ export const BILLING_SUB_LINKS: readonly MainNavLink[] = [
         label: 'CDI Worklist',
         title: 'Clinical documentation improvement queries',
         module: 'billing',
+        // SEC-05: matches the backend's requireRole('billing', 'physician') gate.
+        roles: ['billing', 'physician'],
     },
 ];
 

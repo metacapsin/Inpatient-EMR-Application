@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { query, withTx } from '../db/pool.js';
 import { badRequest, conflict, h, notFound, ok, created, parse } from '../lib/http.js';
-import { requireRole } from '../middleware/auth.js';
+import { requireRole, requireClinicalRole } from '../middleware/auth.js';
 import { medLineSchema, medLineOut } from '../lib/medLine.js';
 import { keptLines } from '../lib/medRec.js';
 import { ensureChecklist } from '../lib/dischargeGates.js';
@@ -16,6 +16,10 @@ import { ensureChecklist } from '../lib/dischargeGates.js';
  */
 export const medReconciliationRouter = Router();
 const clinical = requireRole('physician', 'nurse', 'pharmacist');
+// SEC-17: completing a reconciliation is a clinical attestation (it creates the inpatient
+// active-medication rows or the discharge-medications document) — an admin account cannot do this
+// on someone else's behalf, unlike editing the draft list (still gated by `clinical` above).
+const attesters = requireClinicalRole('physician', 'nurse', 'pharmacist');
 const REC_TYPES = ['admission', 'transfer', 'discharge'];
 const ACTIONS = ['continue', 'modify', 'stop', 'new'];
 const iso = (d) => (d instanceof Date ? d.toISOString() : d ?? null);
@@ -166,7 +170,7 @@ medReconciliationRouter.put('/api/encounters/:id/med-reconciliation/:type', clin
 }));
 
 // POST /api/encounters/:id/med-reconciliation/:type/complete
-medReconciliationRouter.post('/api/encounters/:id/med-reconciliation/:type/complete', clinical, h(async (req, res) => {
+medReconciliationRouter.post('/api/encounters/:id/med-reconciliation/:type/complete', attesters, h(async (req, res) => {
     const type = parse(z.enum(REC_TYPES), req.params.type);
     const b = parse(z.object({ lines: z.array(recLine).max(200).optional() }), req.body ?? {});
     const enc = await loadEncounter(req, req.params.id);
@@ -184,16 +188,33 @@ medReconciliationRouter.post('/api/encounters/:id/med-reconciliation/:type/compl
             rec = (await db.query(`INSERT INTO medication_reconciliations (tenant_id, encounter_id, type, lines, status, completed_by, completed_at) VALUES ($1,$2,$3,$4,'completed',$5,now()) RETURNING *`, [req.user.tenantId, enc.id, type, JSON.stringify(lines), req.user.id])).rows[0];
         }
         if (type === 'admission') {
-            // continue / modify / new → inpatient active medication rows (the MAR source of truth)
+            // SAF-27: a "continue"/"modify"/"new" line used to always insert a fresh medications row,
+            // even when the same drug was already active via a CPOE order (or a prior reconciliation
+            // pass) — dedupe by RxNorm code, falling back to a case-insensitive name match when
+            // neither row has one. Scoped to source='inpatient' only: a home-reported medication
+            // (the very thing admission reconciliation is reconciling against) must never count as
+            // a duplicate of the inpatient order this line is about to create.
+            const existingActive = (await db.query(
+                `SELECT name, rxnorm_code FROM medications WHERE tenant_id = $1 AND patient_id = $2 AND is_active = true AND source = 'inpatient'`,
+                [req.user.tenantId, enc.patient_id],
+            )).rows;
+            const isDuplicate = (l) => existingActive.some((m) =>
+                (l.rxnormCode && m.rxnorm_code && m.rxnorm_code === l.rxnormCode) ||
+                (!l.rxnormCode && !m.rxnorm_code && m.name.trim().toLowerCase() === l.name.trim().toLowerCase()));
+            const dedupedMedications = [];
             for (const l of lines) {
                 if (l.action === 'stop') continue;
+                if (isDuplicate(l)) { dedupedMedications.push(l.name); continue; }
                 await db.query(
                     `INSERT INTO medications (tenant_id, patient_id, encounter_id, name, dose, route, frequency, instructions, rxnorm_code, source)
                      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'inpatient')`,
                     [req.user.tenantId, enc.patient_id, enc.id, l.name, l.dose || null, l.route || null, l.frequency || null, l.instructions || null, l.rxnormCode || null],
                 );
             }
-            // Advisory-only CDS: never blocks nursing reconciliation; physician sees hard stops at order entry.
+            rec.dedupedMedications = dedupedMedications;
+            // Advisory-only CDS: never blocks nursing reconciliation; physician sees hard stops at
+            // order entry. A failure here is still surfaced to the caller (not just logged) so a
+            // real CDS outage isn't silently invisible — it just never blocks completion.
             try {
                 const { checkInteractions, recordCdsAlerts } = await import('../lib/cds/check.js');
                 const candidates = lines
@@ -219,7 +240,10 @@ medReconciliationRouter.post('/api/encounters/:id/med-reconciliation/:type/compl
                 }
             } catch (e) {
                 // Table may not exist yet on old DBs; never fail reconciliation on CDS advisory.
-                if (e?.code !== '42P01') console.warn('[med-rec] CDS advisory skipped:', e?.message || e);
+                if (e?.code !== '42P01') {
+                    console.warn('[med-rec] CDS advisory failed:', e?.message || e);
+                    rec.cdsAdvisoryError = 'The drug-interaction check could not be completed for this reconciliation.';
+                }
             }
         }
         if (type === 'discharge') {
@@ -241,8 +265,8 @@ medReconciliationRouter.post('/api/encounters/:id/med-reconciliation/:type/compl
                 [req.user.id, enc.id],
             );
         }
-        return rec.id;
+        return { id: rec.id, dedupedMedications: rec.dedupedMedications, cdsAdvisoryError: rec.cdsAdvisoryError };
     });
-    const rec = (await query(`${REC_SELECT} WHERE r.id = $1`, [out])).rows[0];
-    ok(res, recOut(rec));
+    const rec = (await query(`${REC_SELECT} WHERE r.id = $1`, [out.id])).rows[0];
+    ok(res, { ...recOut(rec), dedupedMedications: out.dedupedMedications ?? [], cdsAdvisoryError: out.cdsAdvisoryError ?? null });
 }));

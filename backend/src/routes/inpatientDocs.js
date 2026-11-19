@@ -7,6 +7,7 @@ import { requireRole } from '../middleware/auth.js';
 
 export const inpatientDocsRouter = Router();
 const nursingOrMd = requireRole('physician', 'nurse');
+const readers = requireRole('physician', 'nurse', 'staff');
 const uuid = () => crypto.randomUUID();
 
 /** An encounter id must belong to the caller's tenant before we write clinical data against it. */
@@ -120,7 +121,7 @@ inpatientDocsRouter.post('/api/CarePlan/create', nursingOrMd, h(async (req, res)
     created(res, planOut(r.rows[0]));
 }));
 
-inpatientDocsRouter.get('/api/CarePlan/:encounterId', h(async (req, res) => {
+inpatientDocsRouter.get('/api/CarePlan/:encounterId', readers, h(async (req, res) => {
     const r = await query('SELECT * FROM care_plans WHERE tenant_id = $1 AND encounter_id = $2', [req.user.tenantId, req.params.encounterId]);
     if (r.rowCount) return ok(res, planOut(r.rows[0]));
     // No plan yet: version 0 tells the UI to create rather than update.
@@ -240,7 +241,7 @@ inpatientDocsRouter.post('/api/IORecord/add', nursingOrMd, h(async (req, res) =>
     created(res, ioOut(r.rows[0]));
 }));
 
-inpatientDocsRouter.get('/api/IORecord/balance/:encounterId', h(async (req, res) => {
+inpatientDocsRouter.get('/api/IORecord/balance/:encounterId', readers, h(async (req, res) => {
     const r = await query(
         `SELECT
            COALESCE(sum(volume_ml) FILTER (WHERE record_type='Intake' AND recorded_at >= now() - interval '8 hours'),0) AS intake8,
@@ -259,7 +260,7 @@ inpatientDocsRouter.get('/api/IORecord/balance/:encounterId', h(async (req, res)
     });
 }));
 
-inpatientDocsRouter.get('/api/IORecord/timeline/:encounterId', h(async (req, res) => {
+inpatientDocsRouter.get('/api/IORecord/timeline/:encounterId', readers, h(async (req, res) => {
     const r = await query(
         `SELECT * FROM io_records WHERE tenant_id = $1 AND encounter_id = $2 ORDER BY recorded_at DESC LIMIT 500`,
         [req.user.tenantId, req.params.encounterId],
@@ -344,7 +345,7 @@ inpatientDocsRouter.post('/api/NursingFlowsheet/save', nursingOrMd, h(async (req
     ok(res, flowsheetOut(out));
 }));
 
-inpatientDocsRouter.get('/api/NursingFlowsheet/history/:encounterId', h(async (req, res) => {
+inpatientDocsRouter.get('/api/NursingFlowsheet/history/:encounterId', readers, h(async (req, res) => {
     const r = await query(
         `SELECT v.* FROM nursing_flowsheet_versions v JOIN nursing_flowsheets f ON f.id = v.flowsheet_id
          WHERE f.tenant_id = $1 AND f.encounter_id = $2 AND v.saved_at >= now() - interval '7 days' ORDER BY v.saved_at DESC LIMIT 200`,
@@ -356,7 +357,7 @@ inpatientDocsRouter.get('/api/NursingFlowsheet/history/:encounterId', h(async (r
 }));
 
 // Most recent flowsheet for the encounter ("current shift"). 404 when none, which the UI treats as "start a new one".
-inpatientDocsRouter.get('/api/NursingFlowsheet/:encounterId', h(async (req, res) => {
+inpatientDocsRouter.get('/api/NursingFlowsheet/:encounterId', readers, h(async (req, res) => {
     const r = await query(
         `SELECT * FROM nursing_flowsheets WHERE tenant_id = $1 AND encounter_id = $2 ORDER BY shift_date DESC, updated_at DESC LIMIT 1`,
         [req.user.tenantId, req.params.encounterId],
@@ -368,7 +369,7 @@ inpatientDocsRouter.get('/api/NursingFlowsheet/:encounterId', h(async (req, res)
 // ================================================================ HAI events
 const haiOut = (e) => ({ id: e.id, encounterId: e.encounter_id, unitId: e.unit_id, eventType: e.event_type, occurredAt: iso(e.occurred_at), ...e.data });
 
-inpatientDocsRouter.get('/api/HAIEvent/encounter/:encounterId', h(async (req, res) => {
+inpatientDocsRouter.get('/api/HAIEvent/encounter/:encounterId', readers, h(async (req, res) => {
     const r = await query(`SELECT * FROM hai_events WHERE tenant_id=$1 AND encounter_id=$2 ORDER BY occurred_at DESC LIMIT 500`, [req.user.tenantId, req.params.encounterId]);
     ok(res, r.rows.map(haiOut));
 }));
@@ -399,7 +400,7 @@ inpatientDocsRouter.post('/api/HAIEvent', requireRole('physician', 'nurse'), h(a
 }));
 
 // Unit summary derived from the event log: latest event per (encounter, infectionType) decides if it is still active.
-inpatientDocsRouter.get('/api/HAIEvent/summary/:unitId', h(async (req, res) => {
+inpatientDocsRouter.get('/api/HAIEvent/summary/:unitId', readers, h(async (req, res) => {
     const events = (
         await query(`SELECT * FROM hai_events WHERE tenant_id=$1 AND unit_id=$2 ORDER BY occurred_at`, [req.user.tenantId, req.params.unitId])
     ).rows.map(haiOut);

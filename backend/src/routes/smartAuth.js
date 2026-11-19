@@ -5,10 +5,11 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
-import { config, isProd } from '../config.js';
+import { config, isProd, devTokensAllowed } from '../config.js';
 import { q, tx } from '../lib/sql.js';
 import { ApiError, h, ok, parse } from '../lib/http.js';
 import { sendEmail } from '../lib/email.js';
+import { recordAuditEvent } from '../lib/audit.js';
 
 export const smartAuthRouter = Router();
 
@@ -190,13 +191,21 @@ function scopesAllowedByClient(client, scopes) {
     return scopes.every((s) => allowed.includes(s) || (s.endsWith('.read') && allowed.includes('patient/*.read')));
 }
 
+// SEC-15: SMART App Launch requires discovery at `{FHIR base URL}/.well-known/smart-configuration`
+// (absolute to the FHIR server, not the app root) — this API's FHIR base is `/fhir` (see fhir.js's
+// `/fhir/metadata`), so that's where it's actually served now. The old root-level path redirects here
+// for anything still pointed at it.
+smartAuthRouter.get('/.well-known/smart-configuration', (_req, res) => {
+    res.redirect(301, '/fhir/.well-known/smart-configuration');
+});
+
 smartAuthRouter.get(
-    '/.well-known/smart-configuration',
+    '/fhir/.well-known/smart-configuration',
     route(async (_req, res) => {
         res.json({
-            authorization_endpoint: `/oauth/authorize`,
-            token_endpoint: `/oauth/token`,
-            revocation_endpoint: `/oauth/revoke`,
+            authorization_endpoint: `${config.backendUrl}/oauth/authorize`,
+            token_endpoint: `${config.backendUrl}/oauth/token`,
+            revocation_endpoint: `${config.backendUrl}/oauth/revoke`,
             capabilities: [
                 'launch-standalone',
                 'client-public',
@@ -227,7 +236,10 @@ smartAuthRouter.get(
                 state: z.string().min(1),
                 code_challenge: z.string().min(43).max(128),
                 code_challenge_method: z.literal('S256'),
-                aud: z.string().optional(),
+                // SEC-15: SMART App Launch requires the app to send `aud` (the FHIR server it intends
+                // to call) and the authorization server to reject a mismatch — otherwise a code issued
+                // here could be replayed against a different FHIR server impersonating this one.
+                aud: z.string().min(1),
             }),
             req.query,
         );
@@ -236,6 +248,16 @@ smartAuthRouter.get(
         if (!client) throw new ApiError(400, 'Unknown or inactive client_id');
         if (!redirectAllowed(client, queryIn.redirect_uri)) {
             throw new ApiError(400, 'redirect_uri does not match a registered URI');
+        }
+
+        const expectedAud = `${config.backendUrl}/fhir`;
+        if (queryIn.aud.replace(/\/$/, '') !== expectedAud) {
+            const errUrl = new URL(queryIn.redirect_uri);
+            errUrl.searchParams.set('error', 'invalid_request');
+            errUrl.searchParams.set('error_description', `aud must be ${expectedAud}`);
+            errUrl.searchParams.set('state', queryIn.state);
+            res.redirect(302, errUrl.toString());
+            return;
         }
 
         const scopeResult = parseAndValidateScopes(queryIn.scope);
@@ -298,6 +320,14 @@ smartAuthRouter.post(
         redirect.searchParams.set('state', b.state);
 
         if (!b.allow) {
+            await recordAuditEvent({
+                tenantId: account.tenant_id,
+                actorType: 'patient',
+                actorId: account.id,
+                action: 'update',
+                resource: 'smart_authorization',
+                details: { decision: 'denied', clientId: b.client_id },
+            });
             redirect.searchParams.set('error', 'access_denied');
             redirect.searchParams.set('error_description', 'The patient denied the request');
             ok(res, { redirectUrl: redirect.toString() });
@@ -326,6 +356,14 @@ smartAuthRouter.post(
             ],
         );
 
+        await recordAuditEvent({
+            tenantId: account.tenant_id,
+            actorType: 'patient',
+            actorId: account.id,
+            action: 'update',
+            resource: 'smart_authorization',
+            details: { decision: 'allowed', clientId: b.client_id, scopes: scopeResult.scopes },
+        });
         redirect.searchParams.set('code', code);
         ok(res, { redirectUrl: redirect.toString() });
     }),
@@ -528,19 +566,52 @@ smartAuthRouter.post(
             if (client) await assertClientSecret(client, clientSecret);
         }
         const hash = sha256(token);
-        await q(
-            `UPDATE smart_authorizations SET revoked_at = now()
-             WHERE (refresh_token_hash = $1 OR code_hash = $1) AND revoked_at IS NULL`,
-            [hash],
+        // SEC-15: scope the revoke to the authenticated client's own grants. Without the client_id
+        // filter, any caller holding a valid token hash could revoke a grant belonging to a different
+        // client — the token itself is secret so this isn't an easy attack, but a revocation endpoint
+        // should never be able to touch another client's authorization regardless.
+        const revoked = await q(
+            clientId
+                ? `UPDATE smart_authorizations SET revoked_at = now()
+                   WHERE (refresh_token_hash = $1 OR code_hash = $1) AND client_id = $2 AND revoked_at IS NULL
+                   RETURNING id, tenant_id, patient_account_id`
+                : `UPDATE smart_authorizations SET revoked_at = now()
+                   WHERE (refresh_token_hash = $1 OR code_hash = $1) AND revoked_at IS NULL
+                   RETURNING id, tenant_id, patient_account_id`,
+            clientId ? [hash, clientId] : [hash],
         );
+        for (const r of revoked.rows) {
+            await recordAuditEvent({
+                tenantId: r.tenant_id,
+                actorType: 'patient',
+                actorId: r.patient_account_id,
+                action: 'update',
+                resource: 'smart_authorization',
+                resourceId: r.id,
+                details: { decision: 'revoked', clientId },
+            });
+        }
         try {
             const payload = /** @type {import('jsonwebtoken').JwtPayload} */ (
                 jwt.verify(token, config.smartJwtSecret)
             );
             if (payload.typ === 'smart' && payload.aid) {
-                await q(`UPDATE smart_authorizations SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL`, [
-                    payload.aid,
-                ]);
+                const r2 = await q(
+                    `UPDATE smart_authorizations SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL
+                     RETURNING id, tenant_id, patient_account_id`,
+                    [payload.aid],
+                );
+                for (const r of r2.rows) {
+                    await recordAuditEvent({
+                        tenantId: r.tenant_id,
+                        actorType: 'patient',
+                        actorId: r.patient_account_id,
+                        action: 'update',
+                        resource: 'smart_authorization',
+                        resourceId: r.id,
+                        details: { decision: 'revoked', clientId },
+                    });
+                }
             }
         } catch {
             /* RFC 7009 always returns 200 */
@@ -586,19 +657,47 @@ smartAuthRouter.post(
             }),
             req.body,
         );
-        const account = (
+        // SEC-14: the same email can exist in more than one tenant's patient_accounts (two unrelated
+        // organizations inviting the same person). Picking "the oldest one" and comparing the password
+        // against only that row meant a patient with the *correct* password for a newer tenant account
+        // could get a confusing "invalid email or password" because the wrong row was tried. Instead,
+        // when tenantId isn't given, try every matching row and log in to whichever one's password
+        // actually matches — tenantId (when supplied) still narrows it directly.
+        const candidates = (
             await q(
                 b.tenantId
                     ? `SELECT * FROM patient_accounts WHERE lower(email) = lower($1) AND tenant_id = $2`
-                    : `SELECT * FROM patient_accounts WHERE lower(email) = lower($1) ORDER BY created_at LIMIT 1`,
+                    : `SELECT * FROM patient_accounts WHERE lower(email) = lower($1) ORDER BY created_at`,
                 b.tenantId ? [b.email, b.tenantId] : [b.email],
             )
-        ).rows[0];
-        const valid = await bcrypt.compare(b.password, account?.password_hash ?? DUMMY_HASH);
-        if (!account || !valid || !account.is_active || !account.password_hash) {
+        ).rows;
+        let account = null;
+        for (const candidate of candidates.length ? candidates : [null]) {
+            const valid = await bcrypt.compare(b.password, candidate?.password_hash ?? DUMMY_HASH);
+            if (candidate && valid && candidate.is_active && candidate.password_hash) {
+                account = candidate;
+                break;
+            }
+        }
+        if (!account) {
+            await recordAuditEvent({
+                tenantId: candidates[0]?.tenant_id ?? null,
+                actorType: 'anonymous',
+                action: 'login_failed',
+                resource: 'patient_account',
+                details: { emailHash: sha256(b.email.toLowerCase()) },
+            });
             throw new ApiError(401, 'Invalid email or password');
         }
         await q(`UPDATE patient_accounts SET last_login_at = now() WHERE id = $1`, [account.id]);
+        await recordAuditEvent({
+            tenantId: account.tenant_id,
+            actorType: 'patient',
+            actorId: account.id,
+            action: 'login',
+            resource: 'patient_account',
+            patientId: account.patient_id,
+        });
         ok(res, {
             token: signPatientJwt(account),
             patientId: account.patient_id,
@@ -613,13 +712,17 @@ smartAuthRouter.post(
     authLimiter,
     route(async (req, res) => {
         const { email } = parse(z.object({ email: z.string().trim().email() }), req.body);
-        const account = (
+        // SEC-14: the same email can be registered under more than one tenant. Rather than picking one
+        // (silently resetting the wrong tenant's account while the one the patient actually meant stays
+        // untouched), send a correctly-scoped reset link for *every* matching active account — same
+        // inbox either way, so this discloses nothing a single-match response wouldn't already imply.
+        const accounts = (
             await q(
                 `SELECT * FROM patient_accounts WHERE lower(email) = lower($1) AND is_active = TRUE AND password_hash IS NOT NULL`,
                 [email],
             )
-        ).rows[0];
-        if (account) {
+        ).rows;
+        for (const account of accounts) {
             const raw = crypto.randomBytes(32).toString('hex');
             await q(
                 `UPDATE patient_accounts SET invite_token_hash = $1, invite_expires_at = now() + interval '1 hour' WHERE id = $2`,
@@ -629,10 +732,10 @@ smartAuthRouter.post(
             await sendEmail({
                 to: account.email,
                 subject: 'Reset your patient portal password',
-                text: `Reset your password:\n${link}\n\nThis link expires in 1 hour.`,
-                html: `<p>Reset your password:</p><p><a href="${link}">${link}</a></p><p>This link expires in 1 hour.</p>`,
+                text: `Reset your password:\n${link}\n\nThis link expires in 1 hour.${accounts.length > 1 ? '\n\nNote: you have more than one patient portal account with this email; use the link from the message that matches the organization you meant to sign in to.' : ''}`,
+                html: `<p>Reset your password:</p><p><a href="${link}">${link}</a></p><p>This link expires in 1 hour.</p>${accounts.length > 1 ? '<p>Note: you have more than one patient portal account with this email; use the link from the message that matches the organization you meant to sign in to.</p>' : ''}`,
             });
-            if (!isProd) console.log(`[patient-auth/forgot-password] token for ${account.email}: ${raw}`);
+            if (devTokensAllowed()) console.log(`[patient-auth/forgot-password] token for ${account.email} (tenant ${account.tenant_id}): ${raw}`);
         }
         ok(res, { message: 'If that email is registered, a reset link has been sent.' });
     }),

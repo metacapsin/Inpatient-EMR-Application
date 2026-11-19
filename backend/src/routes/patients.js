@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { randomBytes } from 'node:crypto';
 import { query, withTx } from '../db/pool.js';
 import { h, notFound, ok, created, parse, badRequest, conflict } from '../lib/http.js';
 import { requireRole } from '../middleware/auth.js';
@@ -7,6 +8,10 @@ import { boss, QUEUES } from '../db/queue.js';
 import { runForPatient, runInline } from '../lib/eligibility.js';
 import { isEnabled as stediEnabled } from '../lib/stedi.js';
 import { APPT_SELECT, apptOut } from './appointments.js';
+import {
+    RACE_CODES, ETHNICITY_CODES, SEX_AT_BIRTH_CODES, GENDER_IDENTITY_CODES,
+    SEXUAL_ORIENTATION_CODES, COMMUNICATION_PREFERENCE_CODES, GUARDIAN_ROLE_CODES,
+} from '../lib/uscdiCodes.js';
 
 export const patientsRouter = Router();
 
@@ -115,6 +120,8 @@ function contactOut(c) {
         emergencyCity: c.city ?? '',
         emergencyState: c.state ?? '',
         emergencyZipCode: c.zip_code ?? '',
+        isGuardian: c.is_guardian ?? false,
+        legalRole: c.legal_role ?? '',
     };
 }
 
@@ -162,10 +169,21 @@ function patientOut(p) {
         },
         preferredLanguage: p.preferred_language ?? '',
         ethnicity: p.ethnicity ?? '',
-        race: p.race ?? '',
+        race: Array.isArray(p.race) ? p.race : [],
         countryOfBirth: p.country_of_birth ?? '',
         advancedHealthCareDirective: p.advance_directive_status ?? '',
         noticeOfPrivacyPracticesDate: p.notice_of_privacy_practices_date ?? '',
+        // USCDI v3 demographics (coded — see lib/uscdiCodes.js).
+        genderIdentity: p.gender_identity ?? '',
+        sexAtBirth: p.sex_at_birth ?? '',
+        sexualOrientation: p.sexual_orientation ?? '',
+        interpreterNeeded: p.interpreter_needed ?? false,
+        communicationPreference: Array.isArray(p.communication_preference) ? p.communication_preference : [],
+        isUnknownPatient: p.is_unknown_patient ?? false,
+        // Set only via the ADT death-record workflow (adt.js) — exposed here read-only so the chart can
+        // show a deceased banner; registration/update never writes these (see Bucket F scope note).
+        deceased: p.deceased ?? false,
+        deceasedAt: p.deceased_at ? (p.deceased_at.toISOString?.() ?? p.deceased_at) : null,
         insurance: insuranceOut(insuranceRows.find((i) => i.rank === 'primary')),
         secondaryInsurance: insuranceOut(insuranceRows.find((i) => i.rank === 'secondary')),
         emergencyContacts,
@@ -233,6 +251,10 @@ patientsRouter.get('/Patient/getAllPatientListPaginated', h(async (req, res) => 
     }
     if (q.startDate) add('p.created_at >= ?::date', q.startDate);
     if (q.endDate) add(`p.created_at < (?::date + 1)`, q.endDate);
+    // BUG-06: 'today'/'thismonth' used to be sent by the frontend but silently ignored server-side —
+    // only 'last5recent' was ever handled. Both now actually filter.
+    if (q.recentlyCreated === 'today') where.push(`p.created_at >= date_trunc('day', now())`);
+    else if (q.recentlyCreated === 'thismonth') where.push(`p.created_at >= date_trunc('month', now())`);
 
     const orderBy = SORTS[q.sortField] ?? SORTS.createdOn;
     const dir = q.sortOrder === 'desc' ? 'DESC' : 'ASC';
@@ -368,14 +390,22 @@ const emergencyContactBody = z.object({
     emergencyCity: optStr(100),
     emergencyState: optStr(50),
     emergencyZipCode: optStr(20),
+    // Distinct from relationshipToPatient (free text): a legal role, from a fixed code set.
+    isGuardian: optBool(),
+    // The registration form always submits every contact row, legalRole included, even one whose
+    // "next of kin / legal guardian" checkbox is unchecked — that row's legalRole is '' in that
+    // case, not omitted, so the enum below has to tolerate '' (treated the same as not provided).
+    legalRole: z.preprocess((v) => (v === '' ? null : v), z.enum(Object.keys(GUARDIAN_ROLE_CODES)).optional().nullable()),
 }).strip();
 
 const patientBody = z.object({
     mrn: z.string().trim().min(1).max(40).optional(),
     prefix: optStr(10),
-    firstName: z.string().trim().min(1).max(100),
+    // Required only for standard registration — see createPatientBody's superRefine. The unknown-patient
+    // path (registrationType: 'unknown') fills these in server-side with a placeholder.
+    firstName: optStr(100),
     middleName: optStr(100),
-    lastName: z.string().trim().min(1).max(100),
+    lastName: optStr(100),
     suffix: optStr(10),
     dOB: z.string().regex(/^\d{4}-\d{2}-\d{2}/, 'dOB must be YYYY-MM-DD').optional().nullable(),
     sex: sexSchema.optional().nullable(),
@@ -391,8 +421,8 @@ const patientBody = z.object({
     address1: optStr(), address2: optStr(), city: optStr(100), state: optStr(50), zipCode: optStr(20),
     mailingAddress1: optStr(), mailingAddress2: optStr(), mailingCity: optStr(100), mailingState: optStr(50), mailingZipCode: optStr(20),
     preferredLanguage: optStr(60),
-    ethnicity: optStr(100),
-    race: optStr(100),
+    ethnicity: z.enum(Object.keys(ETHNICITY_CODES)).optional().nullable(),
+    race: z.array(z.enum(Object.keys(RACE_CODES))).max(Object.keys(RACE_CODES).length).optional().nullable(),
     countryOfBirth: optStr(100),
     advancedHealthCareDirective: optStr(60),
     noticeOfPrivacyPracticesDate: optDate(),
@@ -403,6 +433,39 @@ const patientBody = z.object({
     insurance: insuranceBody.optional().nullable(),
     secondaryInsurance: insuranceBody.optional().nullable(),
     emergencyContacts: z.array(emergencyContactBody).max(2).optional().nullable(),
+    // USCDI v3 demographics — all optional/coded, see lib/uscdiCodes.js.
+    genderIdentity: z.enum(Object.keys(GENDER_IDENTITY_CODES)).optional().nullable(),
+    sexAtBirth: z.enum(Object.keys(SEX_AT_BIRTH_CODES)).optional().nullable(),
+    sexualOrientation: z.enum(Object.keys(SEXUAL_ORIENTATION_CODES)).optional().nullable(),
+    interpreterNeeded: optBool(),
+    communicationPreference: z.array(z.enum(Object.keys(COMMUNICATION_PREFERENCE_CODES))).max(Object.keys(COMMUNICATION_PREFERENCE_CODES).length).optional().nullable(),
+    // Resolving a prior unknown-patient registration sets this back to false once identity is confirmed;
+    // never settable to true directly — see createPatientBody for how it's actually set on create.
+    isUnknownPatient: optBool(),
+});
+
+/**
+ * Create-only wrapper. `registrationType` picks between the two registration paths this module
+ * supports: 'standard' (the normal, fully-identified registration — requires the fields a clinician
+ * actually needs to admit and treat someone) and 'unknown' (trauma/unresponsive arrival — a placeholder
+ * identity is allowed through so care isn't blocked on paperwork). Not a DB column; the handler derives
+ * `is_unknown_patient` from it and fills in a placeholder name when one wasn't given.
+ */
+const createPatientBody = patientBody.extend({
+    registrationType: z.enum(['standard', 'unknown']).optional().default('standard'),
+}).superRefine((b, ctx) => {
+    // dOB and sex are the two identifiers clinical logic throughout this app actually keys off
+    // (age-range queries, CMS code sets, dosing, etc.) — required server-side, not just client-side,
+    // for every registration except the unknown-patient path. A contact method is deliberately NOT
+    // required here: it's already enforced client-side on the standard registration form, and making
+    // it a hard server requirement would reject every other internal/legacy caller that creates a
+    // patient without one (ADT inbound, test fixtures, quick-add flows) for no real safety benefit.
+    if (b.registrationType !== 'unknown') {
+        if (!b.firstName) ctx.addIssue({ code: 'custom', path: ['firstName'], message: 'firstName is required' });
+        if (!b.lastName) ctx.addIssue({ code: 'custom', path: ['lastName'], message: 'lastName is required' });
+        if (!b.dOB) ctx.addIssue({ code: 'custom', path: ['dOB'], message: 'dOB is required' });
+        if (!b.sex) ctx.addIssue({ code: 'custom', path: ['sex'], message: 'sex is required' });
+    }
 });
 
 // Column map for the flat patients columns (shared by create and update).
@@ -418,6 +481,9 @@ const PATIENT_COLS = {
     advancedHealthCareDirective: 'advance_directive_status', noticeOfPrivacyPracticesDate: 'notice_of_privacy_practices_date',
     pcpName: 'pcp_name', pcpNpi: 'pcp_npi', pcpRecipientId: 'pcp_recipient_id',
     status: 'is_active',
+    genderIdentity: 'gender_identity', sexAtBirth: 'sex_at_birth', sexualOrientation: 'sexual_orientation',
+    interpreterNeeded: 'interpreter_needed', communicationPreference: 'communication_preference',
+    isUnknownPatient: 'is_unknown_patient',
 };
 
 /** Full patient in the API shape (used by other routers, e.g. discharge readiness eligibility re-check). */
@@ -426,10 +492,11 @@ export async function loadPatientOut(tenantId, id) {
     return r.rowCount ? patientOut(r.rows[0]) : null;
 }
 
-const nz = (v) => (v === '' || v === undefined ? null : v);
+const nz = (v) => (v === '' || v === undefined || (Array.isArray(v) && v.length === 0) ? null : v);
 
-/** True when an insurance/contact block carries any real value (so an all-blank block isn't persisted). */
-const hasAnyValue = (obj) => !!obj && Object.values(obj).some((v) => v !== '' && v !== null && v !== undefined);
+/** True when an insurance/contact block carries any real value (so an all-blank block isn't persisted).
+ * `false` doesn't count as a value here — it's indistinguishable from an unset checkbox/flag. */
+const hasAnyValue = (obj) => !!obj && Object.values(obj).some((v) => v !== '' && v !== null && v !== undefined && v !== false);
 
 async function upsertInsurance(client, tenantId, patientId, rank, ins) {
     if (!hasAnyValue(ins)) {
@@ -463,13 +530,14 @@ async function upsertEmergencyContact(client, tenantId, patientId, rank, c) {
         return;
     }
     await client.query(
-        `INSERT INTO patient_emergency_contacts (tenant_id, patient_id, rank, relationship, name, phone, address1, city, state, zip_code)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        `INSERT INTO patient_emergency_contacts (tenant_id, patient_id, rank, relationship, name, phone, address1, city, state, zip_code, is_guardian, legal_role)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
          ON CONFLICT (patient_id, rank) DO UPDATE SET
             relationship = EXCLUDED.relationship, name = EXCLUDED.name, phone = EXCLUDED.phone, address1 = EXCLUDED.address1,
-            city = EXCLUDED.city, state = EXCLUDED.state, zip_code = EXCLUDED.zip_code`,
+            city = EXCLUDED.city, state = EXCLUDED.state, zip_code = EXCLUDED.zip_code,
+            is_guardian = EXCLUDED.is_guardian, legal_role = EXCLUDED.legal_role`,
         [tenantId, patientId, rank, nz(c.relationshipToPatient), nz(c.contactName), nz(c.contactPhone), nz(c.street),
-         nz(c.emergencyCity), nz(c.emergencyState), nz(c.emergencyZipCode)],
+         nz(c.emergencyCity), nz(c.emergencyState), nz(c.emergencyZipCode), c.isGuardian ?? false, nz(c.legalRole)],
     );
 }
 
@@ -498,8 +566,17 @@ async function nextMrn(client, tenantId) {
 }
 
 patientsRouter.post('/Patient/createPatient', clinicalWriters, h(async (req, res) => {
-    const b = parse(patientBody, req.body);
+    const b = parse(createPatientBody, req.body);
     const tenantId = req.user.tenantId;
+    // Unknown-patient path: a placeholder identity, never client-supplied — isUnknownPatient can only
+    // become true this way, keeping the flag an honest signal of how the patient was actually registered.
+    if (b.registrationType === 'unknown') {
+        b.isUnknownPatient = true;
+        if (!b.firstName) b.firstName = 'Unknown';
+        if (!b.lastName) b.lastName = `Patient-${randomBytes(2).toString('hex').toUpperCase()}`;
+    } else {
+        b.isUnknownPatient = false; // never client-settable on a standard registration
+    }
     // Patient + insurance + emergency contacts are written atomically: a patient never ends up with a
     // half-written insurance record.
     const id = await withTx(async (client) => {

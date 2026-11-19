@@ -91,18 +91,27 @@ export const FACESHEET_MODULES: FacesheetModuleDef[] = [
     { path: 'visitors-contacts', label: 'Visitors & Contacts', icon: UsersRound, group: 'social' },
 ];
 
-/** Hidden from sidebar and mobile module tabs; direct URLs still work. */
-const HIDDEN_FACESHEET_NAV_PATHS = new Set([
-    'vitals',
-    'location',
-    'history',
-    'prescriptions',
-    'immunizations',
+/**
+ * Chart modules whose backing service is not yet available in this product (dietary orders,
+ * prior authorization, patient invoices, preventive screening). They are hidden from navigation
+ * and from the facesheet routes unless `VITE_FACESHEET_PREVIEW_TABS=true`, so a chart never shows
+ * demo or dead-endpoint data by default.
+ */
+export const FACESHEET_PREVIEW_MODULE_PATHS: ReadonlySet<string> = new Set([
+    'dietary',
+    'prior-auth',
+    'invoices',
     'preventive-screening',
 ]);
 
+export const FACESHEET_PREVIEW_TABS_ENABLED = import.meta.env.VITE_FACESHEET_PREVIEW_TABS === 'true';
+
+export function isFacesheetModuleEnabled(path: string): boolean {
+    return FACESHEET_PREVIEW_TABS_ENABLED || !FACESHEET_PREVIEW_MODULE_PATHS.has(path);
+}
+
 function isVisibleInChartNav(m: FacesheetModuleDef): boolean {
-    return !HIDDEN_FACESHEET_NAV_PATHS.has(m.path);
+    return isFacesheetModuleEnabled(m.path);
 }
 
 const ORDER: FacesheetModuleGroupId[] = ['overview', 'clinical', 'labs', 'care', 'social'];

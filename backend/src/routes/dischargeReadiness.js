@@ -2,12 +2,13 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { query, withTx } from '../db/pool.js';
 import { ApiError, conflict, h, notFound, ok, parse } from '../lib/http.js';
-import { requireRole } from '../middleware/auth.js';
+import { requireRole, requireClinicalRole } from '../middleware/auth.js';
 import { computeDischargeGates, ensureChecklist } from '../lib/dischargeGates.js';
 import { completedRecLines, keptLines } from '../lib/medRec.js';
 import { medLineText } from '../lib/medLine.js';
 import { historyByPatient, runForPatient } from '../lib/eligibility.js';
 import { loadPatientOut } from './patients.js';
+import { DISPOSITION_CODES, isValidDispositionCode } from '../lib/dispositionCodes.js';
 
 /**
  * Discharge summary + nursing checklist + readiness hub (#13). Implements the REST contract that
@@ -18,6 +19,9 @@ import { loadPatientOut } from './patients.js';
 export const dischargeReadinessRouter = Router();
 const physician = requireRole('physician');
 const nursing = requireRole('physician', 'nurse');
+// SEC-17: signing the discharge summary is a clinical attestation — unlike editing the draft
+// (still gated by `physician` above, which admin may do), an admin account cannot sign it.
+const summarySigner = requireClinicalRole('physician');
 const iso = (d) => (d instanceof Date ? d.toISOString() : d ?? null);
 
 async function loadEncounter(req, id) {
@@ -40,7 +44,8 @@ const summaryOut = (s) => ({
     hospitalCourse: s?.hospital_course ?? '',
     procedures: s?.procedures ?? '',
     finalDiagnoses: s?.final_diagnoses ?? '',
-    disposition: s?.disposition ?? 'Home',
+    disposition: s?.disposition ?? '01',
+    dispositionLabel: DISPOSITION_CODES[s?.disposition] ?? DISPOSITION_CODES['01'],
     conditionAtDischarge: s?.condition_at_discharge ?? '',
     dischargeMedications: s?.discharge_medications_text ?? '',
     dischargeMedicationLines: s?.discharge_medications ?? [],
@@ -123,11 +128,19 @@ const summaryBody = z.object({
     hospitalCourse: z.string().max(20000).optional().nullable(),
     procedures: z.string().max(5000).optional().nullable(),
     finalDiagnoses: z.string().max(5000).optional().nullable(),
-    disposition: z.string().max(200).optional().nullable(),
+    // UB-04 patient discharge status code (e.g. '01' home, '07' AMA, '20' expired) — see lib/dispositionCodes.js.
+    disposition: z.string().refine(isValidDispositionCode, 'Not a recognized discharge disposition code').optional().nullable(),
     conditionAtDischarge: z.string().max(500).optional().nullable(),
     dischargeMedications: z.string().max(10000).optional().nullable(),
     followUpInstructions: z.string().max(10000).optional().nullable(),
 });
+
+// BUG-12: column for each field, in the fixed order the INSERT/positional params below assume.
+const SUMMARY_FIELD_COLUMNS = {
+    admissionDiagnosis: 'admission_diagnosis', hospitalCourse: 'hospital_course', procedures: 'procedures',
+    finalDiagnoses: 'final_diagnoses', disposition: 'disposition', conditionAtDischarge: 'condition_at_discharge',
+    dischargeMedications: 'discharge_medications_text', followUpInstructions: 'follow_up_instructions',
+};
 
 // PUT /api/encounters/:id/discharge-summary — upsert, draft only
 dischargeReadinessRouter.put('/api/encounters/:id/discharge-summary', physician, h(async (req, res) => {
@@ -135,23 +148,29 @@ dischargeReadinessRouter.put('/api/encounters/:id/discharge-summary', physician,
     const enc = await loadEncounter(req, req.params.id);
     const existing = (await query('SELECT status FROM discharge_summaries WHERE encounter_id = $1', [enc.id])).rows[0];
     if (existing?.status === 'signed') throw conflict('Signed discharge summary cannot be edited');
-    const v = (k) => (b[k] === undefined ? null : b[k]);
+    // BUG-12: a field present in the body (even as explicit null, to clear it) must overwrite the
+    // existing value; a field left out of the body entirely must not touch it. The previous
+    // COALESCE($n, existing) upsert couldn't tell "explicit null" from "omitted" apart — both arrived
+    // as SQL NULL — so a field could never actually be cleared once set. Only present fields go in the
+    // UPDATE's SET clause; the INSERT (first-time row) still gets every field, omitted ones as null.
+    const keys = Object.keys(SUMMARY_FIELD_COLUMNS);
+    const insertVals = keys.map((k) => (b[k] === undefined ? null : b[k]));
+    const setClause = keys
+        .map((k, i) => (b[k] !== undefined ? `${SUMMARY_FIELD_COLUMNS[k]} = $${i + 3}` : null))
+        .filter(Boolean)
+        .concat('updated_at = now()')
+        .join(', ');
     await query(
-        `INSERT INTO discharge_summaries (tenant_id, encounter_id, admission_diagnosis, hospital_course, procedures, final_diagnoses, disposition, condition_at_discharge, discharge_medications_text, follow_up_instructions, author_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-         ON CONFLICT (encounter_id) DO UPDATE SET
-            admission_diagnosis = COALESCE($3, discharge_summaries.admission_diagnosis), hospital_course = COALESCE($4, discharge_summaries.hospital_course),
-            procedures = COALESCE($5, discharge_summaries.procedures), final_diagnoses = COALESCE($6, discharge_summaries.final_diagnoses),
-            disposition = COALESCE($7, discharge_summaries.disposition), condition_at_discharge = COALESCE($8, discharge_summaries.condition_at_discharge),
-            discharge_medications_text = COALESCE($9, discharge_summaries.discharge_medications_text), follow_up_instructions = COALESCE($10, discharge_summaries.follow_up_instructions),
-            updated_at = now()`,
-        [req.user.tenantId, enc.id, v('admissionDiagnosis'), v('hospitalCourse'), v('procedures'), v('finalDiagnoses'), v('disposition'), v('conditionAtDischarge'), v('dischargeMedications'), v('followUpInstructions'), req.user.id],
+        `INSERT INTO discharge_summaries (tenant_id, encounter_id, ${keys.map((k) => SUMMARY_FIELD_COLUMNS[k]).join(', ')}, author_id)
+         VALUES ($1,$2,${insertVals.map((_, i) => `$${i + 3}`).join(',')},$${insertVals.length + 3})
+         ON CONFLICT (encounter_id) DO UPDATE SET ${setClause}`,
+        [req.user.tenantId, enc.id, ...insertVals, req.user.id],
     );
     ok(res, await buildView(req, enc));
 }));
 
 // POST /api/encounters/:id/discharge-summary/sign
-dischargeReadinessRouter.post('/api/encounters/:id/discharge-summary/sign', physician, h(async (req, res) => {
+dischargeReadinessRouter.post('/api/encounters/:id/discharge-summary/sign', summarySigner, h(async (req, res) => {
     const b = parse(z.object({ signedByName: z.string().trim().max(200).optional() }).passthrough(), req.body ?? {});
     const enc = await loadEncounter(req, req.params.id);
     await withTx(async (db) => {

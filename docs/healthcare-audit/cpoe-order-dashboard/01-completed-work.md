@@ -1,0 +1,43 @@
+# CPOE / Order Dashboard: Completed Work
+
+Date: 2026-11-13. Phase 1, module 10. Full scope approved and implemented — bug fixes (BUG-02, BUG-09, SAF-27) plus the Phase 2-scale feature set: order sets, verbal/telephone orders with read-back and physician co-sign, hold/resume/renew/modify, and five new order types (dietary, therapy, procedure, consult, nursing). No external blocker.
+
+## Summary for stakeholders
+
+The order dashboard's "Acknowledge" button called an endpoint that never existed — in practice unreachable in production (the backend always reported the button as unavailable), but genuinely dead code. It now calls a real endpoint and real acknowledgement state. Status and priority filtering used to run in JavaScript after a 2,000-row database fetch, so a unit with more than 2,000 orders in the lookback window could silently drop older matching orders and show the wrong total — both filters now run in the database. The dashboard offered "Dietary", "Therapy", and "Procedure" order type filters that the backend had no way to actually create — those are now real order types you can place, alongside two more the audit also flagged as needed: "Consult" and "Nursing". Discontinuing or cancelling an order now requires and records a reason — previously nothing was captured, and the cancel button's reason field was silently discarded without even reaching the server. A hospital commonly needs to put an order on hold and resume it later, renew an order nearing its end, or record a verbal/telephone order a physician gave by phone (with the nurse reading it back to confirm, and the physician co-signing afterward) — none of this existed; all of it does now. Reusable order sets (for example, a standard admission or sepsis workup bundle) can now be created once and placed as a group in one action. Finally, a nursing medication-reconciliation step could create a duplicate active medication record for a drug the patient was already actively on via a doctor's order — that's fixed, and a drug-interaction check failure during reconciliation is now visibly reported instead of only logged on the server where nobody would see it.
+
+## What changed
+
+| # | Item | Issue IDs | Result |
+|---|---|---|---|
+| 1 | Nurse acknowledgement | BUG-02 | New `orders.acknowledged_by`/`acknowledged_at`; `POST /api/orders/:id/acknowledge` and `POST /api/inpatient/orders/:id/acknowledge` (the path the dashboard already called); `canAcknowledge` now reflects real state instead of being hardcoded `false`. An acknowledged active order shows as a genuine `accepted` status on the dashboard |
+| 2 | SQL-side filtering | BUG-09 | Status and priority filters now apply as real SQL `WHERE` clauses (type/unit/patient-search/date-range already were) — no longer filtered in JS against a pre-capped 2,000-row fetch, so `total` is now the true matching count |
+| 3 | Medication priority | BUG-09 | `medications.priority` (routine/urgent/stat) — previously there was no column at all, so every plain medication order structurally reported `routine` regardless of what was actually ordered |
+| 4 | Phantom dashboard options closed | BUG-09 | `dietary`/`therapy`/`procedure` are now real, placeable order types (see #6); the phantom `in_progress` status (never produced by the real data path) is removed, replaced by the real `held` status |
+| 5 | Discontinue/cancel reason | — | New `orders.reason`, required on every transition away from `active` except resuming from `held`; the dashboard's cancel action now actually sends and stores the reason it collects (previously silently dropped before even reaching the server) |
+| 6 | Five new order types | Bucket B | `dietary`, `therapy`, `procedure`, `consult`, `nursing` — each with its own detail table, Zod schema, CPOE entry form, and dashboard type badge/filter |
+| 7 | Verbal/telephone orders + co-sign | Bucket B | Any order type can be flagged `isVerbal`; `readBackConfirmed` must be true at the moment of entry (enforced server-side); a verbal order sets `requiresCosign`, closed by a new physician-only `POST /api/orders/:id/cosign` (admin excluded, same SEC-17 reasoning as clinical-note co-sign) |
+| 8 | Hold / resume / renew / modify | Bucket B | New `held` status (non-terminal, reversible via `PUT /api/orders/:id/status {status:'active'}`); new `POST /api/orders/:id/renew` (completes the old order, creates an identical new one, both linked via `replaces_order_id`) and `POST /api/orders/:id/modify` (same, with caller-supplied updated detail validated against that order type's own schema) |
+| 9 | Order sets | Bucket B | New `order_sets`/`order_set_items` tables; full CRUD (`GET/POST/PUT/DELETE /api/order-sets`) with each item validated against its real order-type schema at save time, not just at placement; `POST /api/order-sets/:id/place` places every item as a real order inside one transaction |
+| 10 | SAF-27 (med-rec duplication) | SAF-27 | Admission medication reconciliation now dedupes "continue"/"modify"/"new" lines against already-active **inpatient-sourced** medications (by RxNorm, falling back to case-insensitive name) before inserting — scoped to `source = 'inpatient'` specifically so a home-reported medication is never mistaken for a duplicate of the inpatient order being created from it (a real bug caught by the test this module added, not shipped) |
+| 11 | SAF-27 (CDS errors swallowed) | SAF-27 | A CDS interaction-check failure during reconciliation is still never blocking (by design — physician-ordered medications see hard stops at order entry, not here), but is now surfaced to the caller as `cdsAdvisoryError` instead of only a server-side `console.warn` |
+| 12 | Tests | — | New `backend/tests/cpoeFull.test.js` (8 tests covering every item above); `tests/api.test.js` updated for the new required discontinue/cancel reason; full backend suite: **131/131** |
+
+## Files
+
+Backend new: `src/db/migrations/030_cpoe_full.sql`, `tests/cpoeFull.test.js`.
+Backend changed: `src/routes/orders.js` (full rewrite), `src/routes/medReconciliation.js`, `tests/api.test.js`, `package.json` (test script).
+
+Frontend new: none (extended existing files).
+Frontend changed: `src/types/cpoeOrders.ts`, `src/types/unifiedOrders.ts`, `src/services/cpoeOrders.service.ts`, `src/services/unifiedOrders.service.ts`, `src/features/cpoe/components/NewOrderForm.tsx`, `src/features/cpoe/components/OrdersTable.tsx`, `src/features/order-dashboard/components/OrderTypeBadge.tsx`, `src/pages/patient/UnifiedOrders.tsx`.
+
+## Scope decisions (flagged, not silently cut)
+
+- **Order-set authoring UI**: order sets are created/edited via the API (exercised by tests); the per-encounter page only offers a "place order set" picker against existing sets. No dedicated builder UI (e.g., a form to assemble a new set's items) was built — a reasonable v1 boundary, but worth naming explicitly.
+- **Modify has no dedicated UI**: the backend `POST /api/orders/:id/modify` endpoint and frontend service function exist and are tested, but `OrdersTable.tsx` only exposes a one-click **Renew** button, not a "modify this order's detail" form. Renew (identical re-order) covers the more common real-world case; modify is reachable via the API today.
+- **Dashboard lifecycle actions are intentionally narrower than the per-encounter view**: the cross-patient Orders Dashboard keeps Acknowledge/Cancel only (its existing scope, now actually working); Hold/Resume/Co-sign/Renew live on the per-encounter `UnifiedOrders` page, on the reasoning that fine-grained lifecycle actions belong with the patient's own chart, not a hospital-wide triage worklist.
+- **USCDI-style terminology risk inherited, not introduced here**: this module's new order types don't use any coded terminology beyond free-text names (e.g., "Physical Therapy" as typed, not a coded concept) — no new terminology-accuracy risk was introduced.
+
+## Verification
+
+Full backend suite **131/131** (`npm test`). Backend `tsc` clean, frontend `tsc` clean, frontend `vitest` (27/27) and `vite build` clean. Live-verified against the shared dev server end-to-end: placed a verbal nursing order (read-back required before submission was accepted), confirmed it showed "Verbal · needs co-sign," co-signed it as the physician (badge updated to plain "Verbal"), held it with a required reason (status → `HELD`, Acknowledge control correctly disappeared), resumed it (status → `ACTIVE` again), and separately acknowledged a different order from the cross-patient Orders Dashboard (status → `Accepted`, Acknowledge control disappeared) — confirming BUG-02 is fixed on the actual call path the UI uses, not just in isolation.

@@ -107,3 +107,17 @@ export async function apiGenerateCodeEventNote(eventId: string): Promise<{ noteT
     }
     return (data as { noteText: string }) ?? { noteText: '' };
 }
+
+/** SAF-26: actually files the generated text as a real clinical_notes row (type 'code_event') —
+ * generate-note above is preview-only and was previously the only option, so nothing was ever saved. */
+export async function apiSaveCodeEventNote(eventId: string): Promise<{ noteId: string; noteText: string }> {
+    const { data } = await api.post<ApiEnvelope<{ noteId: string; noteText: string }> | { noteId: string; noteText: string }>(
+        `/api/CodeEvent/${encodeURIComponent(eventId)}/save-note`,
+        {}
+    );
+    if (data && typeof data === 'object' && 'data' in data) {
+        const inner = (data as ApiEnvelope<{ noteId: string; noteText: string }>).data;
+        if (inner) return inner;
+    }
+    return data as { noteId: string; noteText: string };
+}

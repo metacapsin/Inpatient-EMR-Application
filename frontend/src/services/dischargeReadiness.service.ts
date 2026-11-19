@@ -1,46 +1,29 @@
 /**
  * Discharge & billing readiness.
  *
- * Readiness, discharge summary, sign-off, nursing checklist and eligibility are LIVE against
- * backend/src/routes/dischargeReadiness.js. Charge capture and claim prep have no backend yet (#39): those two
- * sections are served from the in-memory store below while `VITE_CHARGE_CAPTURE_MOCK` is not 'false', and the
- * server marks them `sections.charges.available = false`.
+ * Everything here is LIVE against backend/src/routes/dischargeReadiness.js. There is no client-side
+ * store: charge capture and claim prep are reported by the server as `sections.*.available === false`
+ * and the UI renders an "not available" state for them. Discharge gates come from the server only.
  *
  * Routes (2xx bodies are `{ status, data }` wrapping a `DischargeReadinessView`):
  *   GET    /api/encounters/:encounterId/discharge-readiness
  *   PUT    /api/encounters/:encounterId/discharge-summary
  *   POST   /api/encounters/:encounterId/discharge-summary/sign
  *   PATCH  /api/encounters/:encounterId/discharge-checklist/tasks/:taskId
- *   POST   /api/encounters/:encounterId/charges
- *   PATCH  /api/encounters/:encounterId/charges/:chargeId
- *   DELETE /api/encounters/:encounterId/charges/:chargeId
  *   POST   /api/encounters/:encounterId/eligibility
- *   PUT    /api/encounters/:encounterId/claim-prep
- *   POST   /api/encounters/:encounterId/claim-prep/submit
- *
- * Claim submit: backend MUST reject when `encounter.dischargeSigned !== true` (UI mirrors this via
- * `context.dischargeSigned` and/or signed discharge summary).
  */
 
 import type {
-    ChargeLine,
     ChecklistTask,
-    ClaimPrepState,
-    DischargeReadinessEncounterContext,
     DischargeReadinessPayload,
     DischargeReadinessView,
     DischargeSummaryState,
-    EligibilityRecord,
+    ReadinessGate,
     ServiceResult,
 } from '../types/dischargeReadiness';
 import { asRecord } from '../lib/apiPayload';
 import { getApiErrorMessage } from '../lib/httpError';
 import api from './api';
-import {
-    computeReadinessSnapshot,
-    isDischargeSummaryDocumentationComplete,
-    validateInpatientClaimSubmission,
-} from '../utils/dischargeReadinessValidation';
 
 function diagnosisArrayLine(row: Record<string, unknown>): string {
     const code = typeof row.code === 'string' ? row.code : '';
@@ -116,154 +99,16 @@ function normalizeDischargeSummary(raw: unknown): DischargeSummaryState {
     };
 }
 
-/** Charge capture / claim prep (#39) are not on the backend yet: they stay in the local store unless this is 'false'. */
-export const CHARGE_CAPTURE_MOCK = import.meta.env.VITE_CHARGE_CAPTURE_MOCK !== 'false';
-
-/** Path templates for future `api` wiring — keep in sync with backend OpenAPI. */
 export const DISCHARGE_READINESS_HTTP_ROUTES = {
     readiness: (encounterId: string) => `/api/encounters/${encodeURIComponent(encounterId)}/discharge-readiness`,
     dischargeSummary: (encounterId: string) => `/api/encounters/${encodeURIComponent(encounterId)}/discharge-summary`,
     dischargeSummarySign: (encounterId: string) => `/api/encounters/${encodeURIComponent(encounterId)}/discharge-summary/sign`,
-    checklist: (encounterId: string) => `/api/encounters/${encodeURIComponent(encounterId)}/discharge-checklist`,
     checklistTask: (encounterId: string, taskId: string) =>
         `/api/encounters/${encodeURIComponent(encounterId)}/discharge-checklist/tasks/${encodeURIComponent(taskId)}`,
-    charges: (encounterId: string) => `/api/encounters/${encodeURIComponent(encounterId)}/charges`,
-    chargeById: (encounterId: string, chargeId: string) =>
-        `/api/encounters/${encodeURIComponent(encounterId)}/charges/${encodeURIComponent(chargeId)}`,
     eligibility: (encounterId: string) => `/api/encounters/${encodeURIComponent(encounterId)}/eligibility`,
-    eligibilityRequest: (requestId: string) => `/api/eligibility-requests/${encodeURIComponent(requestId)}`,
-    claimPrep: (encounterId: string) => `/api/encounters/${encodeURIComponent(encounterId)}/claim-prep`,
-    claimSubmit: (encounterId: string) => `/api/encounters/${encodeURIComponent(encounterId)}/claim-prep/submit`,
+    amaDischarge: (encounterId: string) => `/api/encounters/${encodeURIComponent(encounterId)}/ama-discharge`,
+    deathRecord: (encounterId: string) => `/api/encounters/${encodeURIComponent(encounterId)}/death-record`,
 } as const;
-
-const store = new Map<string, DischargeReadinessPayload>();
-
-function money(n: number): number {
-    return Math.round(n * 100) / 100;
-}
-
-function sumCharges(lines: ChargeLine[]): number {
-    return money(lines.reduce((s, c) => s + c.total, 0));
-}
-
-function defaultContext(encounterId: string): DischargeReadinessEncounterContext {
-    return {
-        encounterId,
-        patientId: 'pat-demo-1',
-        patientName: 'Jordan Lee',
-        mrn: 'MRN-100482',
-        admitDate: new Date(Date.now() - 5 * 86400000).toISOString(),
-        locationLabel: 'East Wing / 412-A',
-        attendingName: 'Dr. Sam Rivera',
-    };
-}
-
-/** Local seed for the two sections that have no backend yet (charges + claim prep). Clinical data is never faked. */
-function seedPayload(encounterId: string): DischargeReadinessPayload {
-    const summary = normalizeDischargeSummary(null);
-    const checklist: ChecklistTask[] = [];
-
-    const charges: ChargeLine[] = [
-        {
-            id: 'ch1',
-            category: 'room_board',
-            description: 'Medical/surgical — semi-private',
-            serviceDate: new Date(Date.now() - 4 * 86400000).toISOString().slice(0, 10),
-            serviceCode: '0120',
-            quantity: 4,
-            unitPrice: 2850,
-            total: 11400,
-            status: 'posted',
-        },
-        {
-            id: 'ch2',
-            category: 'lab',
-            description: 'CMP, CBC with differential',
-            serviceDate: new Date(Date.now() - 4 * 86400000).toISOString().slice(0, 10),
-            serviceCode: '80053',
-            quantity: 1,
-            unitPrice: 210,
-            total: 210,
-            status: 'posted',
-        },
-        {
-            id: 'ch3',
-            category: 'radiology',
-            description: 'Chest X-ray 2 views',
-            serviceDate: new Date(Date.now() - 4 * 86400000).toISOString().slice(0, 10),
-            serviceCode: '71045',
-            quantity: 1,
-            unitPrice: 380,
-            total: 380,
-            status: 'posted',
-        },
-        {
-            id: 'ch4',
-            category: 'pharmacy',
-            description: 'IV ceftriaxone (inpatient admin)',
-            serviceDate: new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10),
-            serviceCode: 'J0696',
-            quantity: 6,
-            unitPrice: 45,
-            total: 270,
-            status: 'posted',
-        },
-    ];
-
-    const eligibilityHistory: EligibilityRecord[] = [];
-
-    const claimPrep: ClaimPrepState = {
-        status: 'not_ready',
-        principalDxCode: 'J18.9',
-        principalDxDescription: 'Pneumonia, unspecified organism',
-        procedureCodes: ['0BH17EZ'],
-        totalCharges: sumCharges(charges),
-        estimatedPatientResponsibility: 0,
-        claimFrequency: '1 — Original',
-        admissionType: '3 — Elective (as entered at registration)',
-        lastSubmittedAt: null,
-        payerClaimId: null,
-    };
-
-    return {
-        context: { ...defaultContext(encounterId), encounterId },
-        summary,
-        checklist,
-        charges,
-        eligibilityHistory,
-        claimPrep: { ...claimPrep, totalCharges: sumCharges(charges) },
-    };
-}
-
-function ensurePayload(encounterId: string): DischargeReadinessPayload {
-    let p = store.get(encounterId);
-    if (!p) {
-        p = seedPayload(encounterId);
-        store.set(encounterId, p);
-    }
-    return p;
-}
-
-function deriveReadiness(p: DischargeReadinessPayload): DischargeReadinessView {
-    const snap = computeReadinessSnapshot(p);
-    return {
-        ...p,
-        gates: snap.gates,
-        clinicalReady: snap.isClinicalReady,
-        billingReady: snap.isBillingReady,
-    };
-}
-
-function viewToPayload(v: DischargeReadinessView): DischargeReadinessPayload {
-    return {
-        context: v.context,
-        summary: v.summary,
-        checklist: v.checklist,
-        charges: v.charges,
-        eligibilityHistory: v.eligibilityHistory,
-        claimPrep: v.claimPrep,
-    };
-}
 
 function unwrapEnvelope(raw: unknown): Record<string, unknown> {
     const o = asRecord(raw);
@@ -276,42 +121,47 @@ function unwrapEnvelope(raw: unknown): Record<string, unknown> {
     return o;
 }
 
-function hasDischargePayloadShape(o: Record<string, unknown>): boolean {
-    return (
-        asRecord(o.context) != null &&
-        asRecord(o.summary) != null &&
-        Array.isArray(o.checklist) &&
-        Array.isArray(o.charges) &&
-        Array.isArray(o.eligibilityHistory) &&
-        asRecord(o.claimPrep) != null
-    );
-}
-
-/** Charge / claim-prep sections come from the local store until #39 ships a backend for them. */
-function mergeChargeSections(body: Record<string, unknown>): Record<string, unknown> {
-    if (!CHARGE_CAPTURE_MOCK) return body;
-    const ctx = asRecord(body.context);
-    const encounterId = typeof ctx?.encounterId === 'string' ? ctx.encounterId : '';
-    if (!encounterId) return body;
-    const local = ensurePayload(encounterId);
-    const out = { ...body };
-    if (!Array.isArray(body.charges)) out.charges = local.charges;
-    if (!asRecord(body.claimPrep)) out.claimPrep = { ...local.claimPrep, totalCharges: sumCharges(local.charges) };
-    if (!Array.isArray(body.eligibilityHistory)) out.eligibilityHistory = local.eligibilityHistory;
+function normalizeGates(raw: unknown): ReadinessGate[] {
+    if (!Array.isArray(raw)) return [];
+    const out: ReadinessGate[] = [];
+    for (const item of raw) {
+        const g = asRecord(item);
+        if (!g || typeof g.id !== 'string') continue;
+        out.push({
+            id: g.id,
+            category: (g.category === 'clinical' || g.category === 'operational' || g.category === 'financial' ? g.category : 'operational'),
+            severity: g.severity === 'soft' ? 'soft' : 'hard',
+            message: typeof g.message === 'string' ? g.message : g.id,
+            resolved: g.resolved === true,
+            ownerRole: (g.ownerRole === 'provider' || g.ownerRole === 'nursing' || g.ownerRole === 'billing' || g.ownerRole === 'registration' || g.ownerRole === 'coding' ? g.ownerRole : 'nursing'),
+        });
+    }
     return out;
 }
 
 function parseDischargeReadinessView(raw: unknown): DischargeReadinessView {
-    const body = mergeChargeSections(unwrapEnvelope(raw));
-    if (!hasDischargePayloadShape(body)) {
+    const body = unwrapEnvelope(raw);
+    if (asRecord(body.context) == null || asRecord(body.summary) == null || !Array.isArray(body.checklist)) {
         throw new Error('Unexpected discharge readiness response shape');
     }
     const base = body as unknown as DischargeReadinessPayload;
-    const p: DischargeReadinessPayload = {
-        ...base,
+    const gates = normalizeGates(body.gates);
+    const sections = asRecord(body.sections) as DischargeReadinessPayload['sections'] | undefined;
+    const chargesAvailable = sections?.charges?.available === true && Array.isArray(body.charges);
+    const claimAvailable = sections?.claimPrep?.available === true && asRecord(body.claimPrep) != null;
+    return {
+        context: base.context,
         summary: normalizeDischargeSummary(base.summary),
+        checklist: base.checklist,
+        eligibilityHistory: Array.isArray(body.eligibilityHistory) ? base.eligibilityHistory : [],
+        charges: chargesAvailable ? base.charges : null,
+        claimPrep: claimAvailable ? base.claimPrep : null,
+        sections,
+        gates,
+        clinicalReady: body.clinicalReady === true || (gates.length > 0 && gates.every((g) => g.severity !== 'hard' || g.resolved)),
+        billingReady: false,
+        medRecComplete: typeof body.medRecComplete === 'boolean' ? body.medRecComplete : undefined,
     };
-    return deriveReadiness(p);
 }
 
 async function refetchView(encounterId: string): Promise<DischargeReadinessView> {
@@ -319,31 +169,14 @@ async function refetchView(encounterId: string): Promise<DischargeReadinessView>
     return parseDischargeReadinessView(data);
 }
 
-/** After a local charge/claim mutation: the live clinical view merged with the local store (or the store alone if offline). */
-async function liveOrLocal(encounterId: string, p: DischargeReadinessPayload): Promise<ServiceResult<DischargeReadinessView>> {
-    try {
-        return { ok: true, data: await refetchView(encounterId) };
-    } catch {
-        return { ok: true, data: deriveReadiness(p) };
-    }
-}
-
 async function afterMutation(encounterId: string, raw: unknown): Promise<DischargeReadinessView> {
-    if (raw === undefined || raw === null || raw === '') {
-        return refetchView(encounterId);
-    }
-    if (typeof raw === 'object' && raw !== null && Object.keys(raw as object).length === 0) {
-        return refetchView(encounterId);
-    }
+    if (raw === undefined || raw === null || raw === '') return refetchView(encounterId);
+    if (typeof raw === 'object' && raw !== null && Object.keys(raw as object).length === 0) return refetchView(encounterId);
     try {
         return parseDischargeReadinessView(raw);
     } catch {
         return refetchView(encounterId);
     }
-}
-
-function mockDelay(ms: number): Promise<void> {
-    return new Promise((r) => setTimeout(r, ms));
 }
 
 export async function fetchDischargeReadiness(encounterId: string): Promise<ServiceResult<DischargeReadinessView>> {
@@ -364,8 +197,7 @@ export async function saveDischargeSummaryDraft(
     const id = encounterId.trim();
     try {
         const { data } = await api.put(DISCHARGE_READINESS_HTTP_ROUTES.dischargeSummary(id), partial);
-        const view = await afterMutation(id, data);
-        return { ok: true, data: view };
+        return { ok: true, data: await afterMutation(id, data) };
     } catch (e) {
         return { ok: false, message: getApiErrorMessage(e) };
     }
@@ -389,8 +221,7 @@ export async function signDischargeSummary(
     }
     try {
         const { data } = await api.post(DISCHARGE_READINESS_HTTP_ROUTES.dischargeSummarySign(id), payload);
-        const view = await afterMutation(id, data);
-        return { ok: true, data: view };
+        return { ok: true, data: await afterMutation(id, data) };
     } catch (e) {
         return { ok: false, message: getApiErrorMessage(e) };
     }
@@ -404,101 +235,61 @@ export async function updateChecklistTask(
     const id = encounterId.trim();
     try {
         const { data } = await api.patch(DISCHARGE_READINESS_HTTP_ROUTES.checklistTask(id, taskId), patch);
-        const view = await afterMutation(id, data);
-        return { ok: true, data: view };
+        return { ok: true, data: await afterMutation(id, data) };
     } catch (e) {
         return { ok: false, message: getApiErrorMessage(e) };
     }
 }
 
-export async function addChargeLine(
+export type AmaDischargePayload = {
+    reason: string;
+    risksExplained: boolean;
+    witnessName: string;
+    patientSignature: string;
+};
+
+export async function recordAmaDischarge(
     encounterId: string,
-    line: Omit<ChargeLine, 'id' | 'total'> & { total?: number }
+    payload: AmaDischargePayload,
 ): Promise<ServiceResult<DischargeReadinessView>> {
     const id = encounterId.trim();
-    if (CHARGE_CAPTURE_MOCK) {
-        await mockDelay(80);
-        const p = ensurePayload(id);
-        const rowId = `ch-${Date.now()}`;
-        const total = money(line.quantity * line.unitPrice);
-        const row: ChargeLine = {
-            id: rowId,
-            category: line.category,
-            description: line.description,
-            serviceDate: line.serviceDate,
-            serviceCode: line.serviceCode,
-            quantity: line.quantity,
-            unitPrice: line.unitPrice,
-            total,
-            status: line.status,
-        };
-        p.charges.push(row);
-        p.claimPrep.totalCharges = sumCharges(p.charges);
-        store.set(id, p);
-        return liveOrLocal(id, p);
-    }
     try {
-        const { data } = await api.post(DISCHARGE_READINESS_HTTP_ROUTES.charges(id), line);
-        const view = await afterMutation(id, data);
-        return { ok: true, data: view };
+        await api.post(DISCHARGE_READINESS_HTTP_ROUTES.amaDischarge(id), payload);
+        return { ok: true, data: await refetchView(id) };
     } catch (e) {
         return { ok: false, message: getApiErrorMessage(e) };
     }
 }
 
-export async function updateChargeLine(
+export type DeathRecordPayload = {
+    diedAt: string;
+    pronouncingPhysicianId: string;
+    causeOfDeath?: string;
+};
+
+export async function recordDeath(
     encounterId: string,
-    chargeId: string,
-    patch: Partial<Pick<ChargeLine, 'status' | 'quantity' | 'unitPrice' | 'description'>>
+    payload: DeathRecordPayload,
 ): Promise<ServiceResult<DischargeReadinessView>> {
     const id = encounterId.trim();
-    if (CHARGE_CAPTURE_MOCK) {
-        await mockDelay(80);
-        const p = ensurePayload(id);
-        const c = p.charges.find((x) => x.id === chargeId);
-        if (!c) return { ok: false, message: 'Charge not found' };
-        if (c.status === 'posted') {
-            if (patch.quantity != null || patch.unitPrice != null || patch.description != null) {
-                return { ok: false, message: 'Posted charges cannot be edited (adjust via correction workflow).' };
-            }
-        }
-        Object.assign(c, patch);
-        if (patch.quantity != null || patch.unitPrice != null) {
-            c.total = money(c.quantity * c.unitPrice);
-        }
-        p.claimPrep.totalCharges = sumCharges(p.charges);
-        store.set(id, p);
-        return liveOrLocal(id, p);
-    }
     try {
-        const { data } = await api.patch(DISCHARGE_READINESS_HTTP_ROUTES.chargeById(id, chargeId), patch);
-        const view = await afterMutation(id, data);
-        return { ok: true, data: view };
+        await api.post(DISCHARGE_READINESS_HTTP_ROUTES.deathRecord(id), payload);
+        return { ok: true, data: await refetchView(id) };
     } catch (e) {
         return { ok: false, message: getApiErrorMessage(e) };
     }
 }
 
-export async function deleteChargeLine(encounterId: string, chargeId: string): Promise<ServiceResult<DischargeReadinessView>> {
-    const id = encounterId.trim();
-    if (CHARGE_CAPTURE_MOCK) {
-        await mockDelay(80);
-        const p = ensurePayload(id);
-        const idx = p.charges.findIndex((x) => x.id === chargeId);
-        if (idx < 0) return { ok: false, message: 'Charge not found' };
-        const c = p.charges[idx];
-        if (c.status === 'posted') {
-            return { ok: false, message: 'Posted charges cannot be deleted (use a credit / adjustment workflow).' };
-        }
-        p.charges.splice(idx, 1);
-        p.claimPrep.totalCharges = sumCharges(p.charges);
-        store.set(id, p);
-        return liveOrLocal(id, p);
-    }
+export async function listActivePhysicians(): Promise<ServiceResult<{ id: string; name: string }[]>> {
     try {
-        await api.delete(DISCHARGE_READINESS_HTTP_ROUTES.chargeById(id, chargeId));
-        const view = await refetchView(id);
-        return { ok: true, data: view };
+        const { data } = await api.get<{ data?: unknown }>('/api/physicians');
+        const rows = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+        const list = rows
+            .map((r) => asRecord(r))
+            .filter((r): r is Record<string, unknown> => Boolean(r))
+            .map((r) => ({ id: String(r.id ?? ''), name: String(r.name ?? '') }))
+            .filter((r) => r.id);
+        return { ok: true, data: list };
     } catch (e) {
         return { ok: false, message: getApiErrorMessage(e) };
     }
@@ -509,55 +300,7 @@ export async function runEligibilityCheck(encounterId: string): Promise<ServiceR
     try {
         const serviceDateFrom = new Date().toISOString().slice(0, 10);
         const { data } = await api.post(DISCHARGE_READINESS_HTTP_ROUTES.eligibility(id), { serviceDateFrom });
-        const view = await afterMutation(id, data);
-        return { ok: true, data: view };
-    } catch (e) {
-        return { ok: false, message: getApiErrorMessage(e) };
-    }
-}
-
-export async function updateClaimPrep(
-    encounterId: string,
-    patch: Partial<ClaimPrepState>
-): Promise<ServiceResult<DischargeReadinessView>> {
-    const id = encounterId.trim();
-    if (CHARGE_CAPTURE_MOCK) {
-        await mockDelay(80);
-        const p = ensurePayload(id);
-        p.claimPrep = { ...p.claimPrep, ...patch };
-        store.set(id, p);
-        return liveOrLocal(id, p);
-    }
-    try {
-        const { data } = await api.put(DISCHARGE_READINESS_HTTP_ROUTES.claimPrep(id), patch);
-        const view = await afterMutation(id, data);
-        return { ok: true, data: view };
-    } catch (e) {
-        return { ok: false, message: getApiErrorMessage(e) };
-    }
-}
-
-export async function submitClaimPrep(encounterId: string): Promise<ServiceResult<DischargeReadinessView>> {
-    const id = encounterId.trim();
-    if (CHARGE_CAPTURE_MOCK) {
-        await mockDelay(200);
-        const p = ensurePayload(id);
-        const live = await refetchView(id).catch(() => null);
-        const block = validateInpatientClaimSubmission(live ? viewToPayload(live) : p);
-        if (block) return { ok: false, message: block };
-        p.claimPrep.status = 'submitted';
-        p.claimPrep.lastSubmittedAt = new Date().toISOString();
-        p.claimPrep.payerClaimId = `PAYER-${Math.floor(Math.random() * 1e9)}`;
-        store.set(id, p);
-        return liveOrLocal(id, p);
-    }
-    try {
-        const current = await refetchView(id);
-        const block = validateInpatientClaimSubmission(viewToPayload(current));
-        if (block) return { ok: false, message: block };
-        const { data } = await api.post(DISCHARGE_READINESS_HTTP_ROUTES.claimSubmit(id));
-        const view = await afterMutation(id, data);
-        return { ok: true, data: view };
+        return { ok: true, data: await afterMutation(id, data) };
     } catch (e) {
         return { ok: false, message: getApiErrorMessage(e) };
     }

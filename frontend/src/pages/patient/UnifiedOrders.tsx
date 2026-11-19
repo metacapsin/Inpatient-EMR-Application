@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
-import { ClipboardList, Pill, Plus, ScanLine, Syringe, TestTubes } from 'lucide-react';
+import { ClipboardList, ClipboardPlus, HeartPulse, Pill, Plus, ScanLine, Soup, Stethoscope, Syringe, TestTubes, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import usePatientId from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
@@ -10,14 +10,28 @@ import { AppModal } from '../../components/shared/AppModal';
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import { NewOrderForm } from '../../features/cpoe/components/NewOrderForm';
 import { OrdersTable, summarizeOrder } from '../../features/cpoe/components/OrdersTable';
-import { listEncounterOrders, updateOrderStatus } from '../../services/cpoeOrders.service';
+import {
+    acknowledgeOrder,
+    cosignOrder,
+    listEncounterOrders,
+    listOrderSets,
+    placeOrderSet,
+    renewOrder,
+    updateOrderStatus,
+} from '../../services/cpoeOrders.service';
 import type { CpoeOrderRow, CpoeOrderType } from '../../types/cpoeOrders';
+import type { OrderSet } from '../../types/cpoeOrders';
 
 const TYPE_TABS: Array<{ type: CpoeOrderType; label: string; icon: typeof Pill }> = [
     { type: 'medication', label: 'Medication', icon: Pill },
     { type: 'prn_stat', label: 'PRN / STAT', icon: Syringe },
     { type: 'lab', label: 'Lab', icon: TestTubes },
     { type: 'radiology', label: 'Radiology', icon: ScanLine },
+    { type: 'dietary', label: 'Dietary', icon: Soup },
+    { type: 'therapy', label: 'Therapy', icon: HeartPulse },
+    { type: 'procedure', label: 'Procedure', icon: ClipboardPlus },
+    { type: 'consult', label: 'Consult', icon: Stethoscope },
+    { type: 'nursing', label: 'Nursing', icon: Users },
 ];
 
 const TAB_TITLE: Record<CpoeOrderType, string> = {
@@ -25,7 +39,14 @@ const TAB_TITLE: Record<CpoeOrderType, string> = {
     prn_stat: 'Add PRN / STAT order',
     lab: 'Add lab order',
     radiology: 'Add radiology order',
+    dietary: 'Add dietary order',
+    therapy: 'Add therapy order',
+    procedure: 'Add procedure order',
+    consult: 'Add consult order',
+    nursing: 'Add nursing order',
 };
+
+type StatusAction = 'held' | 'discontinued' | 'cancelled';
 
 export default function UnifiedOrders() {
     const patientId = usePatientId();
@@ -38,10 +59,10 @@ export default function UnifiedOrders() {
     const [busyId, setBusyId] = useState<string | null>(null);
     const [activeType, setActiveType] = useState<CpoeOrderType>('medication');
     const [addOpen, setAddOpen] = useState(false);
-    const [statusConfirm, setStatusConfirm] = useState<{
-        order: CpoeOrderRow;
-        status: 'discontinued' | 'cancelled';
-    } | null>(null);
+    const [statusConfirm, setStatusConfirm] = useState<{ order: CpoeOrderRow; status: StatusAction } | null>(null);
+    const [reasonInput, setReasonInput] = useState('');
+    const [orderSets, setOrderSets] = useState<OrderSet[]>([]);
+    const [placingSetId, setPlacingSetId] = useState('');
 
     const load = useCallback(async () => {
         if (!encounterId) {
@@ -63,28 +84,70 @@ export default function UnifiedOrders() {
         void load();
     }, [load]);
 
+    useEffect(() => {
+        listOrderSets().then(setOrderSets).catch(() => undefined);
+    }, []);
+
     const filteredOrders = useMemo(
         () => orders.filter((o) => o.orderType === activeType),
         [orders, activeType],
     );
 
-    const askStatusChange = (order: CpoeOrderRow, status: 'discontinued' | 'cancelled') => {
+    const askStatusChange = (order: CpoeOrderRow, status: StatusAction) => {
+        setReasonInput('');
         setStatusConfirm({ order, status });
     };
 
     const handleStatusChange = async () => {
         if (!statusConfirm) return;
         const { order, status } = statusConfirm;
-        const verb = status === 'cancelled' ? 'Cancel' : 'Discontinue';
+        if (!reasonInput.trim()) {
+            toast.error('A reason is required');
+            return;
+        }
         setBusyId(order.id);
         try {
-            const updated = await updateOrderStatus(order.id, status);
+            const updated = await updateOrderStatus(order.id, status, reasonInput.trim());
             setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
-            toast.success(`Order ${status}`);
+            toast.success(status === 'held' ? 'Order held' : `Order ${status}`);
             setStatusConfirm(null);
         } catch (err) {
             const e = err as { response?: { data?: { message?: string } } };
-            toast.error(e?.response?.data?.message || `Could not ${verb.toLowerCase()} order`);
+            toast.error(e?.response?.data?.message || `Could not update order`);
+        } finally {
+            setBusyId(null);
+        }
+    };
+
+    const runAction = async (order: CpoeOrderRow, action: 'resume' | 'acknowledge' | 'cosign' | 'renew') => {
+        setBusyId(order.id);
+        try {
+            let updated: CpoeOrderRow;
+            if (action === 'resume') updated = await updateOrderStatus(order.id, 'active');
+            else if (action === 'acknowledge') updated = await acknowledgeOrder(order.id);
+            else if (action === 'cosign') updated = await cosignOrder(order.id);
+            else updated = await renewOrder(order.id);
+            setOrders((prev) => (action === 'renew' ? [updated, ...prev.map((o) => (o.id === order.id ? { ...o, status: 'completed' as const, reason: 'Renewed' } : o))] : prev.map((o) => (o.id === updated.id ? updated : o))));
+            toast.success(action === 'resume' ? 'Order resumed' : action === 'acknowledge' ? 'Order acknowledged' : action === 'cosign' ? 'Order co-signed' : 'Order renewed');
+        } catch (err) {
+            const e = err as { response?: { data?: { message?: string } } };
+            toast.error(e?.response?.data?.message || `Could not ${action} order`);
+        } finally {
+            setBusyId(null);
+        }
+    };
+
+    const handlePlaceOrderSet = async () => {
+        if (!placingSetId || !patientId || !encounterId) return;
+        setBusyId('order-set');
+        try {
+            const placed = await placeOrderSet(placingSetId, patientId.trim(), encounterId);
+            setOrders((prev) => [...placed, ...prev]);
+            toast.success(`${placed.length} order${placed.length === 1 ? '' : 's'} placed from set`);
+            setPlacingSetId('');
+        } catch (err) {
+            const e = err as { response?: { data?: { message?: string } } };
+            toast.error(e?.response?.data?.message || 'Could not place order set');
         } finally {
             setBusyId(null);
         }
@@ -104,12 +167,34 @@ export default function UnifiedOrders() {
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary dark:bg-primary/15">
                     <ClipboardList className="h-4 w-4" aria-hidden />
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                     <h1 className="text-base font-semibold tracking-tight text-gray-900 dark:text-white">Unified orders</h1>
                     <p className="mt-0.5 text-[11px] leading-snug text-gray-600 dark:text-gray-400">
-                        Place medication, PRN/STAT, lab, or radiology orders and review them by type for this encounter.
+                        Place orders and review them by type for this encounter.
                     </p>
                 </div>
+                {orderSets.length && encounterId ? (
+                    <div className="flex items-center gap-1.5">
+                        <select
+                            className="h-8 rounded-md border border-gray-200/80 bg-white px-2 text-xs dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100"
+                            value={placingSetId}
+                            onChange={(e) => setPlacingSetId(e.target.value)}
+                        >
+                            <option value="">Place order set…</option>
+                            {orderSets.map((s) => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                        </select>
+                        <button
+                            type="button"
+                            disabled={!placingSetId || busyId === 'order-set'}
+                            onClick={() => void handlePlaceOrderSet()}
+                            className="inline-flex h-8 items-center rounded-md bg-primary px-2.5 text-xs font-semibold text-white transition hover:bg-primary/90 disabled:opacity-50"
+                        >
+                            Place
+                        </button>
+                    </div>
+                ) : null}
             </div>
 
             {!encounterId ? (
@@ -154,6 +239,7 @@ export default function UnifiedOrders() {
                     loading={loading}
                     busyId={busyId}
                     onStatusChange={(o, status) => askStatusChange(o, status)}
+                    onAction={(o, action) => void runAction(o, action)}
                 />
             </div>
 
@@ -180,19 +266,33 @@ export default function UnifiedOrders() {
 
             <ConfirmDialog
                 open={Boolean(statusConfirm)}
-                title={statusConfirm?.status === 'cancelled' ? 'Cancel order' : 'Discontinue order'}
+                title={statusConfirm?.status === 'cancelled' ? 'Cancel order' : statusConfirm?.status === 'held' ? 'Hold order' : 'Discontinue order'}
                 message={
                     statusConfirm?.status === 'cancelled'
                         ? 'Cancel this order in the chart workflow? This cannot be undone from this screen.'
-                        : 'Discontinue this active order? The order will move out of the active list.'
+                        : statusConfirm?.status === 'held'
+                          ? 'Hold this active order? It can be resumed later.'
+                          : 'Discontinue this active order? The order will move out of the active list.'
                 }
                 detail={statusConfirm ? summarizeOrder(statusConfirm.order) : undefined}
-                confirmLabel={statusConfirm?.status === 'cancelled' ? 'Cancel order' : 'Discontinue'}
+                confirmLabel={statusConfirm?.status === 'cancelled' ? 'Cancel order' : statusConfirm?.status === 'held' ? 'Hold' : 'Discontinue'}
                 variant={statusConfirm?.status === 'cancelled' ? 'danger' : 'warning'}
                 busy={Boolean(statusConfirm && busyId === statusConfirm.order.id)}
+                confirmDisabled={!reasonInput.trim()}
                 onCancel={() => setStatusConfirm(null)}
                 onConfirm={() => void handleStatusChange()}
-            />
+            >
+                <div className="mt-2">
+                    <label className="mb-1 block text-xs font-semibold text-gray-600 dark:text-gray-300">Reason *</label>
+                    <textarea
+                        className="w-full rounded-md border border-gray-200/80 bg-white px-2.5 py-1.5 text-xs text-gray-900 outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 dark:border-white/[0.08] dark:bg-[#1a1816] dark:text-gray-100"
+                        rows={2}
+                        value={reasonInput}
+                        onChange={(e) => setReasonInput(e.target.value)}
+                        placeholder="Why is this order being changed?"
+                    />
+                </div>
+            </ConfirmDialog>
         </div>
     );
 }

@@ -8,6 +8,8 @@ const TYPE_CLASS: Record<UnifiedOrderType, string> = {
     dietary: 'bg-yellow-100 text-yellow-900 ring-yellow-200/80 dark:bg-yellow-950/35 dark:text-yellow-100 dark:ring-yellow-800/40',
     therapy: 'bg-violet-100 text-violet-900 ring-violet-200/80 dark:bg-violet-950/40 dark:text-violet-100 dark:ring-violet-800/45',
     procedure: 'bg-gray-800 text-gray-50 ring-gray-700/80 dark:bg-gray-700 dark:text-gray-100 dark:ring-gray-600/50',
+    consult: 'bg-cyan-100 text-cyan-900 ring-cyan-200/80 dark:bg-cyan-950/40 dark:text-cyan-100 dark:ring-cyan-800/45',
+    nursing: 'bg-pink-100 text-pink-900 ring-pink-200/80 dark:bg-pink-950/40 dark:text-pink-100 dark:ring-pink-800/45',
 };
 
 const TYPE_LABEL: Record<UnifiedOrderType, string> = {
@@ -17,6 +19,8 @@ const TYPE_LABEL: Record<UnifiedOrderType, string> = {
     dietary: 'Dietary',
     therapy: 'Therapy',
     procedure: 'Procedure',
+    consult: 'Consult',
+    nursing: 'Nursing',
 };
 
 export function OrderTypeBadge({ orderType }: { orderType: UnifiedOrderType | string }) {

@@ -24,6 +24,7 @@ import { createReadStream } from 'node:fs';
 import readline from 'node:readline';
 import { pool } from './pool.js';
 import { parseOrderLine } from './icd10OrderFile.js';
+import { listZipEntries, extractZipEntry } from '../lib/unzip.js';
 
 export { formatIcd10Code, parseOrderLine } from './icd10OrderFile.js';
 
@@ -61,18 +62,17 @@ async function downloadFy2026() {
     const res = await fetch(FY2026_ZIP_URL);
     if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
     await pipeline(res.body, createWriteStream(zipPath));
-    // Prefer PowerShell Expand-Archive on Windows; fall back to noting manual unzip.
-    const { execFileSync } = await import('node:child_process');
-    try {
-        execFileSync(
-            'powershell.exe',
-            ['-NoProfile', '-Command', `Expand-Archive -LiteralPath '${zipPath.replace(/'/g, "''")}' -DestinationPath '${DATA_DIR.replace(/'/g, "''")}' -Force`],
-            { stdio: 'inherit' },
-        );
-    } catch {
-        throw new Error(
-            `Downloaded zip to ${zipPath} but could not unzip automatically. Unzip manually into ${DATA_DIR} and re-run.`,
-        );
+    // SAF-13: pure-JS unzip (lib/unzip.js) — works the same on Linux/Mac/Windows, unlike the
+    // powershell.exe call this replaces (which only ever worked on Windows).
+    const zipBuf = fs.readFileSync(zipPath);
+    const entries = listZipEntries(zipBuf).filter((e) => /icd10cm-order-\d{4}\.txt$/i.test(e.name));
+    if (!entries.length) {
+        throw new Error(`Downloaded zip to ${zipPath} but it contains no icd10cm-order-YYYY.txt file. Unzip manually into ${DATA_DIR} and re-run.`);
+    }
+    for (const entry of entries) {
+        const destPath = path.join(DATA_DIR, path.basename(entry.name));
+        fs.writeFileSync(destPath, extractZipEntry(zipBuf, entry));
+        console.log(`[seed:icd10] extracted ${destPath}`);
     }
 }
 

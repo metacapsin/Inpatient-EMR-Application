@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { MockFlagBanner } from '../../components/shared/MockFlagBanner';
 import { useQuery } from '@tanstack/react-query';
 import { format, isValid, parseISO } from 'date-fns';
 import { Activity, Biohazard, Loader2 } from 'lucide-react';
@@ -37,6 +38,7 @@ export default function InfectionDashboardPage() {
 
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-3 sm:gap-4">
+            <MockFlagBanner flag="hai" feature="Infection analytics" />
             <div className="shrink-0 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex items-start gap-3">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400">

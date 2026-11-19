@@ -1,0 +1,513 @@
+<title>Ward to Lab Access Map</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#F2F6F7; --surface:#FFFFFF; --surface-2:#E8EFF1; --surface-3:#DCE6E9; --line:#D3DDE1;
+  --ink:#122B33; --ink-2:#3F565E; --muted:#6F8590;
+  --accent:#176B7A; --accent-ink:#FFFFFF; --accent-soft:#D6EAEE;
+  --full:#176B7A; --full-bg:#D6EAEE; --view:#8A6D1E; --view-bg:#F3E8C4; --none:#9FB0B7; --none-bg:#EEF2F4;
+  --warn:#B4452B; --warn-bg:#F7E1DA;
+  --d-admin:#4E5D9B; --d-access:#B06A2C; --d-med:#176B7A; --d-nurse:#2E7D5B; --d-pharm:#7A4E9B; --d-diag:#1F6FB2; --d-him:#8A6D1E; --d-rev:#A3432F; --d-support:#5E7383; --d-quality:#3E8A8A;
+  --shadow:0 1px 2px rgba(18,43,51,.06),0 10px 28px -18px rgba(18,43,51,.3);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E1B20; --surface:#15262D; --surface-2:#1C3038; --surface-3:#243C45; --line:#2B4450;
+    --ink:#E6EEF1; --ink-2:#B9C9CF; --muted:#86A0A9;
+    --accent:#4FB3C4; --accent-ink:#0B1A1F; --accent-soft:#163C45;
+    --full:#4FB3C4; --full-bg:#163C45; --view:#D9B65A; --view-bg:#3A3118; --none:#5F7680; --none-bg:#1A2B32;
+    --warn:#E07A5F; --warn-bg:#3D241D;
+    --d-admin:#8D9BE0; --d-access:#E0995B; --d-med:#4FB3C4; --d-nurse:#5FBF93; --d-pharm:#B48AD6; --d-diag:#6CA6E0; --d-him:#D9B65A; --d-rev:#E07A5F; --d-support:#93AAB9; --d-quality:#6FC2C2;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -18px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E1B20; --surface:#15262D; --surface-2:#1C3038; --surface-3:#243C45; --line:#2B4450;
+  --ink:#E6EEF1; --ink-2:#B9C9CF; --muted:#86A0A9;
+  --accent:#4FB3C4; --accent-ink:#0B1A1F; --accent-soft:#163C45;
+  --full:#4FB3C4; --full-bg:#163C45; --view:#D9B65A; --view-bg:#3A3118; --none:#5F7680; --none-bg:#1A2B32;
+  --warn:#E07A5F; --warn-bg:#3D241D;
+  --d-admin:#8D9BE0; --d-access:#E0995B; --d-med:#4FB3C4; --d-nurse:#5FBF93; --d-pharm:#B48AD6; --d-diag:#6CA6E0; --d-him:#D9B65A; --d-rev:#E07A5F; --d-support:#93AAB9; --d-quality:#6FC2C2;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -18px rgba(0,0,0,.7);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,sans-serif;font-size:15px;line-height:1.55}
+.wrap{max-width:1200px;margin:0 auto;padding-block:28px 72px;padding-inline:20px}
+h1,h2,h3,h4{font-family:"Sora","IBM Plex Sans",system-ui,sans-serif;text-wrap:balance;margin:0}
+h1{font-size:clamp(30px,4.4vw,46px);font-weight:700;letter-spacing:-.02em;line-height:1.08}
+h2{font-size:24px;font-weight:600;letter-spacing:-.01em}
+h3{font-size:16px;font-weight:600}
+h4{font-size:13px;font-weight:600}
+p{margin:0}
+.eyebrow{font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-size:12.5px}
+.lede{color:var(--ink-2);max-width:64ch;font-size:17px}
+
+/* cover */
+.cover{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:40px 36px;display:grid;gap:22px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.cover::before{content:"";position:absolute;inset:0 0 auto 0;height:6px;background:linear-gradient(90deg,var(--d-admin),var(--d-access),var(--d-med),var(--d-nurse),var(--d-pharm),var(--d-diag),var(--d-him),var(--d-rev),var(--d-support),var(--d-quality))}
+.meta{display:flex;flex-wrap:wrap;gap:10px 22px;color:var(--muted);font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.stat{background:var(--ground);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:grid;gap:2px}
+.stat b{font-family:"Sora",sans-serif;font-size:28px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.stat span{color:var(--muted);font-size:13px}
+nav.toc{display:flex;flex-wrap:wrap;gap:8px}
+nav.toc a{font-size:13px;color:var(--ink-2);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:5px 12px;background:var(--ground)}
+nav.toc a:hover,nav.toc a:focus-visible{border-color:var(--accent);color:var(--accent);outline:none}
+
+section{margin-block:56px 0;display:grid;gap:20px}
+.sec-head{display:grid;gap:6px;max-width:72ch}
+.sec-head p{color:var(--ink-2)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+.pill{display:inline-block;padding:2px 8px;border-radius:5px;font-size:11.5px;font-weight:600;line-height:1.5}
+.pill.F{background:var(--full-bg);color:var(--full)}
+.pill.V{background:var(--view-bg);color:var(--view)}
+.pill.N{background:var(--none-bg);color:var(--none)}
+
+/* how it works */
+.how{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.how .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;display:grid;gap:8px}
+.how .card .k{font-family:"Sora",sans-serif;font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.how .card p{color:var(--ink-2);font-size:14px}
+
+/* departments */
+.depts{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.dept{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:10px;border-top:4px solid var(--dc)}
+.dept .who{color:var(--muted);font-size:13px}
+.roles{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;border-radius:6px;padding:3px 8px;background:var(--surface-2);color:var(--ink-2);font-weight:500}
+.chip.new{background:var(--view-bg);color:var(--view)}
+.chip.exists{background:var(--full-bg);color:var(--full)}
+
+/* role cards */
+.rolejump{display:flex;flex-wrap:wrap;gap:6px}
+.rolejump a{font-size:12.5px;text-decoration:none;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 10px;display:inline-flex;align-items:center;gap:6px}
+.rolejump a i{width:8px;height:8px;border-radius:50%;background:var(--dc);display:inline-block}
+.rolecard{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);display:grid;grid-template-columns:1.15fr .85fr}
+@media (max-width:900px){.rolecard{grid-template-columns:1fr}}
+.rc-head{grid-column:1/-1;padding:18px 22px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;background:color-mix(in srgb,var(--dc) 7%,var(--surface))}
+.rc-head .l{display:flex;align-items:center;gap:12px}
+.rc-head .idx{font-family:"Sora",sans-serif;font-weight:700;font-size:13px;color:var(--dc);border:2px solid var(--dc);border-radius:8px;padding:3px 8px;line-height:1}
+.rc-head .dept-tag{font-size:11.5px;color:var(--dc);font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.rc-head h3{font-size:21px}
+.rc-head .r{display:flex;gap:16px;font-size:13px;color:var(--ink-2);flex-wrap:wrap}
+.rc-head .r b{font-family:"Sora",sans-serif;color:var(--ink)}
+.rc-screen{padding:20px 22px;border-right:1px solid var(--line);display:grid;gap:10px;align-content:start}
+@media (max-width:900px){.rc-screen{border-right:none;border-bottom:1px solid var(--line)}}
+.rc-info{padding:20px 22px;display:grid;gap:18px;align-content:start}
+.cap{font-size:12px;color:var(--muted)}
+
+/* wireframe */
+.wf{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--ground);font-size:11.5px}
+.wf-top{display:flex;align-items:center;gap:5px;padding:8px 10px;background:var(--surface);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.wf-top .logo{font-family:"Sora",sans-serif;font-weight:700;font-size:11.5px;margin-right:6px}
+.wf-top .user{margin-left:auto;display:inline-flex;align-items:center;gap:6px;color:var(--muted)}
+.wf-top .user i{width:16px;height:16px;border-radius:50%;background:var(--dc);display:inline-block}
+.nv{padding:3px 8px;border-radius:5px;background:var(--surface-2);color:var(--ink-2)}
+.nv.on{background:var(--dc);color:#fff;font-weight:600}
+.nv.off{opacity:.3;text-decoration:line-through}
+.wf-body{display:grid;grid-template-columns:150px 1fr;min-height:230px}
+@media (max-width:520px){.wf-body{grid-template-columns:1fr}}
+.wf-side{background:var(--surface);border-right:1px solid var(--line);padding:8px;display:grid;gap:6px;align-content:start}
+.wf-side .g{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:4px 6px 0}
+.wf-side .it{padding:4px 7px;border-radius:5px;color:var(--ink-2);display:flex;justify-content:space-between;gap:6px;align-items:center}
+.wf-side .it.on{background:color-mix(in srgb,var(--dc) 14%,transparent);color:var(--ink);font-weight:600}
+.wf-side .it .pill{font-size:9.5px;padding:0 5px}
+.wf-main{padding:10px;display:grid;gap:8px;align-content:start}
+.wf-main .ttl{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.wf-main .ttl b{font-family:"Sora",sans-serif;font-size:13px}
+.wf-main .ttl span{color:var(--muted);font-size:10.5px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:6px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:8px;display:grid;gap:1px}
+.tile b{font-family:"Sora",sans-serif;font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+.tile span{font-size:10px;color:var(--muted);line-height:1.25}
+.wl{background:var(--surface);border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.wl .h{display:grid;grid-template-columns:1.4fr 1fr 1fr .8fr;gap:6px;padding:5px 8px;background:var(--surface-2);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.wl .r{display:grid;grid-template-columns:1.4fr 1fr 1fr .8fr;gap:6px;padding:5px 8px;border-top:1px solid var(--line);color:var(--ink-2);font-size:10.5px;align-items:center}
+.wl .r b{color:var(--ink);font-weight:500}
+.wl .st{display:inline-block;padding:0 6px;border-radius:999px;font-size:9.5px;font-weight:600;background:var(--surface-2);color:var(--ink-2);justify-self:start}
+.wl .st.crit{background:var(--warn-bg);color:var(--warn)}
+.wl .st.ok{background:var(--full-bg);color:var(--full)}
+.wl .st.wait{background:var(--view-bg);color:var(--view)}
+.tabrow{display:flex;flex-wrap:wrap;gap:3px}
+.tab{font-size:10px;padding:2px 7px;border-radius:4px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2)}
+.tab.off{opacity:.3;text-decoration:line-through}
+
+/* info column */
+.screens{display:grid;gap:4px}
+.screens .row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:5px 8px;border-radius:6px;background:var(--ground);font-size:13px}
+.screens .row span.n{color:var(--ink)}
+.screens .row small{color:var(--muted);font-size:11.5px}
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:560px){.cols2{grid-template-columns:1fr}}
+.cols2 ul{margin:0;padding-left:18px;color:var(--ink-2);display:grid;gap:4px;font-size:13.5px}
+.cols2 ul.no li::marker{color:var(--warn)}
+.cols2 ul.yes li::marker{color:var(--full)}
+.cols2 h4{margin-bottom:6px}
+
+/* matrix */
+.matrix-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table.matrix{border-collapse:separate;border-spacing:0;min-width:1000px;width:100%;font-size:13px}
+.matrix th,.matrix td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:center;vertical-align:middle}
+.matrix thead th{position:sticky;top:0;background:var(--surface);z-index:2;font-weight:600;font-size:12px;color:var(--ink-2);line-height:1.2;border-top:3px solid var(--dc)}
+.matrix thead th .d{display:block;font-size:10px;color:var(--dc);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+.matrix th:first-child,.matrix td:first-child{text-align:left;position:sticky;left:0;background:var(--surface);z-index:1;font-weight:500;min-width:230px;border-right:1px solid var(--line)}
+.matrix thead th:first-child{z-index:3;border-top:3px solid transparent}
+.matrix tbody tr.group td{background:var(--surface-2);color:var(--ink-2);font-size:11px;letter-spacing:.08em;text-transform:uppercase;text-align:left;font-weight:600;padding:6px 9px}
+.cell{display:inline-block;min-width:26px;padding:1px 7px;border-radius:5px;font-size:11.5px;font-weight:600;line-height:1.5}
+.cell.F{background:var(--full-bg);color:var(--full)}
+.cell.V{background:var(--view-bg);color:var(--view)}
+.cell.N{background:var(--none-bg);color:var(--none)}
+.cell.P{background:var(--full-bg);color:var(--full);font-weight:500;font-size:11px}
+
+/* workflow */
+.lanes-scroll{overflow-x:auto}
+.lanes{display:grid;grid-template-columns:160px 1fr;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface);min-width:900px}
+.lane{display:contents}
+.lane .who{padding:16px 14px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);background:var(--surface-2);display:grid;gap:4px;align-content:start}
+.lane .who b{font-size:14px}.lane .who span{font-size:12px;color:var(--muted)}
+.lane .who .dot{width:10px;height:10px;border-radius:50%;background:var(--dc);display:inline-block;margin-right:6px}
+.lane .steps{padding:14px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:repeat(6,1fr);gap:10px;align-items:start}
+.lane:last-of-type .who,.lane:last-of-type .steps{border-bottom:none}
+.step{border:1px solid var(--line);border-radius:9px;padding:10px 11px;background:var(--surface);display:grid;gap:4px;position:relative}
+.step .n{font-family:"Sora",sans-serif;font-size:11px;color:var(--muted);font-weight:600}
+.step b{font-size:13px;line-height:1.3}.step span{font-size:12px;color:var(--ink-2)}
+.step .api{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--muted);margin-top:2px;word-break:break-word}
+.step.new{border-color:var(--view);border-style:dashed}.step.sys{background:var(--surface-2)}
+.step .badge{position:absolute;top:-8px;right:8px;font-size:10px;padding:1px 6px;border-radius:999px;background:var(--view-bg);color:var(--view);font-weight:600}
+.step.exists .badge{background:var(--full-bg);color:var(--full)}
+.state{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--ink-2)}
+.state code{font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--surface-2);padding:2px 7px;border-radius:5px;color:var(--ink)}
+.state .arr{color:var(--muted)}
+.reuse{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.reuse .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:4px;font-size:13.5px;color:var(--ink-2)}
+.reuse .card b{color:var(--ink);font-family:"Sora",sans-serif;font-size:13.5px}
+
+/* phases, decisions */
+.phases{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+.phase{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:8px;align-content:start}
+.phase .wk{font-family:"Sora",sans-serif;font-size:12px;color:var(--accent);font-weight:600}
+.phase ul{margin:0;padding-left:18px;color:var(--ink-2);font-size:13.5px;display:grid;gap:3px}
+.qs{display:grid;gap:10px}
+.q{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--view);border-radius:10px;padding:12px 16px;display:grid;gap:2px}
+.q b{font-size:14px}.q span{font-size:13.5px;color:var(--ink-2)}
+footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+
+@media print{
+  body{background:#fff;color:#122B33}
+  .wrap{max-width:none;padding:0}
+  .cover,.rolecard,.dept,.phase,.q{box-shadow:none;break-inside:avoid}
+  section{break-before:page;margin-top:0}
+  #how{break-before:auto}
+  nav.toc,.rolejump{display:none}
+  .rolecard{break-before:page;grid-template-columns:1fr}
+  .matrix-wrap,.lanes-scroll{overflow:visible}
+  .matrix thead th{position:static}
+}
+</style>
+
+<div class="wrap">
+<header class="cover">
+  <div class="eyebrow">Inpatient EMR · Role-based access design · For client review</div>
+  <h1>Every department sees its own hospital</h1>
+  <p class="lede">One login currently shows every screen to every member of staff. This proposal splits the system into department portals: a lab technician opens a lab worklist, a nurse opens her unit, a billing officer opens revenue. Requests flow between departments and come back as reviewed results.</p>
+  <div class="meta"><span>Prepared 17 November 2026</span><span>Status: proposal for approval</span><span>Scope: inpatient hospital, single facility</span></div>
+  <div class="stats">
+    <div class="stat"><b>10</b><span>hospital departments mapped</span></div>
+    <div class="stat"><b>13</b><span>staff roles, each with its own portal</span></div>
+    <div class="stat"><b>27</b><span>screens placed in the access matrix</span></div>
+    <div class="stat"><b>4</b><span>cross-department request flows</span></div>
+    <div class="stat"><b>6 wk</b><span>estimated delivery</span></div>
+  </div>
+  <nav class="toc" aria-label="Sections">
+    <a href="#how">How access works</a><a href="#departments">Departments</a><a href="#portals">Role portals</a><a href="#matrix">Access matrix</a><a href="#flow">Request to review flow</a><a href="#rollout">Rollout</a><a href="#decisions">Decisions needed</a>
+  </nav>
+</header>
+
+<section id="how">
+  <div class="sec-head">
+    <div class="eyebrow">1 · The principle</div>
+    <h2>Three levels of access, one rule</h2>
+    <p>A member of staff only sees the screens their job needs. The rule is enforced on the server, not just hidden in the interface, so a hidden screen cannot be reached by typing its address.</p>
+  </div>
+  <div class="how">
+    <div class="card"><span class="pill F">Full</span><div class="k">View and act</div><p>The screen is in the menu and every action on it is available to this role. Example: a lab technician on the lab worklist.</p></div>
+    <div class="card"><span class="pill V">View</span><div class="k">Read only</div><p>The screen is in the menu, but buttons that change the record are absent. Example: a pharmacist reading a patient's lab results.</p></div>
+    <div class="card"><span class="pill N">Hidden</span><div class="k">Not available</div><p>The screen is not in the menu and the server refuses the request. Example: a billing officer and clinical notes.</p></div>
+    <div class="card"><span class="pill F" style="background:var(--warn-bg);color:var(--warn)">Clinical only</span><div class="k">Licensed actions</div><p>Signing notes, administering medication, acknowledging critical results and finalising discharge are reserved for licensed clinical roles. The administrator can see these screens but cannot perform these actions.</p></div>
+  </div>
+</section>
+
+<section id="departments">
+  <div class="sec-head">
+    <div class="eyebrow">2 · Hospital sectors</div>
+    <h2>How the hospital is divided, and who logs in from each sector</h2>
+    <p>Mapped from the departments of an inpatient hospital. Roles marked <em>exists</em> are already in the system and keep their accounts; roles marked <em>new</em> are introduced by this work.</p>
+  </div>
+  <div class="legend"><span><i class="sw" style="background:var(--full-bg);border:1px solid var(--full)"></i>exists today</span><span><i class="sw" style="background:var(--view-bg);border:1px solid var(--view)"></i>new role</span></div>
+  <div class="depts" id="depts"></div>
+</section>
+
+<section id="portals">
+  <div class="sec-head">
+    <div class="eyebrow">3 · Role portals</div>
+    <h2>What each member of staff sees after logging in</h2>
+    <p>One card per role. The left side is a wireframe of their home screen: the top menu, the side menu listing every screen they can open, and their landing worklist. The right side lists those screens with the access level, and what the role is deliberately not shown. Struck-through menu items are removed for that role.</p>
+  </div>
+  <div class="rolejump" id="rolejump"></div>
+  <div id="rolecards" style="display:grid;gap:26px"></div>
+</section>
+
+<section id="matrix">
+  <div class="sec-head">
+    <div class="eyebrow">4 · Access matrix</div>
+    <h2>Screen by screen, role by role</h2>
+    <p>The complete reference. Text in a cell means the role gets that specific action only (for example, a nurse on the orders dashboard can <em>acknowledge</em> but not place orders). On a narrow screen, scroll sideways; the screen names stay pinned.</p>
+  </div>
+  <div class="legend">
+    <span><i class="sw" style="background:var(--full-bg);border:1px solid var(--full)"></i><b>Full</b>&nbsp;view and act</span>
+    <span><i class="sw" style="background:var(--view-bg);border:1px solid var(--view)"></i><b>View</b>&nbsp;read only</span>
+    <span><i class="sw" style="background:var(--none-bg);border:1px solid var(--none)"></i><b>–</b>&nbsp;hidden</span>
+  </div>
+  <div class="matrix-wrap"><table class="matrix" id="matrix"></table></div>
+</section>
+
+<section id="flow">
+  <div class="sec-head">
+    <div class="eyebrow">5 · Cross-department workflow</div>
+    <h2>A lab request, from the ward to the lab and back</h2>
+    <p>Ward staff ask for a test, the laboratory performs it and uploads the report, the ward reviews the result. Each department only ever sees its own step. The same seven-step pattern is reused for imaging, medical records and pharmacy.</p>
+  </div>
+  <div class="state"><span>Order status</span><span class="arr">:</span><code>ordered</code><span class="arr">→</span><code>collected</code><span class="arr">→</span><code>in progress</code><span class="arr">→</span><code>preliminary</code><span class="arr">→</span><code>final</code><span class="arr">→</span><code>reviewed / acknowledged</code></div>
+  <div class="lanes-scroll"><div class="lanes" id="lanes"></div></div>
+  <div class="legend"><span><i class="sw" style="background:var(--surface);border:1px solid var(--line)"></i>already in the system</span><span><i class="sw" style="background:var(--surface);border:1px dashed var(--view)"></i>new in this work</span><span><i class="sw" style="background:var(--surface-2);border:1px solid var(--line)"></i>automatic, no person involved</span></div>
+  <h3>The same pattern, three more times</h3>
+  <div class="reuse">
+    <div class="card"><b>Imaging</b>Physician orders a study → radiology technologist performs it and uploads the report → radiologist finalises → physician reviews.</div>
+    <div class="card"><b>Medical records</b>Nurse or physician requests outside records → medical-records clerk scans and uploads → requester is notified and the file appears in the chart.</div>
+    <div class="card"><b>Pharmacy</b>Physician prescribes → pharmacist verifies or rejects in the pharmacy queue → nurse sees the verified medication on the administration record.</div>
+    <div class="card"><b>Housekeeping</b>Nurse or bed manager requests a bed clean → housekeeping accepts and completes → bed board shows the bed as ready.</div>
+  </div>
+</section>
+
+<section id="rollout">
+  <div class="sec-head">
+    <div class="eyebrow">6 · Rollout</div>
+    <h2>Four phases, about six weeks</h2>
+    <p>Phase A is the foundation everything else stands on. Phases B and C can run in parallel with two developers.</p>
+  </div>
+  <div class="phases">
+    <div class="phase"><div class="wk">Phase A · Week 1</div><h3>Permission foundation</h3><ul><li>Named permissions behind every screen and action</li><li>New roles added to user management</li><li>Menus, pages and chart tabs filter by role</li><li>Each role lands on its own home page</li></ul></div>
+    <div class="phase"><div class="wk">Phase B · Weeks 2–3</div><h3>Department portals</h3><ul><li>Provider, nursing, lab, imaging, records, front-desk, pharmacy and revenue worklists</li><li>One shared worklist design: status tabs, patient and bed, age of request, assign to me</li><li>Hospital dashboard kept for administrators</li></ul></div>
+    <div class="phase"><div class="wk">Phase C · Weeks 4–5</div><h3>Request → fulfil → review</h3><ul><li>Lab report upload, verify step, results inbox</li><li>Imaging report upload and radiologist sign-off</li><li>Medical-records request queue</li><li>Notification to the ordering clinician on every final result</li></ul></div>
+    <div class="phase"><div class="wk">Phase D · Week 6</div><h3>Hardening</h3><ul><li>Hospital can switch individual permissions on or off per role</li><li>Nurses default to their own unit's patients</li><li>Every refused access is written to the audit trail</li><li>Unacknowledged critical results escalate to the charge nurse, then the attending</li></ul></div>
+  </div>
+</section>
+
+<section id="decisions">
+  <div class="sec-head">
+    <div class="eyebrow">7 · Decisions for the hospital</div>
+    <h2>Four questions that change the build</h2>
+  </div>
+  <div class="qs">
+    <div class="q"><b>Is a radiologist a separate role, or a physician with a specialty?</b><span>Proposal assumes a specialty flag on the physician role. A separate role adds one column to the matrix and one landing page.</span></div>
+    <div class="q"><b>Should lab results be verified before clinicians see them?</b><span>Proposal assumes results entered by a technician stay preliminary until verified; results arriving from a laboratory system later release immediately.</span></div>
+    <div class="q"><b>Should a nurse see only her own unit's patients at launch?</b><span>Unit scoping is built in Phase D. A small facility may prefer to see all inpatients and skip it.</span></div>
+    <div class="q"><b>Do housekeeping, quality and allied health need logins in the first release?</b><span>Their screens exist with limited depth. They can be added as roles later without touching the other portals.</span></div>
+  </div>
+</section>
+
+<footer>Prepared from the current system on 17 November 2026. The matrix is the proposed default; every cell can be adjusted per hospital in Phase D. Print this page to PDF for a hand-out: each role card prints on its own page.</footer>
+</div>
+
+<script>
+(function(){
+const DEPTS=[
+ {id:'admin',name:'Administration & IT',who:'Hospital administrator, IT, compliance',color:'var(--d-admin)',roles:[['admin','Administrator',1]]},
+ {id:'access',name:'Patient Access / Front Office',who:'Registration, admissions desk, appointment desk, bed coordinator',color:'var(--d-access)',roles:[['staff','Registration clerk',1],['bed_manager','Bed manager',0]]},
+ {id:'med',name:'Medical Staff',who:'Attending, hospitalist, consultant, resident, radiologist',color:'var(--d-med)',roles:[['physician','Physician',1]]},
+ {id:'nurse',name:'Nursing',who:'Staff RN / LVN, charge nurse, CNA',color:'var(--d-nurse)',roles:[['nurse','Nurse',1],['charge_nurse','Charge nurse',0]]},
+ {id:'pharm',name:'Pharmacy',who:'Clinical pharmacist, pharmacy technician',color:'var(--d-pharm)',roles:[['pharmacist','Pharmacist',1]]},
+ {id:'diag',name:'Diagnostics',who:'Laboratory technician / phlebotomist, radiology technologist',color:'var(--d-diag)',roles:[['lab_tech','Lab technician',0],['radiology_tech','Radiology technologist',0]]},
+ {id:'him',name:'Medical Records (HIM)',who:'Records clerk, scanning, release of information, coding',color:'var(--d-him)',roles:[['him','Medical records clerk',0]]},
+ {id:'rev',name:'Revenue Cycle',who:'Billing, denials, clinical documentation specialist',color:'var(--d-rev)',roles:[['billing','Billing officer',1]]},
+ {id:'support',name:'Support Services',who:'Housekeeping (environmental services), transport',color:'var(--d-support)',roles:[['evs','Housekeeping',0]]},
+ {id:'quality',name:'Quality & Infection Control',who:'Quality analyst, infection preventionist',color:'var(--d-quality)',roles:[['quality','Quality analyst',0]]},
+];
+const dept=id=>DEPTS.find(d=>d.id===id);
+const ROLE_ORDER=['admin','physician','nurse','charge_nurse','pharmacist','lab_tech','radiology_tech','him','staff','bed_manager','billing','evs','quality'];
+const NAV=['Dashboard','Patients','Clinical','Diagnostics','Records','Operations','Billing','Quality','Settings'];
+const TABS=['Demographics','Insurance','Vitals','Notes','Orders','Labs','Imaging','Medications','MAR','Allergies','Problems','Care plan','Documents','Consents','Discharge','Invoices'];
+
+/* Screens: [name, nav group, access per role in ROLE_ORDER]. F full, V view, N hidden, text = that action only */
+const SCREENS=[
+ ['Patient access'],
+ ['Patient list','Patients',              ['F','F','F','F','V','V','V','V','F','V','V','N','V']],
+ ['Register / edit patient','Patients',   ['F','N','N','N','N','N','N','N','F','N','N','N','N']],
+ ['Appointments','Patients',              ['F','V','V','V','N','N','N','N','F','N','N','N','N']],
+ ['Admit / transfer / discharge','Patients',['F','V','V','transfer','N','N','N','N','admit','transfer','N','N','N']],
+ ['Bed board','Operations',               ['F','V','V','F','N','N','N','N','V','F','N','status','N']],
+ ['Housekeeping queue','Operations',      ['F','N','request','request','N','N','N','N','N','V','N','F','N']],
+ ['Insurance & eligibility','Billing',    ['F','N','N','N','N','N','N','N','F','N','F','N','N']],
+ ['Clinical'],
+ ['Clinical workspace (notes, vitals)','Clinical',['V','F','nursing','nursing','V','N','N','signed','N','N','N','N','V']],
+ ['Orders dashboard','Clinical',          ['V','F','ack','ack','meds','lab','imaging','N','N','N','N','N','N']],
+ ['Results inbox','Clinical',             ['V','F','F','F','V','N','N','N','N','N','N','N','N']],
+ ['Medication management / MAR','Clinical',['V','prescribe','administer','administer','verify','N','N','N','N','N','N','N','N']],
+ ['Medication reconciliation','Clinical', ['V','F','F','F','F','N','N','N','N','N','N','N','N']],
+ ['Care plan','Clinical',                 ['V','F','F','F','N','N','N','N','N','N','N','N','N']],
+ ['Discharge readiness','Clinical',       ['V','sign','checklist','checklist','meds','N','N','N','N','N','billing','N','N']],
+ ['Consents','Records',                   ['F','V','capture','capture','N','N','N','V','capture','N','N','N','N']],
+ ['Diagnostics & records'],
+ ['Lab worklist & result upload','Diagnostics',['V','N','collect','collect','N','F','N','N','N','N','N','N','N']],
+ ['Imaging worklist & report upload','Diagnostics',['V','finalise','N','N','N','N','F','N','N','N','N','N','N']],
+ ['Documents (chart tab)','Records',      ['F','request','request','request','V','N','N','F','V','N','billing','N','V']],
+ ['Records request queue','Records',      ['V','N','N','N','N','N','N','F','N','N','N','N','N']],
+ ['Revenue & quality'],
+ ['Denials / CDI / charges','Billing',    ['V','CDI','N','N','N','N','N','N','N','N','F','N','N']],
+ ['Infection analytics','Quality',        ['V','V','V','V','N','N','N','N','N','N','N','N','F']],
+ ['Quality measures & reports','Quality', ['V','V','N','V','N','N','N','N','N','N','N','N','F']],
+ ['Staffing','Operations',                ['F','N','V','F','N','N','N','N','N','N','N','N','N']],
+ ['Administration'],
+ ['Settings: facility, users, roles, integrations','Settings',['F','N','N','N','N','N','N','N','N','N','N','N','N']],
+ ['Settings: audit trail','Settings',     ['F','N','N','N','N','N','N','V','N','N','N','N','V']],
+ ['AI assistant','Clinical',              ['F','F','F','F','F','N','N','N','N','N','N','N','N']],
+];
+
+const ROLES={
+ admin:{label:'Administrator',dept:'admin',landing:'Hospital dashboard',tiles:[['42','inpatients'],['3','pending invites'],['2','integrations down'],['118','audit events today']],
+  wl:{cols:['User','Role','Status','Last active'],rows:[['Dr. A. Mehta','physician',['ok','active'],'2 min'],['R. Okafor','lab_tech',['wait','invited'],'—'],['S. Lin','nurse',['ok','active'],'14 min'],['Billing desk','billing',['ok','active'],'1 h']]},
+  tabs:TABS,
+  can:['Create users and assign roles and departments','Configure facility, beds, integrations, security','Open any screen for support and audit'],
+  cannot:['Sign a clinical note or discharge summary','Administer or dispense a medication','Acknowledge a critical result','Verify a laboratory result']},
+ physician:{label:'Physician',dept:'med',landing:'Provider worklist',tiles:[['9','my patients'],['3','unsigned notes'],['2','results to review'],['1','co-sign pending']],
+  wl:{cols:['Patient','Bed','Needs','Since'],rows:[['J. Alvarez, 64','ICU-3',['crit','critical K+ 6.1'],'12 min'],['M. Chen, 51','4B-12',['wait','unsigned H&P'],'3 h'],['P. Singh, 77','4B-07',['ok','CBC final'],'40 min'],['L. Brown, 39','2A-02',['wait','co-sign order'],'1 h']]},
+  tabs:TABS.filter(t=>t!=='Invoices'),
+  can:['Place and co-sign orders, prescribe','Write and sign physician notes','Review and acknowledge results','Sign discharge summary, answer documentation queries'],
+  cannot:['Register or edit patient demographics','Enter or upload laboratory results','Change bed assignments','Denials, charges, invoices']},
+ nurse:{label:'Nurse',dept:'nurse',landing:'Nursing worklist (my unit)',tiles:[['6','assigned patients'],['4','meds due this hour'],['2','vitals overdue'],['1','critical to ack']],
+  wl:{cols:['Patient','Bed','Task','Due'],rows:[['J. Alvarez, 64','ICU-3',['crit','acknowledge K+ 6.1'],'now'],['P. Singh, 77','4B-07',['wait','insulin 10u'],'10:00'],['M. Chen, 51','4B-12',['wait','vitals q4h'],'10:15'],['R. Diaz, 45','4B-09',['ok','discharge checklist'],'today']]},
+  tabs:TABS.filter(t=>!['Insurance','Invoices'].includes(t)),
+  can:['Record vitals, flowsheets, nursing notes, care plan','Administer on the MAR, collect specimens','Acknowledge orders and critical results','Request records and a bed clean, run the discharge checklist'],
+  cannot:['Place or sign physician orders','Enter lab values or upload reports','Register patients or edit insurance','Billing screens or settings']},
+ charge_nurse:{label:'Charge nurse',dept:'nurse',landing:'Unit overview',tiles:[['24','unit census'],['3','open transfers'],['2','beds awaiting clean'],['5','staff on shift']],
+  wl:{cols:['Bed','Patient','Status','Action'],rows:[['4B-03','—',['wait','awaiting clean'],'assign EVS'],['4B-07','P. Singh',['ok','occupied'],'—'],['4B-10','K. Rao',['wait','transfer to 2A'],'approve'],['4B-12','M. Chen',['crit','isolation'],'—']]},
+  tabs:TABS.filter(t=>!['Insurance','Invoices'].includes(t)),
+  can:['Everything a nurse can','Manage beds, transfers and unit assignments','See staffing for the unit','Receive escalated critical results'],
+  cannot:['Place or sign physician orders','Enter lab values','Billing, registration, settings']},
+ pharmacist:{label:'Pharmacist',dept:'pharm',landing:'Pharmacy verification queue',tiles:[['14','orders to verify'],['2','interaction alerts'],['3','med recs pending'],['1','discharge med list']],
+  wl:{cols:['Patient','Medication','Check','Waiting'],rows:[['J. Alvarez','Heparin infusion',['crit','drug interaction'],'5 min'],['M. Chen','Metformin 500 mg',['wait','renal dose'],'22 min'],['P. Singh','Insulin glargine',['ok','verified'],'—'],['L. Brown','Amoxicillin',['crit','allergy: penicillin'],'2 min']]},
+  tabs:['Demographics','Labs','Medications','MAR','Allergies','Problems','Discharge'],
+  can:['Verify, reject, and dispense medication orders','Complete medication reconciliation','Read labs, allergies and problems for safety checks'],
+  cannot:['Prescribe or sign orders','Write clinical notes or vitals','Register patients, manage beds','Documents, billing, settings']},
+ lab_tech:{label:'Lab technician',dept:'diag',landing:'Lab worklist',tiles:[['11','to collect'],['7','in progress'],['3','awaiting verify'],['1','critical to flag']],
+  wl:{cols:['Patient / MRN','Test','Status','Ordered'],rows:[['J. Alvarez · 10422','BMP, stat',['crit','result entered'],'25 min'],['M. Chen · 10387','CBC',['wait','collected'],'1 h'],['P. Singh · 10311','Troponin',['wait','to collect'],'8 min'],['R. Diaz · 10298','Lipid panel',['ok','final + PDF'],'3 h']]},
+  tabs:['Demographics','Labs'],
+  can:['See lab orders only, with patient name, MRN and bed','Mark specimen collected','Enter result values and upload the report file','Flag a critical value'],
+  cannot:['Read notes, medications, or other chart tabs','See imaging or pharmacy orders','Acknowledge a result on behalf of the clinician','Patients, billing, operations menus']},
+ radiology_tech:{label:'Radiology technologist',dept:'diag',landing:'Imaging worklist',tiles:[['6','studies ordered'],['2','in progress'],['4','awaiting read'],['0','critical open']],
+  wl:{cols:['Patient','Study','Status','Ordered'],rows:[['J. Alvarez','CT head, no contrast',['wait','in progress'],'15 min'],['M. Chen','CXR portable',['ok','report uploaded'],'2 h'],['K. Rao','MRI lumbar',['wait','safety screen'],'40 min'],['L. Brown','US abdomen',['wait','ordered'],'5 min']]},
+  tabs:['Demographics','Imaging'],
+  can:['See imaging orders only','Mark study performed, record safety screen','Upload the report and image link for the radiologist'],
+  cannot:['Finalise a read (the radiologist does)','Read notes, medications, labs','Patients, billing, operations menus']},
+ him:{label:'Medical records clerk',dept:'him',landing:'Records request queue',tiles:[['8','open requests'],['3','scans to file'],['2','release of information'],['5','unsigned docs > 48 h']],
+  wl:{cols:['Patient','Request','Status','From'],rows:[['M. Chen','Outside discharge summary',['wait','open'],'Dr. Mehta'],['P. Singh','Prior ECG',['ok','uploaded'],'RN S. Lin'],['J. Alvarez','Signed consent scan',['wait','in progress'],'Registration'],['R. Diaz','Release to insurer',['wait','open'],'Billing']]},
+  tabs:['Demographics','Notes','Problems','Documents','Consents'],
+  can:['Fulfil record requests by uploading scanned documents','File, version and release documents','Read signed notes and consents for release','Read the audit trail'],
+  cannot:['Write any clinical content','Place orders or see medications','Edit demographics or insurance','Billing, beds, settings']},
+ staff:{label:'Registration clerk',dept:'access',landing:'Front-desk board',tiles:[['7','admissions today'],['19','appointments'],['3','eligibility pending'],['2','consents missing']],
+  wl:{cols:['Patient','Arriving','Status','Needs'],rows:[['New: T. Nguyen','09:30',['wait','pre-registered'],'insurance card'],['K. Rao','10:00',['ok','admitted 2A-05'],'—'],['A. Patel','10:30',['wait','eligibility'],'verify'],['B. Ahmed','11:00',['crit','no consent'],'capture']]},
+  tabs:['Demographics','Insurance','Consents'],
+  can:['Register and edit patients, photo, contacts','Admit, book appointments, reserve a bed','Capture insurance, run eligibility, collect consents'],
+  cannot:['Open any clinical tab','See orders, results, medications','Billing worklists','Settings']},
+ bed_manager:{label:'Bed manager',dept:'access',landing:'Live bed board',tiles:[['86%','occupancy'],['4','pending placements'],['3','transfer requests'],['2','awaiting clean']],
+  wl:{cols:['Request','Unit','Status','Age'],rows:[['Admit from ED','ICU',['crit','no bed'],'35 min'],['Transfer K. Rao','4B → 2A',['wait','approved'],'12 min'],['Reserve post-op','3C',['ok','held 3C-04'],'—'],['Clean 4B-03','4B',['wait','EVS assigned'],'8 min']]},
+  tabs:['Demographics'],
+  can:['Assign, reserve and transfer beds','Work the transfer-request queue','See housekeeping status per bed'],
+  cannot:['Open clinical tabs','Register or edit patients','Billing, settings']},
+ billing:{label:'Billing officer',dept:'rev',landing:'Revenue dashboard',tiles:[['23','open denials'],['6','CDI queries out'],['4','awaiting final bill'],['$48k','appeals in flight']],
+  wl:{cols:['Account','Payer','Status','Due'],rows:[['R. Diaz · 10298','Aetna',['crit','denied: auth'],'3 d'],['M. Chen · 10387','Medicare',['wait','CDI query out'],'5 d'],['P. Singh · 10311','BCBS',['ok','eligible'],'—'],['K. Rao · 10455','UHC',['wait','final bill'],'today']]},
+  tabs:['Demographics','Insurance','Documents','Discharge','Invoices'],
+  can:['Denials, appeals, documentation queries, charges','Insurance, eligibility, invoices','Discharge billing tab and billing documents'],
+  cannot:['Any clinical tab (notes, orders, meds, labs)','Register patients','Beds, operations, settings']},
+ evs:{label:'Housekeeping',dept:'support',landing:'Cleaning queue',tiles:[['5','beds to clean'],['2','stat cleans'],['12','done this shift'],['18 min','average turnaround']],
+  wl:{cols:['Bed','Unit','Priority','Status'],rows:[['ICU-2','ICU',['crit','stat · isolation'],'in progress'],['4B-03','4B',['wait','routine'],'assigned'],['2A-11','2A',['wait','routine'],'queued'],['3C-06','3C',['ok','done'],'ready']]},
+  tabs:[],
+  can:['Accept, start and complete bed cleans','See bed status and isolation flag only'],
+  cannot:['Any patient information beyond bed and isolation','Everything else']},
+ quality:{label:'Quality analyst',dept:'quality',landing:'Quality dashboard',tiles:[['3','HAI events this month'],['92%','SEP-1 compliance'],['1.8','CAUTI rate'],['4','open measure gaps']],
+  wl:{cols:['Measure','Unit','Status','Gap'],rows:[['SEP-1 bundle','ICU',['ok','92%'],'2 cases'],['CAUTI','4B',['crit','above target'],'1 event'],['VTE prophylaxis','2A',['wait','88%'],'3 cases'],['CLABSI','ICU',['ok','0 events'],'—']]},
+  tabs:['Demographics','Vitals','Notes','Orders','Labs','Problems'],
+  can:['Infection analytics, quality measures, reports','Read-only chart access for abstraction','Read the audit trail'],
+  cannot:['Write anything clinical','Orders, meds, billing, beds','Settings']},
+};
+
+const accessOf=(screen,k)=>screen[2][ROLE_ORDER.indexOf(k)];
+const lvl=v=>v==='N'?'N':v==='V'?'V':'F';
+const lbl=v=>v==='F'?'Full':v==='V'?'View':v==='N'?'Hidden':v;
+
+/* departments */
+document.getElementById('depts').innerHTML=DEPTS.map(d=>`
+ <div class="dept" style="--dc:${d.color}"><h3>${d.name}</h3><div class="who">${d.who}</div>
+  <div class="roles">${d.roles.map(r=>`<span class="chip ${r[2]?'exists':'new'}">${r[1]}</span>`).join('')}</div></div>`).join('');
+
+/* role jump */
+document.getElementById('rolejump').innerHTML=ROLE_ORDER.map(k=>`<a href="#role-${k}" style="--dc:${dept(ROLES[k].dept).color}"><i></i>${ROLES[k].label}</a>`).join('');
+
+/* role cards */
+document.getElementById('rolecards').innerHTML=ROLE_ORDER.map((k,i)=>{
+ const r=ROLES[k],d=dept(r.dept);
+ const mine=SCREENS.filter(s=>s.length>1&&accessOf(s,k)!=='N');
+ const navOn=new Set(['Dashboard',...mine.map(s=>s[1])]);
+ const groups=NAV.filter(n=>n!=='Dashboard'&&navOn.has(n));
+ const sideHtml=`<div class="it on">${r.landing}</div>`+groups.map(g=>`<div class="g">${g}</div>`+mine.filter(s=>s[1]===g).map(s=>{const v=accessOf(s,k);return `<div class="it"><span>${s[0]}</span><span class="pill ${lvl(v)}">${v==='F'?'Full':v==='V'?'View':v}</span></div>`}).join('')).join('');
+ const wl=r.wl;
+ return `
+ <article class="rolecard" id="role-${k}" style="--dc:${d.color}">
+  <div class="rc-head">
+   <div class="l"><span class="idx">${String(i+1).padStart(2,'0')}</span><div><div class="dept-tag">${d.name}</div><h3>${r.label}</h3></div></div>
+   <div class="r"><span><b>${mine.length}</b> of ${SCREENS.filter(s=>s.length>1).length} screens</span><span><b>${mine.filter(s=>lvl(accessOf(s,k))==='F').length}</b> full</span><span><b>${mine.filter(s=>accessOf(s,k)==='V').length}</b> view only</span><span>Lands on <b>${r.landing}</b></span></div>
+  </div>
+  <div class="rc-screen">
+   <div class="cap">Home screen wireframe for a ${r.label.toLowerCase()}</div>
+   <div class="wf">
+    <div class="wf-top"><span class="logo">EMR</span>${NAV.map((n,j)=>`<span class="nv ${navOn.has(n)?(j===0?'on':''):'off'}">${n}</span>`).join('')}<span class="user"><i></i>${r.label}</span></div>
+    <div class="wf-body">
+     <div class="wf-side">${sideHtml}</div>
+     <div class="wf-main">
+      <div class="ttl"><b>${r.landing}</b><span>example data</span></div>
+      <div class="tiles">${r.tiles.map(t=>`<div class="tile"><b>${t[0]}</b><span>${t[1]}</span></div>`).join('')}</div>
+      <div class="wl"><div class="h">${wl.cols.map(c=>`<span>${c}</span>`).join('')}</div>${wl.rows.map(row=>`<div class="r"><b>${row[0]}</b><span>${row[1]}</span><span class="st ${row[2][0]}">${row[2][1]}</span><span>${row[3]}</span></div>`).join('')}</div>
+     </div>
+    </div>
+   </div>
+   <div class="cap">Patient chart tabs available to this role ${r.tabs.length?'':'(no patient chart for this role)'}</div>
+   <div class="tabrow">${TABS.map(t=>`<span class="tab ${r.tabs.includes(t)?'':'off'}">${t}</span>`).join('')}</div>
+  </div>
+  <div class="rc-info">
+   <div><h4 style="margin-bottom:8px">Screens this role can open</h4><div class="screens">${mine.map(s=>{const v=accessOf(s,k);return `<div class="row"><span class="n">${s[0]} <small>· ${s[1]}</small></span><span class="pill ${lvl(v)}">${lbl(v)}</span></div>`}).join('')}</div></div>
+   <div class="cols2">
+    <div><h4>Can do</h4><ul class="yes">${r.can.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+    <div><h4>Never shown</h4><ul class="no">${r.cannot.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+   </div>
+  </div>
+ </article>`;
+}).join('');
+
+/* matrix */
+const cell=v=>v==='F'?'<span class="cell F">Full</span>':v==='V'?'<span class="cell V">View</span>':v==='N'?'<span class="cell N">–</span>':`<span class="cell P">${v}</span>`;
+document.getElementById('matrix').innerHTML=`<thead><tr><th>Screen</th>${ROLE_ORDER.map(k=>`<th style="--dc:${dept(ROLES[k].dept).color}">${ROLES[k].label}<span class="d">${dept(ROLES[k].dept).name.split(' ')[0]}</span></th>`).join('')}</tr></thead>
+<tbody>${SCREENS.map(s=>s.length===1?`<tr class="group"><td colspan="${ROLE_ORDER.length+1}">${s[0]}</td></tr>`:`<tr><td>${s[0]}</td>${s[2].map(cell).join('')}</tr>`).join('')}</tbody>`;
+
+/* workflow lanes */
+const LANES=[
+ {who:'Ward: physician or nurse',sub:'Requests, then reviews',dept:'med',steps:{1:{t:'Place lab order',s:'From the chart or order dashboard; safety checks run.',api:'order dashboard',k:'exists'},7:{t:'Review and acknowledge',s:'Appears in the results inbox and the Labs tab. Critical results need an explicit acknowledge; unacknowledged ones escalate.',api:'results inbox',k:'new'}}},
+ {who:'Laboratory: lab technician',sub:'Fulfils',dept:'diag',steps:{2:{t:'Pick up from lab worklist',s:'Only lab orders, only the fields a technician needs.',api:'lab worklist',k:'new'},3:{t:'Collect specimen',s:'Status to collected; time stamped.',api:'collect',k:'exists'},4:{t:'Enter values, upload report',s:'Values with flags, plus a PDF or image attached to the result.',api:'result entry + file upload',k:'new'}}},
+ {who:'Pathologist or senior technician',sub:'Verifies',dept:'diag',steps:{5:{t:'Verify and release',s:'Preliminary becomes final. Until then the ward sees "pending".',api:'verify step',k:'new'}}},
+ {who:'System',sub:'Notifies',dept:'admin',steps:{6:{t:'Notify ordering clinician',s:'Bell notification to the orderer; critical values also go to the unit nurses and charge nurse.',api:'notification',k:'sys'}}},
+];
+document.getElementById('lanes').innerHTML=LANES.map(l=>`<div class="lane" style="--dc:${dept(l.dept).color}"><div class="who"><b><span class="dot"></span>${l.who}</b><span>${l.sub}</span></div><div class="steps">${Object.keys(l.steps).map(Number).sort((a,b)=>a-b).map(n=>{const s=l.steps[n];const col=n>=6?n-1:n;return `<div class="step ${s.k}" style="grid-column:${Math.min(col,6)}"><span class="badge">${s.k==='exists'?'exists':s.k==='new'?'new':'auto'}</span><span class="n">STEP ${n}</span><b>${s.t}</b><span>${s.s}</span><span class="api">${s.api}</span></div>`}).join('')}</div></div>`).join('');
+})();
+</script>

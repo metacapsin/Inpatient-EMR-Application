@@ -9,6 +9,9 @@ export const problemsRouter = Router();
 const clinicalWriters = requireRole('physician', 'nurse');
 const STATUSES = ['active', 'inactive', 'resolved', 'entered_in_error'];
 const CHRONICITIES = ['acute', 'chronic'];
+// UB-04/CMS Present On Admission indicator set: Y yes, N no, U documentation insufficient to
+// determine, W clinically undetermined, '1' exempt from POA reporting.
+const POA_CODES = ['Y', 'N', 'U', 'W', '1'];
 
 const dateOnly = z
     .string()
@@ -74,7 +77,7 @@ problemsRouter.get('/api/icd10/search', h(async (req, res) => {
 }));
 
 // ------------------------------------------------------------ list problems
-problemsRouter.get('/api/patients/:patientId/problems', h(async (req, res) => {
+problemsRouter.get('/api/patients/:patientId/problems', clinicalWriters, h(async (req, res) => {
     await assertPatient(req, req.params.patientId);
     const includeResolved =
         String(req.query.includeResolved ?? '').toLowerCase() === 'true' ||
@@ -105,9 +108,16 @@ problemsRouter.post('/api/patients/:patientId/problems', clinicalWriters, h(asyn
             chronicity: z.enum(CHRONICITIES).optional().nullable(),
             onsetDate: dateOnly,
             status: z.enum(['active', 'inactive']).optional().default('active'),
+            poa: z.enum(POA_CODES).optional().nullable(),
+            isPrincipal: z.boolean().optional().default(false),
         }),
         req.body,
     );
+    // POA and principal-diagnosis designation are both encounter-scoped concepts — meaningless (and
+    // therefore rejected rather than silently dropped) without an encounter to attach them to.
+    if ((b.poa || b.isPrincipal) && !b.encounterId) {
+        throw badRequest('poa and isPrincipal require encounterId');
+    }
 
     await assertPatient(req, patientId);
     await assertEncounterOptional(req, b.encounterId ?? null, patientId);
@@ -126,8 +136,8 @@ problemsRouter.post('/api/patients/:patientId/problems', clinicalWriters, h(asyn
         const r = await query(
             `INSERT INTO problems (
                 tenant_id, patient_id, encounter_id, icd10_code, icd10_description,
-                status, chronicity, onset_date, noted_by
-             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                status, chronicity, onset_date, noted_by, poa, is_principal
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
              RETURNING *`,
             [
                 req.user.tenantId,
@@ -139,10 +149,15 @@ problemsRouter.post('/api/patients/:patientId/problems', clinicalWriters, h(asyn
                 b.chronicity ?? null,
                 b.onsetDate ?? null,
                 req.user.id,
+                b.poa ?? null,
+                b.isPrincipal ?? false,
             ],
         );
         created(res, problemOut(r.rows[0]));
     } catch (e) {
+        if (e.code === '23505' && e.constraint === 'problems_one_principal_per_encounter') {
+            throw conflict('This encounter already has a principal diagnosis');
+        }
         if (e.code === '23505') {
             throw conflict('An active problem with this ICD-10 code already exists for this patient');
         }
@@ -160,6 +175,8 @@ problemsRouter.patch('/api/problems/:id', clinicalWriters, h(async (req, res) =>
                 onsetDate: dateOnly,
                 resolvedDate: dateOnly,
                 encounterId: z.string().trim().min(1).max(64).nullable().optional(),
+                poa: z.enum(POA_CODES).nullable().optional(),
+                isPrincipal: z.boolean().optional(),
             })
             .refine((o) => Object.keys(o).length > 0, { message: 'No fields to update' }),
         req.body,
@@ -184,6 +201,11 @@ problemsRouter.patch('/api/problems/:id', clinicalWriters, h(async (req, res) =>
         if (b.encounterId) await assertEncounterOptional(req, b.encounterId, existing.patient_id);
         encounterId = b.encounterId;
     }
+    const poa = b.poa !== undefined ? b.poa : existing.poa;
+    const isPrincipal = b.isPrincipal !== undefined ? b.isPrincipal : existing.is_principal;
+    if ((poa || isPrincipal) && !encounterId) {
+        throw badRequest('poa and isPrincipal require encounterId');
+    }
 
     if (nextStatus === 'resolved') {
         if (!resolvedDate) resolvedDate = new Date().toISOString().slice(0, 10);
@@ -205,13 +227,18 @@ problemsRouter.patch('/api/problems/:id', clinicalWriters, h(async (req, res) =>
                 onset_date = $3,
                 resolved_date = $4,
                 encounter_id = $5,
+                poa = $6,
+                is_principal = $7,
                 updated_at = now()
-             WHERE id = $6 AND tenant_id = $7
+             WHERE id = $8 AND tenant_id = $9
              RETURNING *`,
-            [nextStatus, chronicity, onsetDate, resolvedDate, encounterId, req.params.id, req.user.tenantId],
+            [nextStatus, chronicity, onsetDate, resolvedDate, encounterId, poa ?? null, isPrincipal ?? false, req.params.id, req.user.tenantId],
         );
         ok(res, problemOut(r.rows[0]));
     } catch (e) {
+        if (e.code === '23505' && e.constraint === 'problems_one_principal_per_encounter') {
+            throw conflict('This encounter already has a principal diagnosis');
+        }
         if (e.code === '23505') {
             throw conflict('An active problem with this ICD-10 code already exists for this patient');
         }
