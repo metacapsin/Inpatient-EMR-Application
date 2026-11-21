@@ -230,11 +230,16 @@ export const verifyMfaCode = createAsyncThunk(
 
 /** Silently restores a session from the httpOnly refresh cookie on app load (SEC-09 — the access
  *  token itself is never persisted, so a fresh page load has none until this succeeds). */
-export const bootstrapAuth = createAsyncThunk('auth/bootstrap', async (_, { rejectWithValue }) => {
+export const bootstrapAuth = createAsyncThunk('auth/bootstrap', async (_, { getState, rejectWithValue }) => {
     const token = await refreshAccessToken();
     if (!token) return rejectWithValue('No session');
-    const hydrated = await fetchStaffProfileAfterAuth('', { email: '' } as User);
-    return { token, user: hydrated.user, role: hydrated.role };
+    // Keep the cached staff user as the base so the header does not flash "User" while profile loads.
+    const existing = (getState() as { auth: AuthState }).auth.user;
+    const baseUser: User = existing?.email
+        ? existing
+        : ({ email: existing?.email || '', ...(existing || {}) } as User);
+    const hydrated = await fetchStaffProfileAfterAuth(baseUser.email || '', baseUser);
+    return { token, user: hydrated.user, role: hydrated.role ?? (getState() as { auth: AuthState }).auth.role };
 });
 
 /** User-initiated sign-out: revokes the refresh-token cookie server-side (POST /auth/logout) before
@@ -441,6 +446,16 @@ const authSlice = createSlice({
             })
             .addCase(bootstrapAuth.rejected, (state) => {
                 state.bootstrapped = true;
+                state.token = null;
+                state.user = null;
+                state.role = null;
+                state.patientData = null;
+                clearStoredTokens();
+                localStorage.removeItem('token');
+                localStorage.removeItem('refreshToken');
+                localStorage.removeItem('role');
+                localStorage.removeItem('user');
+                localStorage.removeItem('patientData');
             })
             .addCase(registerUser.pending, (state) => {
                 state.loading = true;

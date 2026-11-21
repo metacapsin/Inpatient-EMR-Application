@@ -15,11 +15,12 @@ import {
     Trash2,
     User,
 } from 'lucide-react';
+import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import {
     CHART_NOTE_STATUSES,
-    PROGRESS_NOTE_TYPE,
+    PHASE1_NOTE_TYPES,
     deletePatientChartNote,
     fetchProviderOptions,
     formatVisitDateDisplay,
@@ -30,7 +31,9 @@ import {
     type PatientChartNote,
 } from '../../services/patientChartNotes.service';
 
-const NOTE_TYPE_OPTIONS = [PROGRESS_NOTE_TYPE];
+const NOTE_TYPE_OPTIONS = [...PHASE1_NOTE_TYPES];
+
+type NoteConfirmKind = 'delete' | 'restore' | 'markInError';
 
 const Notes: React.FC = () => {
     const patientId = usePatientId();
@@ -47,8 +50,11 @@ const Notes: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(5);
     const [busyId, setBusyId] = useState<string | null>(null);
+    const [confirm, setConfirm] = useState<{ kind: NoteConfirmKind; note: PatientChartNote } | null>(null);
+    const [inErrorReason, setInErrorReason] = useState('');
 
     const facesheetBase = patientId ? `/app/facesheet/${encodeURIComponent(patientId)}/notes` : '/app/notes';
+    const confirmBusy = Boolean(confirm && busyId === confirm.note.id);
 
     const loadNotes = useCallback(async () => {
         if (!patientId) return;
@@ -105,44 +111,48 @@ const Notes: React.FC = () => {
 
     const openNote = (id: string) => navigate(`${facesheetBase}/${encodeURIComponent(id)}`);
 
-    const confirmMarkInError = async (note: PatientChartNote) => {
-        const reason = window.prompt('Reason for marking this note in error:');
-        if (!reason || !reason.trim()) return;
-        setBusyId(note.id);
-        try {
-            await markChartNoteInError(note.id, reason.trim());
-            toast.success('Note marked in error');
-            await loadNotes();
-        } catch (err: any) {
-            toast.error(err?.response?.data?.message || 'Failed to mark note in error');
-        } finally {
-            setBusyId(null);
-        }
+    const closeConfirm = () => {
+        if (confirmBusy) return;
+        setConfirm(null);
+        setInErrorReason('');
     };
 
-    const confirmRestore = async (note: PatientChartNote) => {
-        if (!window.confirm('Restore this note?')) return;
-        setBusyId(note.id);
-        try {
-            await restoreChartNote(note.id);
-            toast.success('Note restored');
-            await loadNotes();
-        } catch (err: any) {
-            toast.error(err?.response?.data?.message || 'Failed to restore note');
-        } finally {
-            setBusyId(null);
-        }
+    const openConfirm = (kind: NoteConfirmKind, note: PatientChartNote) => {
+        setInErrorReason('');
+        setConfirm({ kind, note });
     };
 
-    const confirmDelete = async (note: PatientChartNote) => {
-        if (!window.confirm('Delete this draft note? This cannot be undone.')) return;
+    const runConfirm = async () => {
+        if (!confirm) return;
+        const { kind, note } = confirm;
+        if (kind === 'markInError' && inErrorReason.trim().length < 3) {
+            toast.error('Enter a reason (at least 3 characters)');
+            return;
+        }
         setBusyId(note.id);
         try {
-            await deletePatientChartNote(note.id);
-            toast.success('Note deleted');
+            if (kind === 'markInError') {
+                await markChartNoteInError(note.id, inErrorReason.trim());
+                toast.success('Note marked in error');
+            } else if (kind === 'restore') {
+                await restoreChartNote(note.id);
+                toast.success('Note restored');
+            } else {
+                await deletePatientChartNote(note.id);
+                toast.success('Note deleted');
+            }
+            setConfirm(null);
+            setInErrorReason('');
             await loadNotes();
         } catch (err: any) {
-            toast.error(err?.response?.data?.message || 'Failed to delete note');
+            toast.error(
+                err?.response?.data?.message ||
+                    (kind === 'markInError'
+                        ? 'Failed to mark note in error'
+                        : kind === 'restore'
+                          ? 'Failed to restore note'
+                          : 'Failed to delete note'),
+            );
         } finally {
             setBusyId(null);
         }
@@ -328,7 +338,7 @@ const Notes: React.FC = () => {
                                                 type="button"
                                                 className="btn btn-sm btn-outline-warning inline-flex items-center gap-1"
                                                 disabled={busyId === note.id}
-                                                onClick={() => confirmMarkInError(note)}
+                                                onClick={() => openConfirm('markInError', note)}
                                             >
                                                 <AlertTriangle className="h-3.5 w-3.5" />
                                                 Mark in Error
@@ -338,7 +348,7 @@ const Notes: React.FC = () => {
                                                 type="button"
                                                 className="btn btn-sm btn-outline-success inline-flex items-center gap-1"
                                                 disabled={busyId === note.id}
-                                                onClick={() => confirmRestore(note)}
+                                                onClick={() => openConfirm('restore', note)}
                                             >
                                                 <RotateCcw className="h-3.5 w-3.5" />
                                                 Restore
@@ -349,7 +359,7 @@ const Notes: React.FC = () => {
                                                 type="button"
                                                 className="btn btn-sm btn-outline-danger inline-flex items-center gap-1"
                                                 disabled={busyId === note.id}
-                                                onClick={() => confirmDelete(note)}
+                                                onClick={() => openConfirm('delete', note)}
                                             >
                                                 <Trash2 className="h-3.5 w-3.5" />
                                                 Delete
@@ -422,6 +432,59 @@ const Notes: React.FC = () => {
                     </div>
                 ) : null}
             </div>
+
+            <ConfirmDialog
+                open={confirm?.kind === 'delete'}
+                title="Delete draft note"
+                message="Delete this draft note? This cannot be undone."
+                detail={confirm?.note.notesType}
+                variant="danger"
+                confirmLabel="Delete note"
+                busy={confirmBusy}
+                onCancel={closeConfirm}
+                onConfirm={runConfirm}
+            />
+
+            <ConfirmDialog
+                open={confirm?.kind === 'restore'}
+                title="Restore note"
+                message="Restore this note to the chart? It will return to draft or completed based on its prior signature."
+                detail={confirm?.note.notesType}
+                variant="primary"
+                confirmLabel="Restore note"
+                busy={confirmBusy}
+                onCancel={closeConfirm}
+                onConfirm={runConfirm}
+            />
+
+            <ConfirmDialog
+                open={confirm?.kind === 'markInError'}
+                title="Mark note in error"
+                message="This note will remain in the chart as Marked in Error. Provide a clinical reason for the audit trail."
+                detail={confirm?.note.notesType}
+                variant="warning"
+                confirmLabel="Mark in error"
+                busy={confirmBusy}
+                confirmDisabled={inErrorReason.trim().length < 3}
+                onCancel={closeConfirm}
+                onConfirm={runConfirm}
+            >
+                <div>
+                    <label htmlFor="note-in-error-reason" className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-200">
+                        Reason <span className="text-danger">*</span>
+                    </label>
+                    <textarea
+                        id="note-in-error-reason"
+                        className="form-textarea min-h-[96px] w-full resize-y text-sm"
+                        rows={3}
+                        value={inErrorReason}
+                        disabled={confirmBusy}
+                        placeholder="Why is this note marked in error?"
+                        onChange={(e) => setInErrorReason(e.target.value)}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Minimum 3 characters.</p>
+                </div>
+            </ConfirmDialog>
         </div>
     );
 };

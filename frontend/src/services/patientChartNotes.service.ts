@@ -1,10 +1,52 @@
 import api from './api';
 
-/** Phase 1 — only this note type is enabled in facesheet Notes. */
+import { FOLLOW_UP_NOTE_TYPE } from '../features/chart-notes/followUpProgress.types';
+
+/** Free-text / light types + structured CPT forms enabled in facesheet Notes. */
 export const PROGRESS_NOTE_TYPE = 'Office Note Free Text Progress Note' as const;
+export const HP_NOTE_TYPE = 'Office Note Free Text HP' as const;
+export const TCM_NOTE_TYPE = 'Office Note Free Text TCM Note' as const;
+export const CCM_NOTE_TYPE = 'Office Note Free Text CCM Note' as const;
+export const OFFICE_FORM_NOTE_TYPE = 'Office Form' as const;
+export const WORK_NOTE_TYPE = 'Work Note' as const;
+export const PHONE_NOTE_TYPE = 'Phone Note' as const;
+export { FOLLOW_UP_NOTE_TYPE };
+
+export const PHASE1_NOTE_TYPES = [
+    PROGRESS_NOTE_TYPE,
+    HP_NOTE_TYPE,
+    TCM_NOTE_TYPE,
+    CCM_NOTE_TYPE,
+    OFFICE_FORM_NOTE_TYPE,
+    WORK_NOTE_TYPE,
+    PHONE_NOTE_TYPE,
+    FOLLOW_UP_NOTE_TYPE,
+] as const;
+export type Phase1NoteType = (typeof PHASE1_NOTE_TYPES)[number];
+
+export const NOTE_TYPE_SHORT_LABEL: Record<Phase1NoteType, string> = {
+    [PROGRESS_NOTE_TYPE]: 'Progress Note',
+    [HP_NOTE_TYPE]: 'H&P Note',
+    [TCM_NOTE_TYPE]: 'TCM Note',
+    [CCM_NOTE_TYPE]: 'CCM Note',
+    [OFFICE_FORM_NOTE_TYPE]: 'Office Form',
+    [WORK_NOTE_TYPE]: 'Work Note',
+    [PHONE_NOTE_TYPE]: 'Phone Note',
+    [FOLLOW_UP_NOTE_TYPE]: 'Follow-Up Progress',
+};
+
+export const STRUCTURED_NOTE_TYPES = [FOLLOW_UP_NOTE_TYPE] as const;
+
+export function isStructuredNoteType(value: string): boolean {
+    return (STRUCTURED_NOTE_TYPES as readonly string[]).includes(value);
+}
 
 export const CHART_NOTE_STATUSES = ['In Draft', 'Completed', 'Marked in Error'] as const;
 export type ChartNoteStatus = (typeof CHART_NOTE_STATUSES)[number];
+
+export function isPhase1NoteType(value: string): value is Phase1NoteType {
+    return (PHASE1_NOTE_TYPES as readonly string[]).includes(value);
+}
 
 export interface ChartNoteProvider {
     id?: string;
@@ -19,6 +61,7 @@ export interface PatientChartNote {
     encounterId: string;
     notesType: string;
     notesText: string;
+    structuredPayload?: Record<string, unknown> | null;
     date: string;
     time?: string;
     assignedProvider: ChartNoteProvider | null;
@@ -44,8 +87,9 @@ export interface ChartNoteListFilters {
 export interface CreateChartNotePayload {
     patientId: string;
     encounterId: string;
-    notesType?: typeof PROGRESS_NOTE_TYPE;
+    notesType?: Phase1NoteType;
     notesText: string;
+    structuredPayload?: Record<string, unknown> | null;
     date: string;
     time?: string;
     assignedProviderId: string;
@@ -59,6 +103,7 @@ export interface CreateChartNotePayload {
 export interface UpdateChartNotePayload {
     id: string;
     notesText?: string;
+    structuredPayload?: Record<string, unknown> | null;
     date?: string;
     time?: string | null;
     assignedProviderId?: string;
@@ -94,8 +139,8 @@ export async function getPatientChartNoteById(id: string): Promise<PatientChartN
 
 export async function createPatientChartNote(payload: CreateChartNotePayload): Promise<PatientChartNote> {
     const { data } = await api.post('/Patient/createPatientNote', {
-        notesType: PROGRESS_NOTE_TYPE,
         ...payload,
+        notesType: payload.notesType || PROGRESS_NOTE_TYPE,
     });
     return unwrapData<PatientChartNote>(data);
 }

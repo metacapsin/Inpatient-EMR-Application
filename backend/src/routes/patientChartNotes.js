@@ -5,7 +5,7 @@ import { ApiError, conflict, created, forbidden, h, notFound, ok, parse } from '
 import { requireRole } from '../middleware/auth.js';
 
 /**
- * Facesheet chart notes — Phase 1: Office Note Free Text Progress Note only.
+ * Facesheet chart notes — free-text types + structured CPT forms (payload in structured_payload).
  * Shape mirrors EMR-Backend PatientNote fields the EMR-ng create-notes shell uses
  * (notesType, notesText, date, time, assignedProvider, providerSigned, noteStatus, encounterId).
  * PDF / AI / email / cosign are intentionally not implemented here yet.
@@ -13,7 +13,17 @@ import { requireRole } from '../middleware/auth.js';
  */
 export const patientChartNotesRouter = Router();
 
-const NOTE_TYPE = 'Office Note Free Text Progress Note';
+const ALLOWED_NOTE_TYPES = [
+    'Office Note Free Text Progress Note',
+    'Office Note Free Text HP',
+    'Office Note Free Text TCM Note',
+    'Office Note Free Text CCM Note',
+    'Office Form',
+    'Work Note',
+    'Phone Note',
+    'Follow-Up Progress Note (99212-99215/99308-99310/99347-99350)',
+];
+const DEFAULT_NOTE_TYPE = ALLOWED_NOTE_TYPES[0];
 const authors = requireRole('physician', 'nurse', 'staff');
 const readers = requireRole('physician', 'nurse', 'staff');
 const signers = requireRole('physician', 'nurse');
@@ -29,6 +39,7 @@ function noteOut(n) {
         encounterId: n.encounter_id,
         notesType: n.notes_type,
         notesText: n.notes_text ?? '',
+        structuredPayload: n.structured_payload ?? null,
         date: n.visit_date instanceof Date
             ? n.visit_date.toISOString().slice(0, 10)
             : String(n.visit_date ?? '').slice(0, 10),
@@ -119,8 +130,20 @@ function toYmd(value) {
 const createBody = z.object({
     patientId: z.string().trim().min(1),
     encounterId: z.string().trim().min(1),
-    notesType: z.literal(NOTE_TYPE).default(NOTE_TYPE),
+    notesType: z
+        .enum([
+            'Office Note Free Text Progress Note',
+            'Office Note Free Text HP',
+            'Office Note Free Text TCM Note',
+            'Office Note Free Text CCM Note',
+            'Office Form',
+            'Work Note',
+            'Phone Note',
+            'Follow-Up Progress Note (99212-99215/99308-99310/99347-99350)',
+        ])
+        .default(DEFAULT_NOTE_TYPE),
     notesText: z.string().trim().min(5, 'Input should be more than 5 characters').max(100000),
+    structuredPayload: z.any().optional().nullable(),
     date: z.string().trim().min(1, 'Visit Date is required'),
     time: z.string().trim().max(40).optional().nullable(),
     assignedProviderId: z.string().trim().min(1, 'Assigned Provider is required'),
@@ -133,6 +156,7 @@ const createBody = z.object({
 
 const updateBody = z.object({
     notesText: z.string().trim().min(5).max(100000).optional(),
+    structuredPayload: z.any().optional().nullable(),
     date: z.string().trim().min(1).optional(),
     time: z.string().trim().max(40).optional().nullable(),
     assignedProviderId: z.string().trim().min(1).optional(),
@@ -149,8 +173,7 @@ patientChartNotesRouter.post(
     '/Patient/createPatientNote',
     authors,
     h(async (req, res) => {
-        const b = parse(createBody, { ...req.body, notesType: req.body?.notesType || NOTE_TYPE });
-        if (b.notesType !== NOTE_TYPE) throw new ApiError(400, `Phase 1 supports only: ${NOTE_TYPE}`);
+        const b = parse(createBody, { ...req.body, notesType: req.body?.notesType || DEFAULT_NOTE_TYPE });
         await requireEncounterForPatient(req, b.encounterId, b.patientId);
         const provider = await resolveAssignedProvider(req, b.assignedProviderId, b.assignedProviderName);
 
@@ -165,18 +188,19 @@ patientChartNotesRouter.post(
         }
 
         const visitDate = toYmd(b.date);
+        const payload = b.structuredPayload ?? null;
         const r = await query(
             `INSERT INTO patient_chart_notes (
                 tenant_id, patient_id, encounter_id, notes_type, notes_text, visit_date, visit_time,
                 assigned_provider_id, assigned_provider_name, note_status,
-                provider_signed, signed_date, signed_time, created_by, updated_by
-             ) VALUES ($1,$2,$3,$4,$5,$6::date,$7,$8,$9,$10,$11,$12,$13,$14,$14)
+                provider_signed, signed_date, signed_time, structured_payload, created_by, updated_by
+             ) VALUES ($1,$2,$3,$4,$5,$6::date,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$15)
              RETURNING id`,
             [
                 req.user.tenantId,
                 b.patientId,
                 b.encounterId,
-                NOTE_TYPE,
+                b.notesType,
                 b.notesText,
                 visitDate,
                 b.time || null,
@@ -186,6 +210,7 @@ patientChartNotesRouter.post(
                 providerSigned,
                 signedDate,
                 signedTime,
+                payload ? JSON.stringify(payload) : null,
                 req.user.id,
             ],
         );
@@ -291,6 +316,8 @@ patientChartNotesRouter.put(
                 ? existing.visit_date.toISOString().slice(0, 10)
                 : String(existing.visit_date).slice(0, 10));
         const nextTime = b.time !== undefined ? b.time : existing.visit_time;
+        const nextPayload =
+            b.structuredPayload !== undefined ? b.structuredPayload : existing.structured_payload;
         const noteStatus = signing ? 'Completed' : b.noteStatus || existing.note_status;
         const providerSigned = signing ? String(b.providerSigned).trim() : existing.provider_signed || '';
         const signedDate = signing ? b.signedDate || formatSignedDate() : existing.signed_date || '';
@@ -308,9 +335,10 @@ patientChartNotesRouter.put(
                 provider_signed = $8,
                 signed_date = $9,
                 signed_time = $10,
-                updated_by = $11,
+                structured_payload = $11::jsonb,
+                updated_by = $12,
                 updated_at = now()
-             WHERE id = $12 AND tenant_id = $13`,
+             WHERE id = $13 AND tenant_id = $14`,
             [
                 nextText,
                 nextDate,
@@ -322,6 +350,7 @@ patientChartNotesRouter.put(
                 providerSigned,
                 signedDate,
                 signedTime,
+                nextPayload != null ? JSON.stringify(nextPayload) : null,
                 req.user.id,
                 id,
                 req.user.tenantId,

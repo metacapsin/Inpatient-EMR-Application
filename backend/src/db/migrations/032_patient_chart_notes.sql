@@ -1,5 +1,5 @@
 -- Facesheet chart notes (ambulatory-style free-text notes), distinct from clinical_notes
--- (Clinical Workspace H&P / progress sections). Phase 1: Office Note Free Text Progress Note.
+-- (Clinical Workspace H&P / progress sections). Free-text types + Office Form / Work / Phone.
 CREATE TABLE patient_chart_notes (
     id                      TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     tenant_id               TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,

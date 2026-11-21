@@ -25,29 +25,28 @@ const Header = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch<AppDispatch>();
     const user = useSelector((state: IRootState) => state.auth.user);
-    const patientData = useSelector((state: IRootState) => state.auth.patientData);
     // The AI assistant works on a chart; carry the currently open patient so staff land on the right context.
     const facesheetPatientId = useSelector((state: IRootState) => state.facesheet.activePatientId);
     const aiAssistantHref = facesheetPatientId ? `/app/ai-assistant?patientId=${encodeURIComponent(facesheetPatientId)}` : '/app/ai-assistant';
 
-    const patient = patientData?.data ?? patientData;
+    // Staff avatar menu — use logged-in user (not the open chart patient).
+    const staffFullName = [user?.firstName || user?.first_name, user?.lastName || user?.last_name]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
     const displayName =
-        patient?.fullName?.trim() ||
-        (patient?.firstName != null || patient?.lastName != null
-            ? [patient?.firstName, patient?.middleName, patient?.lastName].filter(Boolean).join(' ').trim()
-            : null) ||
-        patient?.displayName ||
-        patient?.name ||
+        (typeof user?.name === 'string' && user.name.trim()) ||
+        staffFullName ||
         user?.username ||
         user?.email ||
         'User';
-    const displayEmail = patient?.emailAddress ?? patient?.email ?? user?.email ?? '';
+    const displayEmail = user?.email || '';
     const profilePhoto =
-        patient?.profilePictureUrl ??
-        patient?.profilePhoto ??
-        patient?.photo ??
-        patient?.avatar ??
-        patient?.image ??
+        user?.profilePictureUrl ||
+        user?.profilePhoto ||
+        user?.photo ||
+        user?.avatar ||
+        user?.image ||
         null;
 
     const handleLogout = () => {

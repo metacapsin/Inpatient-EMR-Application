@@ -5,16 +5,51 @@ import { CheckCircle2, FileText, Pencil, Save, Signature } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
+import { FollowUpProgressFields } from '../../features/chart-notes/FollowUpProgressFields';
+import { composeFollowUpNote } from '../../features/chart-notes/composeFollowUpNote';
 import {
+    emptyFollowUpProgressData,
+    FOLLOW_UP_NOTE_TYPE,
+    validateFollowUpProgress,
+    type FollowUpProgressData,
+} from '../../features/chart-notes/followUpProgress.types';
+import {
+    NOTE_TYPE_SHORT_LABEL,
+    PHASE1_NOTE_TYPES,
     PROGRESS_NOTE_TYPE,
     createPatientChartNote,
     fetchActiveEncountersForPatient,
     fetchProviderOptions,
     getPatientChartNoteById,
+    isPhase1NoteType,
     signPatientChartNote,
     updatePatientChartNote,
     type PatientChartNote,
+    type Phase1NoteType,
 } from '../../services/patientChartNotes.service';
+
+function mergeFollowUpPayload(raw: unknown): FollowUpProgressData {
+    const base = emptyFollowUpProgressData();
+    if (!raw || typeof raw !== 'object') return base;
+    const p = raw as Partial<FollowUpProgressData>;
+    return {
+        ...base,
+        ...p,
+        encounter: { ...base.encounter, ...(p.encounter || {}) },
+        chiefComplaint: { ...base.chiefComplaint, ...(p.chiefComplaint || {}) },
+        vitals: { ...base.vitals, ...(p.vitals || {}) },
+        ros: { ...base.ros, ...(p.ros || {}) },
+        physExam: { ...base.physExam, ...(p.physExam || {}) },
+        assessmentPlan:
+            Array.isArray(p.assessmentPlan) && p.assessmentPlan.length
+                ? p.assessmentPlan.map((r) => ({
+                      dx: r?.dx || '',
+                      icd10: r?.icd10 || '',
+                      plan: r?.plan || '',
+                  }))
+                : base.assessmentPlan,
+    };
+}
 
 type Mode = 'create' | 'edit' | 'view';
 
@@ -43,16 +78,20 @@ const CreateProgressNotePage: React.FC = () => {
     const { moduleSurfaceClass } = useFacesheetChartLayout();
 
     const initialMode: Mode = noteId ? (searchParams.get('mode') === 'edit' ? 'edit' : 'view') : 'create';
+    const typeFromQuery = searchParams.get('notesType') || '';
+    const initialNotesType: Phase1NoteType =
+        isPhase1NoteType(typeFromQuery) ? typeFromQuery : PROGRESS_NOTE_TYPE;
     const [mode, setMode] = useState<Mode>(initialMode);
     const [loading, setLoading] = useState(Boolean(noteId));
     const [saving, setSaving] = useState(false);
     const [note, setNote] = useState<PatientChartNote | null>(null);
 
-    const [notesType] = useState(PROGRESS_NOTE_TYPE);
+    const [notesType, setNotesType] = useState<Phase1NoteType>(initialNotesType);
     const [encounterId, setEncounterId] = useState('');
     const [visitDate, setVisitDate] = useState(toInputDate());
     const [assignedProviderId, setAssignedProviderId] = useState('');
     const [notesText, setNotesText] = useState('');
+    const [followUpData, setFollowUpData] = useState<FollowUpProgressData>(emptyFollowUpProgressData);
     const [touched, setTouched] = useState<Record<string, boolean>>({});
 
     const [providers, setProviders] = useState<Array<{ id: string; name: string }>>([]);
@@ -60,6 +99,7 @@ const CreateProgressNotePage: React.FC = () => {
 
     const facesheetBase = patientId ? `/app/facesheet/${encodeURIComponent(patientId)}/notes` : '/app/notes';
     const isReadOnly = mode === 'view' || note?.noteStatus === 'Completed' || note?.noteStatus === 'Marked in Error';
+    const isFollowUp = notesType === FOLLOW_UP_NOTE_TYPE;
     const noteStatus = note?.noteStatus || 'In Draft';
     const userId = String(user?.id || user?._id || '');
     const userName = displayName(user);
@@ -73,17 +113,32 @@ const CreateProgressNotePage: React.FC = () => {
         (role === 'admin' ||
             ((role === 'physician' || role === 'nurse') && userId === assignedProviderId));
 
+    const composedFollowUp = useMemo(
+        () => (isFollowUp ? composeFollowUpNote(followUpData) : ''),
+        [isFollowUp, followUpData],
+    );
+
     const errors = useMemo(() => {
         const e: Record<string, string> = {};
         if (!encounterId) e.encounterId = 'Encounter is required.';
         if (!visitDate) e.date = 'Visit Date is required.';
         if (!assignedProviderId) e.assignedProvider = 'Assigned Provider is required.';
-        if (!notesText.trim()) e.notesText = 'Notes text is required.';
-        else if (notesText.trim().length < 5) e.notesText = 'Input should be more than 5 characters.';
+        if (isFollowUp) {
+            Object.assign(e, validateFollowUpProgress(followUpData));
+            if (!composedFollowUp.trim() || composedFollowUp.trim().length < 5) {
+                e.notesText = 'Complete the structured sections so the clinical note can be composed.';
+            }
+        } else if (!notesText.trim()) {
+            e.notesText = 'Notes text is required.';
+        } else if (notesText.trim().length < 5) {
+            e.notesText = 'Input should be more than 5 characters.';
+        }
         return e;
-    }, [encounterId, visitDate, assignedProviderId, notesText]);
+    }, [encounterId, visitDate, assignedProviderId, notesText, isFollowUp, followUpData, composedFollowUp]);
 
-    const shellTitle = mode === 'create' ? 'New Progress Note' : mode === 'edit' ? 'Edit Progress Note' : 'View Progress Note';
+    const shortLabel = NOTE_TYPE_SHORT_LABEL[notesType] || 'Note';
+    const shellTitle =
+        mode === 'create' ? `New ${shortLabel}` : mode === 'edit' ? `Edit ${shortLabel}` : `View ${shortLabel}`;
 
     const loadLookups = useCallback(async () => {
         if (!patientId) return;
@@ -110,10 +165,14 @@ const CreateProgressNotePage: React.FC = () => {
         try {
             const n = await getPatientChartNoteById(noteId);
             setNote(n);
+            if (isPhase1NoteType(n.notesType)) setNotesType(n.notesType);
             setEncounterId(n.encounterId || '');
             setVisitDate(toInputDate(n.date));
             setAssignedProviderId(n.assignedProvider?.id || n.assignedProvider?._id || '');
             setNotesText(n.notesText || '');
+            if (n.notesType === FOLLOW_UP_NOTE_TYPE) {
+                setFollowUpData(mergeFollowUpPayload(n.structuredPayload));
+            }
             if (n.noteStatus === 'Completed' || n.noteStatus === 'Marked in Error') setMode('view');
             else if (searchParams.get('mode') === 'edit') setMode('edit');
             else setMode('view');
@@ -137,11 +196,13 @@ const CreateProgressNotePage: React.FC = () => {
 
     const buildPayload = () => {
         const provider = providers.find((p) => p.id === assignedProviderId);
+        const text = isFollowUp ? composedFollowUp.trim() : notesText.trim();
         return {
             patientId: patientId!,
             encounterId,
-            notesType: PROGRESS_NOTE_TYPE as typeof PROGRESS_NOTE_TYPE,
-            notesText: notesText.trim(),
+            notesType,
+            notesText: text,
+            structuredPayload: isFollowUp ? (followUpData as unknown as Record<string, unknown>) : null,
             date: visitDate,
             assignedProviderId,
             assignedProviderName: provider?.name || userName,
@@ -149,7 +210,18 @@ const CreateProgressNotePage: React.FC = () => {
     };
 
     const handleSave = async () => {
-        setTouched({ encounterId: true, date: true, assignedProvider: true, notesText: true });
+        setTouched({
+            encounterId: true,
+            date: true,
+            assignedProvider: true,
+            notesText: true,
+            cptCode: true,
+            chiefComplaint: true,
+            bp: true,
+            hr: true,
+            ros: true,
+            assessmentPlan: true,
+        });
         if (Object.keys(errors).length) {
             toast.error('Please fix the required fields');
             return;
@@ -180,7 +252,18 @@ const CreateProgressNotePage: React.FC = () => {
     const handleSign = async () => {
         if (!note?.id) return;
         if (Object.keys(errors).length) {
-            setTouched({ encounterId: true, date: true, assignedProvider: true, notesText: true });
+            setTouched({
+                encounterId: true,
+                date: true,
+                assignedProvider: true,
+                notesText: true,
+                cptCode: true,
+                chiefComplaint: true,
+                bp: true,
+                hr: true,
+                ros: true,
+                assessmentPlan: true,
+            });
             toast.error('Please fix the required fields before signing');
             return;
         }
@@ -264,8 +347,25 @@ const CreateProgressNotePage: React.FC = () => {
             <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div>
                     <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-200">Note Type</label>
-                    <select className="form-select w-full" value={notesType} disabled>
-                        <option value={PROGRESS_NOTE_TYPE}>{PROGRESS_NOTE_TYPE}</option>
+                    <select
+                        className="form-select w-full"
+                        value={notesType}
+                        disabled={mode !== 'create'}
+                        onChange={(e) => {
+                            const next = e.target.value;
+                            if (isPhase1NoteType(next)) {
+                                setNotesType(next);
+                                if (next === FOLLOW_UP_NOTE_TYPE) {
+                                    setFollowUpData(emptyFollowUpProgressData());
+                                }
+                            }
+                        }}
+                    >
+                        {PHASE1_NOTE_TYPES.map((t) => (
+                            <option key={t} value={t}>
+                                {t}
+                            </option>
+                        ))}
                     </select>
                 </div>
                 <div>
@@ -331,23 +431,40 @@ const CreateProgressNotePage: React.FC = () => {
                 </div>
             </div>
 
+            {isFollowUp ? (
+                <FollowUpProgressFields
+                    value={followUpData}
+                    onChange={setFollowUpData}
+                    readOnly={isReadOnly}
+                    errors={touched.notesText || Object.keys(touched).length ? errors : {}}
+                />
+            ) : null}
+
             <section className="panel mb-5 overflow-hidden p-0">
                 <header className="flex flex-col gap-2 border-b border-white-light bg-white-light/40 px-4 py-3 dark:border-[#191e3a] dark:bg-[#0e1726] sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h4 className="text-base font-semibold text-gray-900 dark:text-white">
                             Final Clinical Note <span className="text-danger">*</span>
                         </h4>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">This is what gets signed and saved to the chart. Required.</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {isFollowUp
+                                ? 'Auto-composed from the structured sections above. This is what gets signed.'
+                                : 'This is what gets signed and saved to the chart. Required.'}
+                        </p>
                     </div>
                 </header>
                 <div className="p-4">
                     <textarea
-                        id="notesTextProgressNote"
+                        id="notesTextChartNote"
                         className="form-textarea min-h-[280px] w-full resize-y text-sm leading-relaxed"
                         rows={14}
-                        placeholder="Compose or paste the final clinical note here…"
-                        value={notesText}
-                        disabled={isReadOnly}
+                        placeholder={
+                            isFollowUp
+                                ? 'Fill the structured sections — the narrative appears here…'
+                                : 'Compose or paste the final clinical note here…'
+                        }
+                        value={isFollowUp ? composedFollowUp : notesText}
+                        disabled={isReadOnly || isFollowUp}
                         onBlur={() => markTouched('notesText')}
                         onChange={(e) => setNotesText(e.target.value)}
                     />
@@ -356,10 +473,14 @@ const CreateProgressNotePage: React.FC = () => {
                             {touched.notesText && errors.notesText ? (
                                 <p className="text-xs text-danger">{errors.notesText}</p>
                             ) : (
-                                <p className="text-xs text-gray-500">Minimum 5 characters.</p>
+                                <p className="text-xs text-gray-500">
+                                    {isFollowUp ? 'Narrative updates as you fill sections.' : 'Minimum 5 characters.'}
+                                </p>
                             )}
                         </div>
-                        <span className="text-xs tabular-nums text-gray-400">{notesText.length}</span>
+                        <span className="text-xs tabular-nums text-gray-400">
+                            {(isFollowUp ? composedFollowUp : notesText).length}
+                        </span>
                     </div>
                 </div>
             </section>
