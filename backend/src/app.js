@@ -35,6 +35,7 @@ import { transferRequestsRouter } from './routes/transferRequests.js';
 import { eligibilityRouter } from './routes/eligibility.js';
 import { problemsRouter } from './routes/problems.js';
 import { clinicalNotesRouter } from './routes/clinicalNotes.js';
+import { patientChartNotesRouter } from './routes/patientChartNotes.js';
 import { dischargeReadinessRouter } from './routes/dischargeReadiness.js';
 import { medReconciliationRouter } from './routes/medReconciliation.js';
 import { labsRouter } from './routes/labs.js';
@@ -107,7 +108,7 @@ export function createApp() {
     // (its final status, captured on res.finish, will be the gate's 403 — see middleware/audit.js).
     app.use(auditMiddleware);
     app.use(requireModuleGate);
-    for (const r of [facilityRouter, tenantProfileRouter, patientsRouter, adtRouter, admissionChecklistRouter, patientDataRouter, inpatientDocsRouter, consentRouter, medicationRouter, revenueRouter, dashboardRouter, appointmentsRouter, recordsRouter, staffingRouter, clinicalOpsRouter, ordersRouter, bedReservationsRouter, evsRouter, transferRequestsRouter, eligibilityRouter, problemsRouter, clinicalNotesRouter, dischargeReadinessRouter, medReconciliationRouter, labsRouter, adtNotificationsRouter, cdsRouter, drugsRouter, patientAccountsRouter, aiRouter, auditEventsRouter]) {
+    for (const r of [facilityRouter, tenantProfileRouter, patientsRouter, adtRouter, admissionChecklistRouter, patientDataRouter, inpatientDocsRouter, consentRouter, medicationRouter, revenueRouter, dashboardRouter, appointmentsRouter, recordsRouter, staffingRouter, clinicalOpsRouter, ordersRouter, bedReservationsRouter, evsRouter, transferRequestsRouter, eligibilityRouter, problemsRouter, clinicalNotesRouter, patientChartNotesRouter, dischargeReadinessRouter, medReconciliationRouter, labsRouter, adtNotificationsRouter, cdsRouter, drugsRouter, patientAccountsRouter, aiRouter, auditEventsRouter]) {
         app.use(r);
     }
 

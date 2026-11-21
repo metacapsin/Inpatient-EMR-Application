@@ -1,272 +1,429 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { patientDataAPI } from '../../services/api';
+import {
+    AlertTriangle,
+    Calendar,
+    CheckCircle2,
+    Eye,
+    FilePlus2,
+    FileText,
+    FolderOpen,
+    Pencil,
+    RotateCcw,
+    Search,
+    Trash2,
+    User,
+} from 'lucide-react';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
-import { format } from 'date-fns';
-import IconSearch from '../../components/Icon/IconSearch';
+import {
+    CHART_NOTE_STATUSES,
+    PROGRESS_NOTE_TYPE,
+    deletePatientChartNote,
+    fetchProviderOptions,
+    formatVisitDateDisplay,
+    listPatientChartNotes,
+    markChartNoteInError,
+    previewNoteText,
+    restoreChartNote,
+    type PatientChartNote,
+} from '../../services/patientChartNotes.service';
 
-interface NoteRecord {
-  _id: string;
-  noteTitle?: string;
-  noteType?: string;
-  noteDate?: string;
-  providerName?: string;
-  assignedProvider?: {
-    name?: string;
-  };
-  date?: string;
-  time?: string;
-  [key: string]: any;
-}
+const NOTE_TYPE_OPTIONS = [PROGRESS_NOTE_TYPE];
 
 const Notes: React.FC = () => {
-  const patientId = usePatientId();
-  const { moduleSurfaceClass } = useFacesheetChartLayout();
-  const [notesList, setNotesList] = useState<NoteRecord[]>([]);
-  const [filteredTableList, setFilteredTableList] = useState<NoteRecord[]>([]);
-  const [filteredCardList, setFilteredCardList] = useState<NoteRecord[]>([]);
-  const [paginatedCardList, setPaginatedCardList] = useState<NoteRecord[]>([]);
-  const [searchText, setSearchText] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage] = useState(2);
+    const patientId = usePatientId();
+    const navigate = useNavigate();
+    const { moduleSurfaceClass } = useFacesheetChartLayout();
 
+    const [notesList, setNotesList] = useState<PatientChartNote[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [searchText, setSearchText] = useState('');
+    const [providerFilter, setProviderFilter] = useState('');
+    const [typeFilter, setTypeFilter] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+    const [providers, setProviders] = useState<Array<{ id: string; name: string }>>([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [rowsPerPage, setRowsPerPage] = useState(5);
+    const [busyId, setBusyId] = useState<string | null>(null);
 
-  const formatDate = (dateString: string): string => {
-    if (!dateString) return '';
-    try {
-      const date = new Date(dateString);
-      return format(date, 'MM/dd/yyyy');
-    } catch {
-      return dateString;
-    }
-  };
+    const facesheetBase = patientId ? `/app/facesheet/${encodeURIComponent(patientId)}/notes` : '/app/notes';
 
-  const getPatientNotes = useCallback(async () => {
+    const loadNotes = useCallback(async () => {
+        if (!patientId) return;
+        setLoading(true);
+        try {
+            const rows = await listPatientChartNotes({
+                patientId,
+                notesType: typeFilter || undefined,
+                noteStatus: statusFilter || undefined,
+                assignedProvider: providerFilter || undefined,
+                includeInError: true,
+            });
+            setNotesList(rows);
+            setCurrentPage(1);
+        } catch (error: any) {
+            toast.error(error?.response?.data?.message || 'Failed to fetch notes');
+        } finally {
+            setLoading(false);
+        }
+    }, [patientId, typeFilter, statusFilter, providerFilter]);
+
+    useEffect(() => {
+        fetchProviderOptions()
+            .then(setProviders)
+            .catch(() => setProviders([]));
+    }, []);
+
+    useEffect(() => {
+        loadNotes();
+    }, [loadNotes]);
+
+    const filteredNotes = useMemo(() => {
+        const q = searchText.trim().toLowerCase();
+        if (!q) return notesList;
+        return notesList.filter((n) => {
+            const hay = [
+                n.notesType,
+                n.notesText,
+                n.assignedProvider?.name,
+                n.providerSigned,
+                n.noteStatus,
+                n.createdByName,
+            ]
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase();
+            return hay.includes(q);
+        });
+    }, [notesList, searchText]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredNotes.length / rowsPerPage));
+    const page = Math.min(currentPage, totalPages);
+    const paginated = filteredNotes.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+
+    const openNote = (id: string) => navigate(`${facesheetBase}/${encodeURIComponent(id)}`);
+
+    const confirmMarkInError = async (note: PatientChartNote) => {
+        const reason = window.prompt('Reason for marking this note in error:');
+        if (!reason || !reason.trim()) return;
+        setBusyId(note.id);
+        try {
+            await markChartNoteInError(note.id, reason.trim());
+            toast.success('Note marked in error');
+            await loadNotes();
+        } catch (err: any) {
+            toast.error(err?.response?.data?.message || 'Failed to mark note in error');
+        } finally {
+            setBusyId(null);
+        }
+    };
+
+    const confirmRestore = async (note: PatientChartNote) => {
+        if (!window.confirm('Restore this note?')) return;
+        setBusyId(note.id);
+        try {
+            await restoreChartNote(note.id);
+            toast.success('Note restored');
+            await loadNotes();
+        } catch (err: any) {
+            toast.error(err?.response?.data?.message || 'Failed to restore note');
+        } finally {
+            setBusyId(null);
+        }
+    };
+
+    const confirmDelete = async (note: PatientChartNote) => {
+        if (!window.confirm('Delete this draft note? This cannot be undone.')) return;
+        setBusyId(note.id);
+        try {
+            await deletePatientChartNote(note.id);
+            toast.success('Note deleted');
+            await loadNotes();
+        } catch (err: any) {
+            toast.error(err?.response?.data?.message || 'Failed to delete note');
+        } finally {
+            setBusyId(null);
+        }
+    };
+
     if (!patientId) {
-      toast.error('Patient ID is required');
-      return;
+        return (
+            <div className={moduleSurfaceClass}>
+                <p className="text-sm text-gray-600 dark:text-gray-300">Open a patient facesheet to view clinical notes.</p>
+            </div>
+        );
     }
-
-    setLoading(true);
-    try {
-      const response = await patientDataAPI.getPatientWiseNotesList({ patientId });
-      if (response.data?.data || Array.isArray(response.data)) {
-        const data = response.data?.data || response.data;
-        const typeLabel: Record<string, string> = { hp: 'H&P', progress: 'Progress Note', discharge_summary: 'Discharge Summary', consult: 'Consult' };
-        const formattedData = data.map((item: any) => ({
-          ...item,
-          _id: item.id ?? item._id,
-          noteTitle: item.title || typeLabel[item.type] || item.type || 'Note',
-          notesType: `${typeLabel[item.type] || item.type || ''}${item.status ? ` · ${item.status}` : ''}`,
-          providerName: item.signedByName || item.createdByName || '',
-          date: item.signedAt || item.createdAt ? formatDate(item.signedAt || item.createdAt) : '',
-          noteDate: item.noteDate || item.createdAt ? formatDate(item.noteDate || item.createdAt) : '',
-          sections: [
-            ['HPI', item.content?.hpi],
-            ['ROS', item.content?.ros],
-            ['Assessment', item.content?.assessment],
-            ['Plan', item.content?.plan],
-          ].filter(([, v]) => typeof v === 'string' && v.trim()),
-          addendaList: Array.isArray(item.addenda) ? item.addenda : [],
-        }));
-        setNotesList(formattedData);
-        setPaginatedCardList(formattedData);
-        setFilteredTableList(formattedData);
-        setFilteredCardList(formattedData);
-        updatePaginatedList(formattedData, 1);
-      }
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to fetch notes');
-    } finally {
-      setLoading(false);
-    }
-  }, [patientId]);
-
-  useEffect(() => {
-    getPatientNotes();
-  }, [getPatientNotes]);
-
-  useEffect(() => {
-    filterData();
-  }, [searchText, notesList]);
-
-  const filterData = () => {
-    if (!searchText || searchText.trim() === '') {
-      setFilteredTableList([...notesList]);
-      setPaginatedCardList([...notesList]);
-      setFilteredCardList(notesList.slice(0, rowsPerPage));
-    } else {
-      const filtered = notesList.filter((item) => matchesSearch(item));
-      setFilteredTableList(filtered);
-      setPaginatedCardList(filtered);
-      updatePaginatedList(filtered, 1);
-    }
-  };
-
-  const matchesSearch = (item: NoteRecord): boolean => {
-    const search = searchText.toLowerCase().trim();
-    const containsSearchText = (value: any) =>
-      value?.toString().toLowerCase().includes(search);
 
     return (
-      containsSearchText(item.noteTitle) ||
-      containsSearchText(item.noteType) ||
-      containsSearchText(item.providerName) ||
-      containsSearchText(item.noteDate)
-    );
-  };
-
-  const updatePaginatedList = (data: NoteRecord[], page: number = currentPage) => {
-    const start = (page - 1) * rowsPerPage;
-    const end = start + rowsPerPage;
-    setFilteredCardList(data.slice(start, end));
-  };
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-    updatePaginatedList(paginatedCardList, page);
-  };
-
-
-
-
-
-
-
-  return (
-    <div className={moduleSurfaceClass}>
-        {/* Breadcrumb */}
-        <div className="mb-5">
-          <ul className="flex items-center gap-2 text-sm">
-            <li>
-              <a href="#" className="text-primary hover:underline">Patient List</a>
-            </li>
-            <li>/</li>
-            <li className="text-gray-900 dark:text-white font-medium">Notes</li>
-          </ul>
-        </div>
-
-        {/* Page Header */}
-        <div className="mb-5">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="flex-1">
-              <h3 className="text-xl font-semibold mb-3">Notes</h3>
-              <div className="relative max-w-md">
-                <input
-                  type="text"
-                  className="form-input pl-10"
-                  aria-label="Search notes" placeholder="Search here"
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                />
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                  <IconSearch className="w-4 h-4" />
-                </span>
-              </div>
+        <div className={moduleSurfaceClass}>
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <ul className="flex flex-wrap items-center gap-2 text-sm">
+                    <li>
+                        <Link to="/app/patients/list" className="text-primary hover:underline">
+                            Patient List
+                        </Link>
+                    </li>
+                    <li className="text-gray-400">/</li>
+                    <li className="font-medium text-gray-900 dark:text-white">Notes</li>
+                </ul>
+                <Link to={`${facesheetBase}/create`} className="btn btn-primary inline-flex shrink-0 items-center gap-2">
+                    <FilePlus2 className="h-4 w-4" />
+                    Create note
+                </Link>
             </div>
-          </div>
-        </div>
 
-        {/* Card View */}
-        <div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {loading ? (
-              <div className="col-span-full text-center py-4">Loading...</div>
-            ) : filteredCardList.length === 0 ? (
-              <div className="col-span-full text-center mt-2">
-                {notesList.length === 0
-                  ? 'No notes recorded for patient.'
-                  : 'No record found.'}
-              </div>
-            ) : (
-              filteredCardList.map((note) => (
-                <div key={note._id} className="panel md:col-span-1">
-                  <div className="mb-4 pb-3 border-b border-white-light dark:border-[#191e3a]">
-                    <div className="flex items-center justify-between gap-2">
-                      <h5 className="text-base font-semibold flex-1 min-w-0 truncate">
-                        {note.noteTitle || 'Note Record'}
-                      </h5>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+            <div className="panel mb-5">
+                <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
                     <div>
-                      <h6 className="text-primary text-sm uppercase font-semibold mb-2">
-                        Note Details
-                      </h6>
-                      <div className="space-y-2">
-                        <div>
-                          <span className="text-gray-600 dark:text-gray-400 text-sm">Type:</span>
-                          <span className="font-bold ml-2 text-sm text-gray-900 dark:text-white">
-                            {note.notesType || '---'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600 dark:text-gray-400 text-sm">Provider:</span>
-                          <span className="font-bold ml-2 text-sm text-gray-900 dark:text-white">
-                            {note.providerName || note.assignedProvider?.name || '---'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600 dark:text-gray-400 text-sm">Date:</span>
-                          <span className="font-bold ml-2 text-sm text-gray-900 dark:text-white">
-                            {note.date || '---'}
-                          </span>
-                        </div>
-                        {Array.isArray(note.sections) && note.sections.length > 0 ? (
-                          <dl className="mt-2 space-y-1.5 border-t border-white-light pt-2 dark:border-[#191e3a]">
-                            {note.sections.map(([label, text]: [string, string]) => (
-                              <div key={label}>
-                                <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</dt>
-                                <dd className="whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200">{text}</dd>
-                              </div>
-                            ))}
-                          </dl>
-                        ) : null}
-                        {Array.isArray(note.addendaList) && note.addendaList.length > 0 ? (
-                          <div className="mt-2 border-t border-white-light pt-2 dark:border-[#191e3a]">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Addenda</p>
-                            {note.addendaList.map((a: any, i: number) => (
-                              <p key={i} className="text-sm text-gray-800 dark:text-gray-200"><span className="text-xs text-gray-500">{a.createdAt ? formatDate(a.createdAt) : ''}{a.createdByName ? ` · ${a.createdByName}` : ''} — </span>{a.text}</p>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
+                        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Clinical notes</h2>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                            Encounter documentation, signatures, and chart notes for this patient.
+                        </p>
+                        <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                            <span>{filteredNotes.length}</span>
+                            <span className="font-normal opacity-75">total</span>
+                        </span>
                     </div>
-                   
-                  </div>
+                    <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-600 dark:text-gray-300">Quick search</label>
+                        <div className="relative">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                            <input
+                                type="search"
+                                className="form-input w-full pl-10"
+                                placeholder="Filter by title, author, or content…"
+                                value={searchText}
+                                onChange={(e) => {
+                                    setSearchText(e.target.value);
+                                    setCurrentPage(1);
+                                }}
+                            />
+                        </div>
+                    </div>
                 </div>
-              ))
-            )}
 
-            {paginatedCardList.length > rowsPerPage && (
-              <div className="col-span-full flex justify-center items-center gap-2 mt-4">
-                <button
-                  className="btn btn-outline-primary"
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
-                >
-                  Previous
-                </button>
-                <span className="text-sm px-4">
-                  Page {currentPage} of {Math.ceil(paginatedCardList.length / rowsPerPage)}
-                </span>
-                <button
-                  className="btn btn-outline-primary"
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage >= Math.ceil(paginatedCardList.length / rowsPerPage)}
-                >
-                  Next
-                </button>
-              </div>
-            )}
-          </div>
+                <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-600 dark:text-gray-300">Provider</label>
+                        <select
+                            className="form-select w-full"
+                            value={providerFilter}
+                            onChange={(e) => setProviderFilter(e.target.value)}
+                        >
+                            <option value="">Select Provider</option>
+                            {providers.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                    {p.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-600 dark:text-gray-300">Note type</label>
+                        <select className="form-select w-full" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                            <option value="">Select Type</option>
+                            {NOTE_TYPE_OPTIONS.map((t) => (
+                                <option key={t} value={t}>
+                                    {t}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-600 dark:text-gray-300">Note status</label>
+                        <select
+                            className="form-select w-full"
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                        >
+                            <option value="">Select Status</option>
+                            {CHART_NOTE_STATUSES.map((s) => (
+                                <option key={s} value={s}>
+                                    {s}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+
+                {loading ? (
+                    <div className="py-12 text-center text-sm text-gray-500">Loading…</div>
+                ) : paginated.length === 0 ? (
+                    <div className="py-12 text-center">
+                        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <FileText className="h-6 w-6" />
+                        </div>
+                        <h5 className="mb-1 text-base font-semibold text-gray-700 dark:text-gray-200">No notes to show</h5>
+                        <p className="mx-auto max-w-md text-sm text-gray-500">
+                            Try clearing filters or search, or create a new note for this encounter.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {paginated.map((note) => (
+                            <article
+                                key={note.id}
+                                className="rounded-xl border border-white-light bg-white p-4 shadow-sm transition hover:shadow-md dark:border-[#191e3a] dark:bg-[#0e1726]"
+                            >
+                                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <div className="min-w-0">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-primary" aria-hidden />
+                                            <h6 className="text-sm font-semibold text-gray-900 dark:text-white sm:text-base">
+                                                {note.notesType}
+                                            </h6>
+                                            <span
+                                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                                    note.noteStatus === 'Completed'
+                                                        ? 'bg-success/15 text-success'
+                                                        : note.noteStatus === 'Marked in Error'
+                                                          ? 'bg-danger/15 text-danger'
+                                                          : 'bg-warning/15 text-warning'
+                                                }`}
+                                            >
+                                                {note.noteStatus === 'Completed' ? (
+                                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                                ) : note.noteStatus === 'Marked in Error' ? (
+                                                    <AlertTriangle className="h-3.5 w-3.5" />
+                                                ) : (
+                                                    <Pencil className="h-3.5 w-3.5" />
+                                                )}
+                                                {note.noteStatus}
+                                            </span>
+                                        </div>
+                                        <p className="mt-1 inline-flex items-center gap-1 text-xs text-gray-500">
+                                            <Calendar className="h-3.5 w-3.5" />
+                                            {formatVisitDateDisplay(note.date)}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <p className="mb-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+                                    {previewNoteText(note.notesText) || 'No note text.'}
+                                </p>
+
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="inline-flex items-center gap-1.5 text-sm text-gray-500">
+                                        <User className="h-3.5 w-3.5" />
+                                        {note.assignedProvider?.name || 'Unknown'}
+                                    </div>
+                                    <div className="flex flex-wrap items-center justify-end gap-1.5">
+                                        <button
+                                            type="button"
+                                            className="btn btn-sm btn-primary inline-flex items-center gap-1"
+                                            onClick={() => openNote(note.id)}
+                                            disabled={busyId === note.id}
+                                        >
+                                            {note.noteStatus === 'Marked in Error' ? (
+                                                <Eye className="h-3.5 w-3.5" />
+                                            ) : (
+                                                <FolderOpen className="h-3.5 w-3.5" />
+                                            )}
+                                            {note.noteStatus === 'Marked in Error' ? 'View' : 'Open'}
+                                        </button>
+                                        {note.noteStatus !== 'Marked in Error' ? (
+                                            <button
+                                                type="button"
+                                                className="btn btn-sm btn-outline-warning inline-flex items-center gap-1"
+                                                disabled={busyId === note.id}
+                                                onClick={() => confirmMarkInError(note)}
+                                            >
+                                                <AlertTriangle className="h-3.5 w-3.5" />
+                                                Mark in Error
+                                            </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                className="btn btn-sm btn-outline-success inline-flex items-center gap-1"
+                                                disabled={busyId === note.id}
+                                                onClick={() => confirmRestore(note)}
+                                            >
+                                                <RotateCcw className="h-3.5 w-3.5" />
+                                                Restore
+                                            </button>
+                                        )}
+                                        {note.noteStatus !== 'Completed' ? (
+                                            <button
+                                                type="button"
+                                                className="btn btn-sm btn-outline-danger inline-flex items-center gap-1"
+                                                disabled={busyId === note.id}
+                                                onClick={() => confirmDelete(note)}
+                                            >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                                Delete
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                </div>
+
+                                {note.providerSigned ? (
+                                    <div className="mt-3 border-t border-white-light pt-3 text-xs text-gray-500 dark:border-[#191e3a]">
+                                        <strong>
+                                            Electronically signed by {note.providerSigned}
+                                            {note.signedDate ? ` on ${note.signedDate}` : ''}
+                                            {note.signedTime ? ` ${note.signedTime}` : ''}
+                                        </strong>
+                                    </div>
+                                ) : null}
+
+                                {note.noteStatus === 'Marked in Error' && note.inErrorReason ? (
+                                    <div className="mt-2 rounded-md bg-danger/5 px-3 py-2 text-xs text-danger">
+                                        Reason: {note.inErrorReason}
+                                    </div>
+                                ) : null}
+                            </article>
+                        ))}
+                    </div>
+                )}
+
+                {filteredNotes.length > 0 ? (
+                    <div className="mt-5 flex flex-col items-center justify-between gap-3 border-t border-white-light pt-4 dark:border-[#191e3a] sm:flex-row">
+                        <p className="text-xs text-gray-500">
+                            Showing {(page - 1) * rowsPerPage + 1} to {Math.min(page * rowsPerPage, filteredNotes.length)} of{' '}
+                            {filteredNotes.length} notes
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <select
+                                className="form-select w-auto text-sm"
+                                value={rowsPerPage}
+                                onChange={(e) => {
+                                    setRowsPerPage(Number(e.target.value));
+                                    setCurrentPage(1);
+                                }}
+                            >
+                                {[5, 10, 20].map((n) => (
+                                    <option key={n} value={n}>
+                                        {n} / page
+                                    </option>
+                                ))}
+                            </select>
+                            <button
+                                type="button"
+                                className="btn btn-outline-primary btn-sm"
+                                disabled={page <= 1}
+                                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                            >
+                                Previous
+                            </button>
+                            <span className="px-2 text-sm">
+                                Page {page} of {totalPages}
+                            </span>
+                            <button
+                                type="button"
+                                className="btn btn-outline-primary btn-sm"
+                                disabled={page >= totalPages}
+                                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                ) : null}
+            </div>
         </div>
-
-
-    </div>
-  );
+    );
 };
 
 export default Notes;
