@@ -1,0 +1,227 @@
+/* Scoped Notes module — PrimeReact density, theme focus, matched overlays */
+
+.notes-module {
+  box-sizing: border-box;
+  max-width: 100%;
+  /* Keep Create / Back clear of the facesheet route scrollbar */
+  padding-right: 0.75rem;
+}
+
+.notes-module .notes-header-actions {
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
+/* 32px control height */
+.notes-module .p-inputtext,
+.notes-module .p-dropdown,
+.notes-module .p-calendar,
+.notes-module .p-calendar .p-inputtext {
+  height: 32px !important;
+  min-height: 32px !important;
+}
+
+.notes-module .p-dropdown .p-dropdown-label {
+  display: block;
+  height: 30px !important;
+  line-height: 30px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notes-module .p-dropdown .p-dropdown-trigger {
+  width: 2rem;
+  height: 30px;
+}
+
+.notes-module .p-inputtext {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+/* Final clinical note — tall editor (autoResize was collapsing empty state) */
+.notes-module .notes-final-note-textarea.p-inputtextarea,
+.notes-module textarea.notes-final-note-textarea {
+  min-height: 28rem !important;
+  height: 28rem !important;
+  resize: vertical;
+}
+
+/* Native Visit Date (replaces PrimeReact Calendar in Notes) */
+.notes-module .notes-date-input {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  align-items: center;
+  border: 1px solid #d6d3d1;
+  border-radius: 6px;
+  background: #fff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.notes-module .notes-date-input:hover:not(.is-disabled) {
+  border-color: #b0967d;
+}
+
+.notes-module .notes-date-input:focus-within {
+  border-color: #9a6b3f;
+  box-shadow: 0 0 0 1px rgba(154, 107, 63, 0.35);
+}
+
+.notes-module .notes-date-input.is-disabled {
+  opacity: 0.65;
+  background: #f5f5f4;
+}
+
+.notes-module .notes-date-input__field {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  border: 0;
+  background: transparent;
+  padding: 0 2rem 0 0.65rem;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  color: #1c1917;
+  outline: none;
+  box-shadow: none !important;
+}
+
+.notes-module .notes-date-input__field:focus {
+  outline: none;
+  box-shadow: none !important;
+}
+
+.notes-module .notes-date-input__field::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.notes-module .notes-date-input__icon {
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  display: inline-flex;
+  height: 1.5rem;
+  width: 1.5rem;
+  transform: translateY(-50%);
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: #9a6b3f;
+  pointer-events: none;
+}
+
+.dark .notes-module .notes-date-input {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #0e1726;
+}
+
+.dark .notes-module .notes-date-input__field {
+  color: #f5f5f4;
+  color-scheme: dark;
+}
+
+/* Theme focus — no default blue ring */
+.notes-module .p-dropdown:not(.p-disabled).p-focus,
+.notes-module .p-inputtext:enabled:focus,
+.notes-module .p-calendar .p-inputtext:enabled:focus,
+.notes-module .p-inputtextarea:enabled:focus {
+  border-color: #9a6b3f !important;
+  box-shadow: 0 0 0 1px rgba(154, 107, 63, 0.35) !important;
+  outline: none !important;
+}
+
+.notes-module .p-dropdown:not(.p-disabled):hover {
+  border-color: #b0967d;
+}
+
+/* Action buttons — border hover */
+.notes-module .notes-action-btn.p-button {
+  border-width: 1px;
+  border-style: solid;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.notes-module .notes-action-btn.p-button.p-button-outlined {
+  border-color: #d6d3d1;
+}
+
+.notes-module .notes-action-btn.p-button:not(.p-button-outlined):not(.p-disabled):hover {
+  border-color: #73563b !important;
+  filter: brightness(0.97);
+}
+
+.notes-module .notes-action-btn.p-button.p-button-outlined:not(.p-disabled):hover {
+  border-color: #9a6b3f !important;
+  background: rgba(154, 107, 63, 0.06) !important;
+  color: #73563b !important;
+}
+
+.notes-module .notes-action-btn.p-button.p-button-warning.p-button-outlined:not(.p-disabled):hover {
+  border-color: #b54708 !important;
+  background: rgba(181, 71, 8, 0.08) !important;
+  color: #b54708 !important;
+}
+
+.notes-module .notes-action-btn.p-button.p-button-danger.p-button-outlined:not(.p-disabled):hover {
+  border-color: #b42318 !important;
+  background: rgba(180, 35, 24, 0.08) !important;
+  color: #b42318 !important;
+}
+
+.notes-module .notes-action-btn.p-button.p-button-success.p-button-outlined:not(.p-disabled):hover {
+  border-color: #027a48 !important;
+  background: rgba(2, 122, 72, 0.08) !important;
+  color: #027a48 !important;
+}
+
+/* Truncated option labels inside trigger / items */
+.notes-dd-option {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Overlay panels appended to body — width synced via --notes-dd-w */
+.notes-dd-panel.p-dropdown-panel {
+  box-sizing: border-box;
+  width: var(--notes-dd-w, 16rem) !important;
+  min-width: var(--notes-dd-w, 16rem) !important;
+  max-width: var(--notes-dd-w, 16rem) !important;
+}
+
+.notes-dd-panel .p-dropdown-items-wrapper {
+  max-width: 100%;
+}
+
+.notes-dd-panel .p-dropdown-item {
+  overflow: hidden;
+}
+
+.notes-dd-panel.p-dropdown-panel .p-dropdown-item.p-highlight,
+.notes-dd-panel.p-dropdown-panel .p-dropdown-item:not(.p-disabled):hover {
+  background: rgba(154, 107, 63, 0.1) !important;
+  color: #4f3c28 !important;
+}
+
+.notes-dd-panel.p-dropdown-panel:focus,
+.notes-dd-panel .p-focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+

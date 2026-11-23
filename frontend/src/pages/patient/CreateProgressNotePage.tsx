@@ -1,14 +1,28 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import { Button } from 'primereact/button';
+import { Dropdown } from 'primereact/dropdown';
+import { InputTextarea } from 'primereact/inputtextarea';
 import { CheckCircle2, FileText, Pencil, Save, Signature } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { FollowUpProgressFields } from '../../features/chart-notes/FollowUpProgressFields';
 import { NeurologyHpFields } from '../../features/chart-notes/NeurologyHpFields';
+import { NotesDateInput } from '../../features/chart-notes/NotesDateInput';
 import { composeFollowUpNote } from '../../features/chart-notes/composeFollowUpNote';
 import { composeNeurologyHpNote } from '../../features/chart-notes/composeNeurologyHpNote';
+import {
+    ClinicalFieldLabel,
+    ClinicalNoteActionBar,
+    ClinicalNoteSection,
+    NoteFormSkeleton,
+    NoteStatusTag,
+    notesDropdownOptionTemplate,
+    notesDropdownValueTemplate,
+    syncOverlayWidth,
+} from '../../features/chart-notes/notesUi';
 import {
     emptyFollowUpProgressData,
     FOLLOW_UP_NOTE_TYPE,
@@ -138,6 +152,14 @@ const CreateProgressNotePage: React.FC = () => {
 
     const [providers, setProviders] = useState<Array<{ id: string; name: string }>>([]);
     const [encounters, setEncounters] = useState<Array<{ id: string; label: string }>>([]);
+
+    const noteTypeDdRef = useRef<Dropdown>(null);
+    const providerDdRef = useRef<Dropdown>(null);
+    const encounterDdRef = useRef<Dropdown>(null);
+
+    const onDropdownShow = (ref: React.RefObject<Dropdown | null>, panelClass: string) => () => {
+        syncOverlayWidth(ref.current?.getElement?.() ?? null, `.${panelClass}`, '--notes-dd-w');
+    };
 
     const facesheetBase = patientId ? `/app/facesheet/${encodeURIComponent(patientId)}/notes` : '/app/notes';
     const isReadOnly = mode === 'view' || note?.noteStatus === 'Completed' || note?.noteStatus === 'Marked in Error';
@@ -348,6 +370,19 @@ const CreateProgressNotePage: React.FC = () => {
         }
     };
 
+    const noteTypeOptions = useMemo(() => PHASE1_NOTE_TYPES.map((t) => ({ label: t, value: t })), []);
+    const providerOptions = useMemo(
+        () => [{ label: 'Select provider', value: '' }, ...providers.map((p) => ({ label: p.name, value: p.id }))],
+        [providers],
+    );
+    const encounterOptions = useMemo(() => {
+        const opts = [{ label: 'Select encounter', value: '' }, ...encounters.map((e) => ({ label: e.label, value: e.id }))];
+        if (encounterId && !encounters.some((e) => e.id === encounterId)) {
+            opts.push({ label: `Current encounter · ${encounterId.slice(0, 8)}`, value: encounterId });
+        }
+        return opts;
+    }, [encounters, encounterId]);
+
     if (!patientId) {
         return (
             <div className={moduleSurfaceClass}>
@@ -358,147 +393,135 @@ const CreateProgressNotePage: React.FC = () => {
 
     if (loading) {
         return (
-            <div className={moduleSurfaceClass}>
-                <div className="py-16 text-center text-sm text-gray-500">Loading note…</div>
+            <div className={`${moduleSurfaceClass} notes-module w-full min-w-0`}>
+                <NoteFormSkeleton />
             </div>
         );
     }
 
     return (
-        <div className={moduleSurfaceClass}>
-            <header className="mb-5 flex flex-col gap-3 border-b border-white-light pb-4 dark:border-[#191e3a] sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                    <div className="mb-1 flex flex-wrap items-center gap-2 text-sm text-gray-500">
+        <div className={`${moduleSurfaceClass} notes-module w-full min-w-0`}>
+            <header className="mb-5 flex flex-col gap-3 border-b border-emr-border/80 pb-4 pr-1 dark:border-white/10 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 flex-1">
+                    <nav aria-label="Breadcrumb" className="mb-1.5 flex flex-wrap items-center gap-2 text-sm text-gray-500">
                         <Link to={facesheetBase} className="text-primary hover:underline">
-                            Notes
+                            Clinical Notes
                         </Link>
-                        <span>/</span>
+                        <span aria-hidden>/</span>
                         <span className="font-medium text-gray-900 dark:text-white">{shellTitle}</span>
-                        <span
-                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                noteStatus === 'Completed'
-                                    ? 'bg-success/15 text-success'
-                                    : noteStatus === 'Marked in Error'
-                                      ? 'bg-danger/15 text-danger'
-                                      : 'bg-warning/15 text-warning'
-                            }`}
-                        >
-                            {noteStatus}
-                        </span>
-                    </div>
-                    <h3 className="flex items-center gap-2 truncate text-xl font-semibold text-gray-900 dark:text-white">
-                        <FileText className="h-5 w-5 shrink-0 text-primary" />
+                        <NoteStatusTag status={noteStatus} />
+                    </nav>
+                    <h1 className="flex items-center gap-2 truncate text-xl font-semibold tracking-tight text-gray-900 dark:text-white">
+                        <FileText className="h-5 w-5 shrink-0 text-primary" aria-hidden />
                         {shellTitle}
-                    </h3>
+                    </h1>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="notes-header-actions flex flex-wrap items-center gap-2">
                     {note?.providerSigned ? (
                         <span className="inline-flex items-center gap-1.5 rounded-lg bg-success/10 px-3 py-1.5 text-sm text-success">
-                            <Signature className="h-4 w-4" />
+                            <Signature className="h-4 w-4" aria-hidden />
                             Signed · {note.providerSigned}
                         </span>
                     ) : null}
-                    <Link to={facesheetBase} className="btn btn-outline-primary btn-sm">
-                        Back
+                    <Link to={facesheetBase} className="inline-flex">
+                        <Button type="button" label="Back" outlined size="small" className="notes-action-btn" />
                     </Link>
                 </div>
             </header>
 
             {encounters.length === 0 && mode === 'create' ? (
-                <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+                <div
+                    className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200"
+                    role="status"
+                >
                     No active encounter for this patient. Admit the patient from ADT before creating a note.
                 </div>
             ) : null}
 
-            <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-                <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-200">Note Type</label>
-                    <select
-                        className="form-select w-full"
-                        value={notesType}
-                        disabled={mode !== 'create'}
-                        onChange={(e) => {
-                            const next = e.target.value;
-                            if (isPhase1NoteType(next)) {
-                                setNotesType(next);
-                                if (next === FOLLOW_UP_NOTE_TYPE) {
-                                    setFollowUpData(emptyFollowUpProgressData());
+            <ClinicalNoteSection title="Visit metadata">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div className="min-w-0">
+                        <ClinicalFieldLabel>Note Type</ClinicalFieldLabel>
+                        <Dropdown
+                            ref={noteTypeDdRef}
+                            value={notesType}
+                            options={noteTypeOptions}
+                            disabled={mode !== 'create'}
+                            className="w-full"
+                            panelClassName="notes-dd-panel notes-dd-panel-note-type"
+                            appendTo={typeof document !== 'undefined' ? document.body : undefined}
+                            itemTemplate={notesDropdownOptionTemplate}
+                            valueTemplate={notesDropdownValueTemplate}
+                            onShow={onDropdownShow(noteTypeDdRef, 'notes-dd-panel-note-type')}
+                            onChange={(e) => {
+                                const next = e.value as string;
+                                if (isPhase1NoteType(next)) {
+                                    setNotesType(next);
+                                    if (next === FOLLOW_UP_NOTE_TYPE) setFollowUpData(emptyFollowUpProgressData());
+                                    if (next === NEUROLOGY_HP_NOTE_TYPE) setNeurologyData(emptyNeurologyHpData());
                                 }
-                                if (next === NEUROLOGY_HP_NOTE_TYPE) {
-                                    setNeurologyData(emptyNeurologyHpData());
-                                }
-                            }
-                        }}
-                    >
-                        {PHASE1_NOTE_TYPES.map((t) => (
-                            <option key={t} value={t}>
-                                {t}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-                <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-200">
-                        Visit Date <span className="text-danger">*</span>
-                    </label>
-                    <input
-                        type="date"
-                        className="form-input w-full"
-                        value={visitDate}
-                        disabled={isReadOnly}
-                        onBlur={() => markTouched('date')}
-                        onChange={(e) => setVisitDate(e.target.value)}
-                    />
-                    {touched.date && errors.date ? <p className="mt-1 text-xs text-danger">{errors.date}</p> : null}
-                </div>
-                <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-200">
-                        Assigned Provider <span className="text-danger">*</span>
-                    </label>
-                    <select
-                        className="form-select w-full"
-                        value={assignedProviderId}
-                        disabled={isReadOnly}
-                        onBlur={() => markTouched('assignedProvider')}
-                        onChange={(e) => setAssignedProviderId(e.target.value)}
-                    >
-                        <option value="">Select provider</option>
-                        {providers.map((p) => (
-                            <option key={p.id} value={p.id}>
-                                {p.name}
-                            </option>
-                        ))}
-                    </select>
-                    {touched.assignedProvider && errors.assignedProvider ? (
-                        <p className="mt-1 text-xs text-danger">{errors.assignedProvider}</p>
-                    ) : null}
-                </div>
-                <div className="md:col-span-3">
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-200">
-                        Encounter <span className="text-danger">*</span>
-                    </label>
-                    <select
-                        className="form-select w-full"
-                        value={encounterId}
-                        disabled={isReadOnly || (mode !== 'create' && Boolean(note?.encounterId))}
-                        onBlur={() => markTouched('encounterId')}
-                        onChange={(e) => setEncounterId(e.target.value)}
-                    >
-                        <option value="">Select encounter</option>
-                        {encounters.map((e) => (
-                            <option key={e.id} value={e.id}>
-                                {e.label}
-                            </option>
-                        ))}
-                        {encounterId && !encounters.some((e) => e.id === encounterId) ? (
-                            <option value={encounterId}>Current encounter · {encounterId.slice(0, 8)}</option>
+                            }}
+                        />
+                    </div>
+                    <div className="min-w-0">
+                        <ClinicalFieldLabel required>Visit Date</ClinicalFieldLabel>
+                        <NotesDateInput
+                            id="notes-visit-date"
+                            value={visitDate}
+                            disabled={isReadOnly}
+                            onChange={setVisitDate}
+                            onBlur={() => markTouched('date')}
+                        />
+                        {touched.date && errors.date ? <p className="mt-1 text-xs text-danger">{errors.date}</p> : null}
+                    </div>
+                    <div className="min-w-0">
+                        <ClinicalFieldLabel required>Assigned Provider</ClinicalFieldLabel>
+                        <Dropdown
+                            ref={providerDdRef}
+                            value={assignedProviderId}
+                            options={providerOptions}
+                            disabled={isReadOnly}
+                            className="w-full"
+                            panelClassName="notes-dd-panel notes-dd-panel-assigned"
+                            appendTo={typeof document !== 'undefined' ? document.body : undefined}
+                            filter
+                            filterPlaceholder="Search provider"
+                            itemTemplate={notesDropdownOptionTemplate}
+                            valueTemplate={notesDropdownValueTemplate}
+                            onShow={onDropdownShow(providerDdRef, 'notes-dd-panel-assigned')}
+                            onChange={(e) => {
+                                setAssignedProviderId(e.value || '');
+                                markTouched('assignedProvider');
+                            }}
+                        />
+                        {touched.assignedProvider && errors.assignedProvider ? (
+                            <p className="mt-1 text-xs text-danger">{errors.assignedProvider}</p>
                         ) : null}
-                    </select>
-                    {touched.encounterId && errors.encounterId ? (
-                        <p className="mt-1 text-xs text-danger">{errors.encounterId}</p>
-                    ) : null}
+                    </div>
+                    <div className="min-w-0 md:col-span-3">
+                        <ClinicalFieldLabel required>Encounter</ClinicalFieldLabel>
+                        <Dropdown
+                            ref={encounterDdRef}
+                            value={encounterId}
+                            options={encounterOptions}
+                            disabled={isReadOnly || (mode !== 'create' && Boolean(note?.encounterId))}
+                            className="w-full"
+                            panelClassName="notes-dd-panel notes-dd-panel-encounter"
+                            appendTo={typeof document !== 'undefined' ? document.body : undefined}
+                            itemTemplate={notesDropdownOptionTemplate}
+                            valueTemplate={notesDropdownValueTemplate}
+                            onShow={onDropdownShow(encounterDdRef, 'notes-dd-panel-encounter')}
+                            onChange={(e) => {
+                                setEncounterId(e.value || '');
+                                markTouched('encounterId');
+                            }}
+                        />
+                        {touched.encounterId && errors.encounterId ? (
+                            <p className="mt-1 text-xs text-danger">{errors.encounterId}</p>
+                        ) : null}
+                    </div>
                 </div>
-            </div>
+            </ClinicalNoteSection>
 
             {isFollowUp ? (
                 <FollowUpProgressFields
@@ -518,54 +541,45 @@ const CreateProgressNotePage: React.FC = () => {
                 />
             ) : null}
 
-            <section className="panel mb-5 overflow-hidden p-0">
-                <header className="flex flex-col gap-2 border-b border-white-light bg-white-light/40 px-4 py-3 dark:border-[#191e3a] dark:bg-[#0e1726] sm:flex-row sm:items-center sm:justify-between">
+            <ClinicalNoteSection title="Final Clinical Note *">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {isStructured
+                        ? 'Auto-composed from the structured sections above. This is what gets signed.'
+                        : 'This is what gets signed and saved to the chart. Required.'}
+                </p>
+                <InputTextarea
+                    id="notesTextChartNote"
+                    className="notes-final-note-textarea w-full text-sm leading-relaxed"
+                    rows={22}
+                    placeholder={
+                        isStructured
+                            ? 'Fill the structured sections — the narrative appears here…'
+                            : 'Compose or paste the final clinical note here…'
+                    }
+                    value={isStructured ? composedStructured : notesText}
+                    disabled={isReadOnly || isStructured}
+                    onBlur={() => markTouched('notesText')}
+                    onChange={(e) => setNotesText(e.target.value)}
+                />
+                <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                        <h4 className="text-base font-semibold text-gray-900 dark:text-white">
-                            Final Clinical Note <span className="text-danger">*</span>
-                        </h4>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {isStructured
-                                ? 'Auto-composed from the structured sections above. This is what gets signed.'
-                                : 'This is what gets signed and saved to the chart. Required.'}
-                        </p>
+                        {touched.notesText && errors.notesText ? (
+                            <p className="text-xs text-danger">{errors.notesText}</p>
+                        ) : (
+                            <p className="text-xs text-gray-500">
+                                {isStructured ? 'Narrative updates as you fill sections.' : 'Minimum 5 characters.'}
+                            </p>
+                        )}
                     </div>
-                </header>
-                <div className="p-4">
-                    <textarea
-                        id="notesTextChartNote"
-                        className="form-textarea min-h-[280px] w-full resize-y text-sm leading-relaxed"
-                        rows={14}
-                        placeholder={
-                            isStructured
-                                ? 'Fill the structured sections — the narrative appears here…'
-                                : 'Compose or paste the final clinical note here…'
-                        }
-                        value={isStructured ? composedStructured : notesText}
-                        disabled={isReadOnly || isStructured}
-                        onBlur={() => markTouched('notesText')}
-                        onChange={(e) => setNotesText(e.target.value)}
-                    />
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                            {touched.notesText && errors.notesText ? (
-                                <p className="text-xs text-danger">{errors.notesText}</p>
-                            ) : (
-                                <p className="text-xs text-gray-500">
-                                    {isStructured ? 'Narrative updates as you fill sections.' : 'Minimum 5 characters.'}
-                                </p>
-                            )}
-                        </div>
-                        <span className="text-xs tabular-nums text-gray-400">
-                            {(isStructured ? composedStructured : notesText).length}
-                        </span>
-                    </div>
+                    <span className="text-xs tabular-nums text-gray-400">
+                        {(isStructured ? composedStructured : notesText).length}
+                    </span>
                 </div>
-            </section>
+            </ClinicalNoteSection>
 
             {note?.providerSigned ? (
                 <div className="mb-5 flex items-start gap-2 rounded-lg border border-success/20 bg-success/5 px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
                     <span>
                         Electronically signed by <strong>{note.providerSigned}</strong>
                         {note.signedDate ? ` on ${note.signedDate}` : ''}
@@ -574,34 +588,40 @@ const CreateProgressNotePage: React.FC = () => {
                 </div>
             ) : null}
 
-            <footer className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-end gap-2 border-t border-white-light bg-white/95 px-1 py-3 backdrop-blur dark:border-[#191e3a] dark:bg-[#0e1726]/95">
-                <Link to={facesheetBase} className="btn btn-outline-dark">
-                    Back
+            <ClinicalNoteActionBar>
+                <Link to={facesheetBase}>
+                    <Button type="button" label="Back" outlined />
                 </Link>
                 {mode === 'view' && noteStatus !== 'Completed' && noteStatus !== 'Marked in Error' ? (
-                    <button type="button" className="btn btn-outline-primary inline-flex items-center gap-1.5" onClick={() => setMode('edit')}>
-                        <Pencil className="h-4 w-4" />
-                        Edit
-                    </button>
+                    <Button
+                        type="button"
+                        label="Edit"
+                        outlined
+                        icon={<Pencil className="mr-1.5 h-4 w-4" />}
+                        onClick={() => setMode('edit')}
+                    />
                 ) : null}
                 {canSign ? (
-                    <button type="button" className="btn btn-primary inline-flex items-center gap-1.5" disabled={saving} onClick={handleSign}>
-                        <Signature className="h-4 w-4" />
-                        Sign
-                    </button>
+                    <Button
+                        type="button"
+                        label="Sign"
+                        icon={<Signature className="mr-1.5 h-4 w-4" />}
+                        disabled={saving}
+                        loading={saving}
+                        onClick={handleSign}
+                    />
                 ) : null}
                 {(mode === 'create' || mode === 'edit') && noteStatus !== 'Completed' && noteStatus !== 'Marked in Error' ? (
-                    <button
+                    <Button
                         type="button"
-                        className="btn btn-primary inline-flex items-center gap-1.5"
+                        label={mode === 'create' ? 'Create Note' : 'Update Note'}
+                        icon={<Save className="mr-1.5 h-4 w-4" />}
                         disabled={saving || (mode === 'create' && encounters.length === 0)}
+                        loading={saving}
                         onClick={handleSave}
-                    >
-                        <Save className="h-4 w-4" />
-                        {mode === 'create' ? 'Create Note' : 'Update Note'}
-                    </button>
+                    />
                 ) : null}
-            </footer>
+            </ClinicalNoteActionBar>
         </div>
     );
 };

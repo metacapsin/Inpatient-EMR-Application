@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import type { AssessmentPlanRow, FollowUpProgressData } from './followUpProgress.types';
 import {
     EXAM_SYSTEMS,
@@ -7,6 +6,7 @@ import {
     VISIT_SETTING_OPTIONS,
     cptOptionsForSetting,
 } from './followUpProgress.types';
+import { ClinicalFieldLabel as FieldLabel, ClinicalNoteSection as Section } from './notesUi';
 
 type Props = {
     value: FollowUpProgressData;
@@ -14,26 +14,6 @@ type Props = {
     readOnly?: boolean;
     errors?: Record<string, string>;
 };
-
-function FieldLabel({ children, required }: { children: ReactNode; required?: boolean }) {
-    return (
-        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-200">
-            {children}
-            {required ? <span className="text-danger"> *</span> : null}
-        </label>
-    );
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-    return (
-        <section className="panel mb-4 overflow-hidden p-0">
-            <header className="border-b border-white-light bg-white-light/40 px-4 py-2.5 dark:border-[#191e3a] dark:bg-[#0e1726]">
-                <h4 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h4>
-            </header>
-            <div className="space-y-3 p-4">{children}</div>
-        </section>
-    );
-}
 
 export function FollowUpProgressFields({ value, onChange, readOnly, errors = {} }: Props) {
     const patch = (partial: Partial<FollowUpProgressData>) => onChange({ ...value, ...partial });
