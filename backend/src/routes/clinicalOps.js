@@ -316,9 +316,9 @@ clinicalOpsRouter.get('/api/CodeEvent/active/:unitId', h(async (req, res) => {
 }));
 
 clinicalOpsRouter.get('/api/CodeEvent/patient/:patientId', h(async (req, res) => {
-    // The active event if there is one, otherwise the most recent.
+    // Active event if any, else most recent. No row = null (not 404) — facesheet polls this often.
     const r = await query(`${CE_SELECT} WHERE ce.tenant_id = $1 AND ce.patient_id = $2 ORDER BY (ce.status = 'active') DESC, ce.called_at DESC LIMIT 1`, [req.user.tenantId, req.params.patientId]);
-    if (!r.rowCount) throw notFound('No code event for this patient');
+    if (!r.rowCount) return ok(res, null);
     ok(res, ceOut(r.rows[0]));
 }));
 

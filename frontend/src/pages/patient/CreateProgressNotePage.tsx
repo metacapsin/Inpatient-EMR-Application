@@ -6,13 +6,21 @@ import { useAuth } from '../../hooks/useAuth';
 import { usePatientId } from '../../hooks/usePatientId';
 import { useFacesheetChartLayout } from '../../hooks/useFacesheetChartLayout';
 import { FollowUpProgressFields } from '../../features/chart-notes/FollowUpProgressFields';
+import { NeurologyHpFields } from '../../features/chart-notes/NeurologyHpFields';
 import { composeFollowUpNote } from '../../features/chart-notes/composeFollowUpNote';
+import { composeNeurologyHpNote } from '../../features/chart-notes/composeNeurologyHpNote';
 import {
     emptyFollowUpProgressData,
     FOLLOW_UP_NOTE_TYPE,
     validateFollowUpProgress,
     type FollowUpProgressData,
 } from '../../features/chart-notes/followUpProgress.types';
+import {
+    emptyNeurologyHpData,
+    NEUROLOGY_HP_NOTE_TYPE,
+    validateNeurologyHp,
+    type NeurologyHpData,
+} from '../../features/chart-notes/neurologyHp.types';
 import {
     NOTE_TYPE_SHORT_LABEL,
     PHASE1_NOTE_TYPES,
@@ -48,6 +56,39 @@ function mergeFollowUpPayload(raw: unknown): FollowUpProgressData {
                       plan: r?.plan || '',
                   }))
                 : base.assessmentPlan,
+    };
+}
+
+function mergeNeurologyPayload(raw: unknown): NeurologyHpData {
+    const base = emptyNeurologyHpData();
+    if (!raw || typeof raw !== 'object') return base;
+    const p = raw as Partial<NeurologyHpData>;
+    return {
+        ...base,
+        ...p,
+        identifying: { ...base.identifying, ...(p.identifying || {}) },
+        hpi: {
+            ...base.hpi,
+            ...(p.hpi || {}),
+            neurologicSymptoms: {
+                ...base.hpi.neurologicSymptoms,
+                ...(p.hpi?.neurologicSymptoms || {}),
+            },
+        },
+        pmh: { ...base.pmh, ...(p.pmh || {}) },
+        psh: { ...base.psh, ...(p.psh || {}) },
+        familyHistory: { ...base.familyHistory, ...(p.familyHistory || {}) },
+        socialHistory: { ...base.socialHistory, ...(p.socialHistory || {}) },
+        physicalExam: {
+            ...base.physicalExam,
+            ...(p.physicalExam || {}),
+            vitalSigns: {
+                ...base.physicalExam.vitalSigns,
+                ...(p.physicalExam?.vitalSigns || {}),
+            },
+        },
+        assessment: { ...base.assessment, ...(p.assessment || {}) },
+        plan: { ...base.plan, ...(p.plan || {}) },
     };
 }
 
@@ -92,6 +133,7 @@ const CreateProgressNotePage: React.FC = () => {
     const [assignedProviderId, setAssignedProviderId] = useState('');
     const [notesText, setNotesText] = useState('');
     const [followUpData, setFollowUpData] = useState<FollowUpProgressData>(emptyFollowUpProgressData);
+    const [neurologyData, setNeurologyData] = useState<NeurologyHpData>(emptyNeurologyHpData);
     const [touched, setTouched] = useState<Record<string, boolean>>({});
 
     const [providers, setProviders] = useState<Array<{ id: string; name: string }>>([]);
@@ -100,6 +142,8 @@ const CreateProgressNotePage: React.FC = () => {
     const facesheetBase = patientId ? `/app/facesheet/${encodeURIComponent(patientId)}/notes` : '/app/notes';
     const isReadOnly = mode === 'view' || note?.noteStatus === 'Completed' || note?.noteStatus === 'Marked in Error';
     const isFollowUp = notesType === FOLLOW_UP_NOTE_TYPE;
+    const isNeurology = notesType === NEUROLOGY_HP_NOTE_TYPE;
+    const isStructured = isFollowUp || isNeurology;
     const noteStatus = note?.noteStatus || 'In Draft';
     const userId = String(user?.id || user?._id || '');
     const userName = displayName(user);
@@ -113,10 +157,11 @@ const CreateProgressNotePage: React.FC = () => {
         (role === 'admin' ||
             ((role === 'physician' || role === 'nurse') && userId === assignedProviderId));
 
-    const composedFollowUp = useMemo(
-        () => (isFollowUp ? composeFollowUpNote(followUpData) : ''),
-        [isFollowUp, followUpData],
-    );
+    const composedStructured = useMemo(() => {
+        if (isFollowUp) return composeFollowUpNote(followUpData);
+        if (isNeurology) return composeNeurologyHpNote(neurologyData);
+        return '';
+    }, [isFollowUp, isNeurology, followUpData, neurologyData]);
 
     const errors = useMemo(() => {
         const e: Record<string, string> = {};
@@ -125,7 +170,12 @@ const CreateProgressNotePage: React.FC = () => {
         if (!assignedProviderId) e.assignedProvider = 'Assigned Provider is required.';
         if (isFollowUp) {
             Object.assign(e, validateFollowUpProgress(followUpData));
-            if (!composedFollowUp.trim() || composedFollowUp.trim().length < 5) {
+            if (!composedStructured.trim() || composedStructured.trim().length < 5) {
+                e.notesText = 'Complete the structured sections so the clinical note can be composed.';
+            }
+        } else if (isNeurology) {
+            Object.assign(e, validateNeurologyHp(neurologyData));
+            if (!composedStructured.trim() || composedStructured.trim().length < 5) {
                 e.notesText = 'Complete the structured sections so the clinical note can be composed.';
             }
         } else if (!notesText.trim()) {
@@ -134,7 +184,17 @@ const CreateProgressNotePage: React.FC = () => {
             e.notesText = 'Input should be more than 5 characters.';
         }
         return e;
-    }, [encounterId, visitDate, assignedProviderId, notesText, isFollowUp, followUpData, composedFollowUp]);
+    }, [
+        encounterId,
+        visitDate,
+        assignedProviderId,
+        notesText,
+        isFollowUp,
+        isNeurology,
+        followUpData,
+        neurologyData,
+        composedStructured,
+    ]);
 
     const shortLabel = NOTE_TYPE_SHORT_LABEL[notesType] || 'Note';
     const shellTitle =
@@ -173,6 +233,9 @@ const CreateProgressNotePage: React.FC = () => {
             if (n.notesType === FOLLOW_UP_NOTE_TYPE) {
                 setFollowUpData(mergeFollowUpPayload(n.structuredPayload));
             }
+            if (n.notesType === NEUROLOGY_HP_NOTE_TYPE) {
+                setNeurologyData(mergeNeurologyPayload(n.structuredPayload));
+            }
             if (n.noteStatus === 'Completed' || n.noteStatus === 'Marked in Error') setMode('view');
             else if (searchParams.get('mode') === 'edit') setMode('edit');
             else setMode('view');
@@ -196,13 +259,16 @@ const CreateProgressNotePage: React.FC = () => {
 
     const buildPayload = () => {
         const provider = providers.find((p) => p.id === assignedProviderId);
-        const text = isFollowUp ? composedFollowUp.trim() : notesText.trim();
+        const text = isStructured ? composedStructured.trim() : notesText.trim();
+        let structuredPayload: Record<string, unknown> | null = null;
+        if (isFollowUp) structuredPayload = followUpData as unknown as Record<string, unknown>;
+        if (isNeurology) structuredPayload = neurologyData as unknown as Record<string, unknown>;
         return {
             patientId: patientId!,
             encounterId,
             notesType,
             notesText: text,
-            structuredPayload: isFollowUp ? (followUpData as unknown as Record<string, unknown>) : null,
+            structuredPayload,
             date: visitDate,
             assignedProviderId,
             assignedProviderName: provider?.name || userName,
@@ -358,6 +424,9 @@ const CreateProgressNotePage: React.FC = () => {
                                 if (next === FOLLOW_UP_NOTE_TYPE) {
                                     setFollowUpData(emptyFollowUpProgressData());
                                 }
+                                if (next === NEUROLOGY_HP_NOTE_TYPE) {
+                                    setNeurologyData(emptyNeurologyHpData());
+                                }
                             }
                         }}
                     >
@@ -440,6 +509,15 @@ const CreateProgressNotePage: React.FC = () => {
                 />
             ) : null}
 
+            {isNeurology ? (
+                <NeurologyHpFields
+                    value={neurologyData}
+                    onChange={setNeurologyData}
+                    readOnly={isReadOnly}
+                    errors={touched.notesText || Object.keys(touched).length ? errors : {}}
+                />
+            ) : null}
+
             <section className="panel mb-5 overflow-hidden p-0">
                 <header className="flex flex-col gap-2 border-b border-white-light bg-white-light/40 px-4 py-3 dark:border-[#191e3a] dark:bg-[#0e1726] sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -447,7 +525,7 @@ const CreateProgressNotePage: React.FC = () => {
                             Final Clinical Note <span className="text-danger">*</span>
                         </h4>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {isFollowUp
+                            {isStructured
                                 ? 'Auto-composed from the structured sections above. This is what gets signed.'
                                 : 'This is what gets signed and saved to the chart. Required.'}
                         </p>
@@ -459,12 +537,12 @@ const CreateProgressNotePage: React.FC = () => {
                         className="form-textarea min-h-[280px] w-full resize-y text-sm leading-relaxed"
                         rows={14}
                         placeholder={
-                            isFollowUp
+                            isStructured
                                 ? 'Fill the structured sections — the narrative appears here…'
                                 : 'Compose or paste the final clinical note here…'
                         }
-                        value={isFollowUp ? composedFollowUp : notesText}
-                        disabled={isReadOnly || isFollowUp}
+                        value={isStructured ? composedStructured : notesText}
+                        disabled={isReadOnly || isStructured}
                         onBlur={() => markTouched('notesText')}
                         onChange={(e) => setNotesText(e.target.value)}
                     />
@@ -474,12 +552,12 @@ const CreateProgressNotePage: React.FC = () => {
                                 <p className="text-xs text-danger">{errors.notesText}</p>
                             ) : (
                                 <p className="text-xs text-gray-500">
-                                    {isFollowUp ? 'Narrative updates as you fill sections.' : 'Minimum 5 characters.'}
+                                    {isStructured ? 'Narrative updates as you fill sections.' : 'Minimum 5 characters.'}
                                 </p>
                             )}
                         </div>
                         <span className="text-xs tabular-nums text-gray-400">
-                            {(isFollowUp ? composedFollowUp : notesText).length}
+                            {(isStructured ? composedStructured : notesText).length}
                         </span>
                     </div>
                 </div>

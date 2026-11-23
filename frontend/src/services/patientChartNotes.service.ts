@@ -1,6 +1,7 @@
 import api from './api';
 
 import { FOLLOW_UP_NOTE_TYPE } from '../features/chart-notes/followUpProgress.types';
+import { NEUROLOGY_HP_NOTE_TYPE } from '../features/chart-notes/neurologyHp.types';
 
 /** Free-text / light types + structured CPT forms enabled in facesheet Notes. */
 export const PROGRESS_NOTE_TYPE = 'Office Note Free Text Progress Note' as const;
@@ -10,7 +11,7 @@ export const CCM_NOTE_TYPE = 'Office Note Free Text CCM Note' as const;
 export const OFFICE_FORM_NOTE_TYPE = 'Office Form' as const;
 export const WORK_NOTE_TYPE = 'Work Note' as const;
 export const PHONE_NOTE_TYPE = 'Phone Note' as const;
-export { FOLLOW_UP_NOTE_TYPE };
+export { FOLLOW_UP_NOTE_TYPE, NEUROLOGY_HP_NOTE_TYPE };
 
 export const PHASE1_NOTE_TYPES = [
     PROGRESS_NOTE_TYPE,
@@ -21,6 +22,7 @@ export const PHASE1_NOTE_TYPES = [
     WORK_NOTE_TYPE,
     PHONE_NOTE_TYPE,
     FOLLOW_UP_NOTE_TYPE,
+    NEUROLOGY_HP_NOTE_TYPE,
 ] as const;
 export type Phase1NoteType = (typeof PHASE1_NOTE_TYPES)[number];
 
@@ -33,9 +35,10 @@ export const NOTE_TYPE_SHORT_LABEL: Record<Phase1NoteType, string> = {
     [WORK_NOTE_TYPE]: 'Work Note',
     [PHONE_NOTE_TYPE]: 'Phone Note',
     [FOLLOW_UP_NOTE_TYPE]: 'Follow-Up Progress',
+    [NEUROLOGY_HP_NOTE_TYPE]: 'Neurology H&P',
 };
 
-export const STRUCTURED_NOTE_TYPES = [FOLLOW_UP_NOTE_TYPE] as const;
+export const STRUCTURED_NOTE_TYPES = [FOLLOW_UP_NOTE_TYPE, NEUROLOGY_HP_NOTE_TYPE] as const;
 
 export function isStructuredNoteType(value: string): boolean {
     return (STRUCTURED_NOTE_TYPES as readonly string[]).includes(value);

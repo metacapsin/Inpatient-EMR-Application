@@ -13,7 +13,11 @@ type ApiEnvelope<T> = { data?: T; status?: string; message?: string };
 function unwrapOne(raw: unknown): CodeEventRecord | null {
     if (!raw || typeof raw !== 'object') return null;
     const o = raw as Record<string, unknown>;
-    if (o.data && typeof o.data === 'object') return o.data as CodeEventRecord;
+    // Envelope `{ status, data }` — empty patient lookup returns data: null (not 404).
+    if ('data' in o) {
+        if (o.data == null) return null;
+        if (typeof o.data === 'object') return o.data as CodeEventRecord;
+    }
     return raw as CodeEventRecord;
 }
 

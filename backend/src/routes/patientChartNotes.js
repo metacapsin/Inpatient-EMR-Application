@@ -22,6 +22,7 @@ const ALLOWED_NOTE_TYPES = [
     'Work Note',
     'Phone Note',
     'Follow-Up Progress Note (99212-99215/99308-99310/99347-99350)',
+    'Neurology H&P',
 ];
 const DEFAULT_NOTE_TYPE = ALLOWED_NOTE_TYPES[0];
 const authors = requireRole('physician', 'nurse', 'staff');
@@ -140,6 +141,7 @@ const createBody = z.object({
             'Work Note',
             'Phone Note',
             'Follow-Up Progress Note (99212-99215/99308-99310/99347-99350)',
+            'Neurology H&P',
         ])
         .default(DEFAULT_NOTE_TYPE),
     notesText: z.string().trim().min(5, 'Input should be more than 5 characters').max(100000),
